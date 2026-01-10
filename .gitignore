@@ -10,6 +10,7 @@ lcov.info
 # Editors/IDEs
 .idea/
 .vscode/
+.claude/
 
 # Environment files
 .env

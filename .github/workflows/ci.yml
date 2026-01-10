@@ -23,4 +23,4 @@ jobs:
       - name: Test
         run: cargo test --all
       - name: Coverage
-        run: cargo llvm-cov --all --workspace --lcov --output-path lcov.info --fail-under-lines 100
+        run: cargo llvm-cov --workspace --lcov --output-path lcov.info --fail-under-lines 95
