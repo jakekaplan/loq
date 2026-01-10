@@ -1,4 +1,4 @@
-use assert_cmd::Command;
+use assert_cmd::cargo::cargo_bin_cmd;
 use predicates::prelude::*;
 use tempfile::TempDir;
 
@@ -23,8 +23,7 @@ fn default_check_success() {
     let temp = TempDir::new().unwrap();
     write_file(&temp, "src/main.rs", "fn main() {}\n");
 
-    Command::cargo_bin("fence")
-        .unwrap()
+    cargo_bin_cmd!("fence")
         .current_dir(temp.path())
         .assert()
         .success()
@@ -36,8 +35,7 @@ fn check_explicit_files() {
     let temp = TempDir::new().unwrap();
     write_file(&temp, "a.txt", "a\n");
 
-    Command::cargo_bin("fence")
-        .unwrap()
+    cargo_bin_cmd!("fence")
         .current_dir(temp.path())
         .args(["check", "a.txt"])
         .assert()
@@ -50,8 +48,7 @@ fn check_reads_stdin_list() {
     let temp = TempDir::new().unwrap();
     write_file(&temp, "a.txt", "a\n");
 
-    Command::cargo_bin("fence")
-        .unwrap()
+    cargo_bin_cmd!("fence")
         .current_dir(temp.path())
         .args(["check", "-"])
         .write_stdin("a.txt\n")
@@ -65,8 +62,7 @@ fn exit_code_error_on_violation() {
     let contents = repeat_lines(401);
     write_file(&temp, "big.txt", &contents);
 
-    Command::cargo_bin("fence")
-        .unwrap()
+    cargo_bin_cmd!("fence")
         .current_dir(temp.path())
         .args(["check", "big.txt"])
         .assert()
@@ -86,8 +82,7 @@ severity = "warning"
     write_file(&temp, ".fence.toml", config);
     write_file(&temp, "warn.txt", "a\nb\n");
 
-    let output = Command::cargo_bin("fence")
-        .unwrap()
+    let output = cargo_bin_cmd!("fence")
         .current_dir(temp.path())
         .args(["--quiet", "check", "warn.txt"])
         .output()
@@ -102,8 +97,7 @@ fn silent_prints_nothing() {
     let contents = repeat_lines(401);
     write_file(&temp, "big.txt", &contents);
 
-    let output = Command::cargo_bin("fence")
-        .unwrap()
+    let output = cargo_bin_cmd!("fence")
         .current_dir(temp.path())
         .args(["--silent", "check", "big.txt"])
         .output()
@@ -117,8 +111,7 @@ fn silent_prints_nothing() {
 fn missing_file_warns() {
     let temp = TempDir::new().unwrap();
 
-    Command::cargo_bin("fence")
-        .unwrap()
+    cargo_bin_cmd!("fence")
         .current_dir(temp.path())
         .args(["check", "missing.txt"])
         .assert()
@@ -133,8 +126,7 @@ fn verbose_includes_config_and_rule() {
     write_file(&temp, ".fence.toml", config);
     write_file(&temp, "a.txt", "a\nb\n");
 
-    Command::cargo_bin("fence")
-        .unwrap()
+    cargo_bin_cmd!("fence")
         .current_dir(temp.path())
         .args(["--verbose", "check", "a.txt"])
         .assert()
@@ -147,8 +139,7 @@ fn verbose_includes_config_and_rule() {
 fn init_writes_config() {
     let temp = TempDir::new().unwrap();
 
-    Command::cargo_bin("fence")
-        .unwrap()
+    cargo_bin_cmd!("fence")
         .current_dir(temp.path())
         .args(["init"])
         .assert()
@@ -163,8 +154,7 @@ fn init_fails_when_exists() {
     let temp = TempDir::new().unwrap();
     write_file(&temp, ".fence.toml", "default_max_lines = 10\n");
 
-    Command::cargo_bin("fence")
-        .unwrap()
+    cargo_bin_cmd!("fence")
         .current_dir(temp.path())
         .args(["init"])
         .assert()
@@ -176,13 +166,14 @@ fn init_fails_when_exists() {
 fn init_rejects_flags() {
     let temp = TempDir::new().unwrap();
 
-    Command::cargo_bin("fence")
-        .unwrap()
+    cargo_bin_cmd!("fence")
         .current_dir(temp.path())
         .args(["--quiet", "init"])
         .assert()
         .failure()
-        .stderr(predicate::str::contains("init does not accept output or config flags"));
+        .stderr(predicate::str::contains(
+            "init does not accept output or config flags",
+        ));
 }
 
 #[test]
@@ -191,8 +182,7 @@ fn init_baseline_adds_exempt() {
     let contents = repeat_lines(401);
     write_file(&temp, "src/legacy.txt", &contents);
 
-    Command::cargo_bin("fence")
-        .unwrap()
+    cargo_bin_cmd!("fence")
         .current_dir(temp.path())
         .args(["init", "--baseline"])
         .assert()
@@ -208,8 +198,7 @@ fn config_error_is_reported() {
     write_file(&temp, "bad.toml", "max_line = 10\n");
     write_file(&temp, "a.txt", "a\n");
 
-    Command::cargo_bin("fence")
-        .unwrap()
+    cargo_bin_cmd!("fence")
         .current_dir(temp.path())
         .args(["--config", "bad.toml", "check", "a.txt"])
         .assert()

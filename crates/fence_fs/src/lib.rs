@@ -22,8 +22,8 @@ pub enum FsError {
 impl std::fmt::Display for FsError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            FsError::Config(err) => write!(f, "{}", err),
-            FsError::Io(err) => write!(f, "{}", err),
+            FsError::Config(err) => write!(f, "{err}"),
+            FsError::Io(err) => write!(f, "{err}"),
         }
     }
 }
@@ -109,16 +109,13 @@ pub fn run_check(paths: Vec<PathBuf>, options: CheckOptions) -> Result<CheckOutp
             (compiled, ConfigOrigin::File(config_path))
         } else {
             let config = FenceConfig::built_in_defaults();
-            let compiled = compile_config(
-                ConfigOrigin::BuiltIn,
-                options.cwd.clone(),
-                config,
-                None,
-            )?;
+            let compiled =
+                compile_config(ConfigOrigin::BuiltIn, options.cwd.clone(), config, None)?;
             (compiled, ConfigOrigin::BuiltIn)
         };
 
-        let (group_outcomes, mut group_verbose) = check_group(&group_paths, &compiled, &options.cwd);
+        let (group_outcomes, mut group_verbose) =
+            check_group(&group_paths, &compiled, &options.cwd);
         for entry in &mut group_verbose {
             entry.config_source = origin.clone();
         }
@@ -161,8 +158,8 @@ fn check_file(
         .to_string_lossy()
         .to_string();
 
-    let relative = pathdiff::diff_paths(path, &compiled.root_dir)
-        .unwrap_or_else(|| path.to_path_buf());
+    let relative =
+        pathdiff::diff_paths(path, &compiled.root_dir).unwrap_or_else(|| path.to_path_buf());
     let relative_str = normalize_path(&relative);
 
     let decision = decide(compiled, &relative_str);
@@ -328,11 +325,7 @@ mod tests {
     #[test]
     fn missing_files_reported() {
         let temp = TempDir::new().unwrap();
-        write_file(
-            &temp,
-            ".fence.toml",
-            "default_max_lines = 1\nexempt = []\n",
-        );
+        write_file(&temp, ".fence.toml", "default_max_lines = 1\nexempt = []\n");
         let missing = temp.path().join("missing.txt");
 
         let output = run_check(

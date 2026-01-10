@@ -1,7 +1,7 @@
 use std::fmt;
 use std::path::{Path, PathBuf};
 
-use globset::{Glob, GlobMatcher};
+use globset::{GlobBuilder, GlobMatcher};
 use serde::Deserialize;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
@@ -77,16 +77,18 @@ impl FenceConfig {
                 ".ruff_cache/**".to_string(),
             ],
             exempt: Vec::new(),
-            rules: vec![Rule {
-                path: "**/*.tsx".to_string(),
-                max_lines: 300,
-                severity: Severity::Warning,
-            },
-            Rule {
-                path: "tests/**/*".to_string(),
-                max_lines: 500,
-                severity: Severity::Error,
-            }],
+            rules: vec![
+                Rule {
+                    path: "**/*.tsx".to_string(),
+                    max_lines: 300,
+                    severity: Severity::Warning,
+                },
+                Rule {
+                    path: "tests/**/*".to_string(),
+                    max_lines: 500,
+                    severity: Severity::Error,
+                },
+            ],
         }
     }
 }
@@ -195,9 +197,9 @@ impl ConfigError {
                 line_col,
                 suggestion,
             } => {
-                let base = format_error(path, line_col, &format!("unknown key '{}'", key));
+                let base = format_error(path, line_col, &format!("unknown key '{key}'"));
                 if let Some(suggestion) = suggestion {
-                    format!("{}\n       did you mean '{}'?", base, suggestion)
+                    format!("{base}\n       did you mean '{suggestion}'?")
                 } else {
                     base
                 }
@@ -234,17 +236,19 @@ fn format_error(path: &Path, line_col: &Option<(usize, usize)>, message: &str) -
 }
 
 pub fn parse_config(path: &Path, text: &str) -> Result<FenceConfig, ConfigError> {
-    let mut deserializer = toml::Deserializer::new(text);
+    let deserializer = toml::Deserializer::new(text);
     let mut unknown = Vec::new();
-    let parsed: FenceConfig = serde_ignored::deserialize(&mut deserializer, |path| {
-        if let Some(key) = extract_key(path) {
+    let parsed: FenceConfig = serde_ignored::deserialize(deserializer, |path| {
+        if let Some(key) = extract_key(&path) {
             unknown.push(key);
         }
     })
     .map_err(|err| ConfigError::Toml {
         path: path.to_path_buf(),
         message: err.to_string(),
-        line_col: err.line_col().map(|(line, col)| (line + 1, col + 1)),
+        line_col: err
+            .span()
+            .and_then(|span| line_col_from_offset(text, span.start)),
     })?;
 
     if let Some(key) = unknown.into_iter().next() {
@@ -267,9 +271,9 @@ pub fn compile_config(
     config: FenceConfig,
     source_path: Option<&Path>,
 ) -> Result<CompiledConfig, ConfigError> {
-    let path_for_errors = source_path.map(Path::to_path_buf).unwrap_or_else(|| {
-        PathBuf::from("<built-in defaults>")
-    });
+    let path_for_errors = source_path
+        .map(Path::to_path_buf)
+        .unwrap_or_else(|| PathBuf::from("<built-in defaults>"));
 
     let exclude = compile_patterns(&config.exclude, &path_for_errors)?;
     let exempt = compile_patterns(&config.exempt, &path_for_errors)?;
@@ -294,10 +298,7 @@ pub fn compile_config(
     })
 }
 
-fn compile_patterns(
-    patterns: &[String],
-    source_path: &Path,
-) -> Result<PatternList, ConfigError> {
+fn compile_patterns(patterns: &[String], source_path: &Path) -> Result<PatternList, ConfigError> {
     let mut compiled = Vec::new();
     for pattern in patterns {
         let matcher = compile_glob(pattern, source_path)?;
@@ -309,32 +310,26 @@ fn compile_patterns(
     Ok(PatternList::new(compiled))
 }
 
-fn compile_glob(
-    pattern: &str,
-    source_path: &Path,
-) -> Result<GlobMatcher, ConfigError> {
-    let mut builder = Glob::new(pattern)
-        .map_err(|err| ConfigError::Glob {
-            path: source_path.to_path_buf(),
-            pattern: pattern.to_string(),
-            message: err.to_string(),
-        })?
-        .builder();
+fn compile_glob(pattern: &str, source_path: &Path) -> Result<GlobMatcher, ConfigError> {
     #[cfg(windows)]
-    {
+    let builder = {
+        let mut builder = GlobBuilder::new(pattern);
         builder.case_insensitive(true);
-    }
-    Ok(builder.build().map_err(|err| ConfigError::Glob {
+        builder
+    };
+    #[cfg(not(windows))]
+    let builder = GlobBuilder::new(pattern);
+    let glob = builder.build().map_err(|err| ConfigError::Glob {
         path: source_path.to_path_buf(),
         pattern: pattern.to_string(),
         message: err.to_string(),
-    })?
-    .compile_matcher())
+    })?;
+    Ok(glob.compile_matcher())
 }
 
 fn extract_key(path: &serde_ignored::Path) -> Option<String> {
     let path_str = path.to_string();
-    let mut last = path_str.split('.').last().unwrap_or(&path_str);
+    let mut last = path_str.split('.').next_back().unwrap_or(&path_str);
     if let Some(pos) = last.find('[') {
         last = &last[..pos];
     }
@@ -348,8 +343,7 @@ fn extract_key(path: &serde_ignored::Path) -> Option<String> {
 fn find_key_location(text: &str, key: &str) -> Option<(usize, usize)> {
     for (line_idx, line) in text.lines().enumerate() {
         let trimmed = line.trim_start();
-        if trimmed.starts_with(key) {
-            let rest = &trimmed[key.len()..];
+        if let Some(rest) = trimmed.strip_prefix(key) {
             if rest.trim_start().starts_with('=') {
                 let leading = line.len().saturating_sub(trimmed.len());
                 return Some((line_idx + 1, leading + 1));
@@ -385,6 +379,26 @@ fn suggest_key(key: &str) -> Option<String> {
     }
 }
 
+fn line_col_from_offset(text: &str, offset: usize) -> Option<(usize, usize)> {
+    if offset > text.len() {
+        return None;
+    }
+    let mut line = 1usize;
+    let mut col = 1usize;
+    for (idx, ch) in text.char_indices() {
+        if idx >= offset {
+            break;
+        }
+        if ch == '\n' {
+            line += 1;
+            col = 1;
+        } else {
+            col += 1;
+        }
+    }
+    Some((line, col))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -395,7 +409,9 @@ mod tests {
         let text = "default_max_lines = 400\nmax_line = 10\n";
         let err = parse_config(Path::new(".fence.toml"), text).unwrap_err();
         match err {
-            ConfigError::UnknownKey { key, suggestion, .. } => {
+            ConfigError::UnknownKey {
+                key, suggestion, ..
+            } => {
                 assert_eq!(key, "max_line");
                 assert_eq!(suggestion, Some("max_lines".to_string()));
             }
@@ -433,8 +449,8 @@ mod tests {
                 severity: Severity::Error,
             }],
         };
-        let err = compile_config(ConfigOrigin::BuiltIn, PathBuf::from("."), config, None)
-            .unwrap_err();
+        let err =
+            compile_config(ConfigOrigin::BuiltIn, PathBuf::from("."), config, None).unwrap_err();
         match err {
             ConfigError::Glob { .. } => {}
             _ => panic!("expected glob error"),
@@ -443,7 +459,7 @@ mod tests {
 
     #[test]
     fn unknown_key_without_location() {
-        let text = "rules = [{ max_line = 10 }]\n";
+        let text = "rules = [{ path = \"src/*.rs\", max_lines = 10, max_line = 20 }]\n";
         let err = parse_config(Path::new(".fence.toml"), text).unwrap_err();
         match err {
             ConfigError::UnknownKey { line_col, .. } => {
@@ -477,8 +493,8 @@ mod tests {
             exempt: vec![],
             rules: vec![],
         };
-        let err = compile_config(ConfigOrigin::BuiltIn, PathBuf::from("."), config, None)
-            .unwrap_err();
+        let err =
+            compile_config(ConfigOrigin::BuiltIn, PathBuf::from("."), config, None).unwrap_err();
         assert!(err.render().contains("invalid glob"));
     }
 }

@@ -1,0 +1,25 @@
+# Rust build artifacts
+/target/
+**/*.rs.bk
+
+# Coverage output
+lcov.info
+*.profraw
+*.profdata
+
+# Editors/IDEs
+.idea/
+.vscode/
+
+# Environment files
+.env
+.env.*
+!.env.example
+.direnv/
+
+# Logs
+*.log
+
+# OS files
+.DS_Store
+Thumbs.db

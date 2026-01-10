@@ -8,8 +8,12 @@ pub enum MatchBy {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Decision {
-    Excluded { pattern: String },
-    Exempt { pattern: String },
+    Excluded {
+        pattern: String,
+    },
+    Exempt {
+        pattern: String,
+    },
     Check {
         limit: usize,
         severity: Severity,
@@ -89,7 +93,9 @@ mod tests {
         };
         let decision = decide(&compiled(config), "src/main.rs");
         match decision {
-            Decision::Check { limit, severity, .. } => {
+            Decision::Check {
+                limit, severity, ..
+            } => {
                 assert_eq!(limit, 200);
                 assert_eq!(severity, Severity::Warning);
             }
@@ -107,7 +113,9 @@ mod tests {
         };
         let decision = decide(&compiled(config), "src/file.txt");
         match decision {
-            Decision::Check { limit, matched_by, .. } => {
+            Decision::Check {
+                limit, matched_by, ..
+            } => {
                 assert_eq!(limit, 123);
                 assert_eq!(matched_by, MatchBy::Default);
             }

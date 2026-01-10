@@ -24,27 +24,27 @@ pub fn format_violation(
         Severity::Error => "error",
         Severity::Warning => "warning",
     };
-    format!(
-        "{}[max-lines]: {}: {} lines (limit: {}, +{} over)",
-        label, path, actual, limit, over_by
-    )
+    format!("{label}[max-lines]: {path}: {actual} lines (limit: {limit}, +{over_by} over)")
 }
 
 pub fn format_skip_warning(path: &str, reason: &SkipReason) -> String {
     match reason {
-        SkipReason::Binary => format!("warning[skip-binary]: {}: binary file skipped", path),
-        SkipReason::Unreadable(error) => format!(
-            "warning[skip-unreadable]: {}: unreadable file skipped ({})",
-            path, error
-        ),
+        SkipReason::Binary => format!("warning[skip-binary]: {path}: binary file skipped"),
+        SkipReason::Unreadable(error) => {
+            format!("warning[skip-unreadable]: {path}: unreadable file skipped ({error})")
+        }
         SkipReason::Missing => {
-            format!("warning[skip-missing]: {}: missing file skipped", path)
+            format!("warning[skip-missing]: {path}: missing file skipped")
         }
     }
 }
 
 pub fn format_summary(summary: &Summary) -> String {
-    let error_label = if summary.errors == 1 { "error" } else { "errors" };
+    let error_label = if summary.errors == 1 {
+        "error"
+    } else {
+        "errors"
+    };
     let warning_label = if summary.warnings == 1 {
         "warning"
     } else {
@@ -125,10 +125,7 @@ mod tests {
             "warning[skip-unreadable]: bin: unreadable file skipped (denied)"
         );
         let missing = format_skip_warning("bin", &SkipReason::Missing);
-        assert_eq!(
-            missing,
-            "warning[skip-missing]: bin: missing file skipped"
-        );
+        assert_eq!(missing, "warning[skip-missing]: bin: missing file skipped");
     }
 
     #[test]

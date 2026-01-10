@@ -10,9 +10,7 @@ pub fn expand_paths(paths: &[PathBuf]) -> Result<Vec<PathBuf>, FsError> {
         if path.exists() {
             if path.is_dir() {
                 for entry in WalkDir::new(path) {
-                    let entry = entry.map_err(|err| {
-                        FsError::Io(std::io::Error::new(std::io::ErrorKind::Other, err))
-                    })?;
+                    let entry = entry.map_err(|err| FsError::Io(std::io::Error::other(err)))?;
                     if entry.file_type().is_file() {
                         files.push(entry.path().to_path_buf());
                     }

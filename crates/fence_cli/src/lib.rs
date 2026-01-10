@@ -3,7 +3,7 @@
 mod cli;
 
 use std::ffi::OsString;
-use std::io::{self, Read, Write};
+use std::io::{self, Read};
 use std::path::{Path, PathBuf};
 use std::time::Instant;
 
@@ -23,12 +23,7 @@ pub fn run_env() -> i32 {
     run_with(args, stdin.lock(), &mut stdout, &mut stderr)
 }
 
-pub fn run_with<I, R, W1, W2>(
-    args: I,
-    mut stdin: R,
-    stdout: &mut W1,
-    stderr: &mut W2,
-) -> i32
+pub fn run_with<I, R, W1, W2>(args: I, mut stdin: R, stdout: &mut W1, stderr: &mut W2) -> i32
 where
     I: IntoIterator<Item = OsString>,
     R: Read,
@@ -38,7 +33,11 @@ where
     let cli = Cli::parse_from(args);
     let mode = output_mode(&cli);
 
-    match cli.command.unwrap_or(Command::Check(cli::CheckArgs { paths: vec![] })) {
+    let command = cli
+        .command
+        .clone()
+        .unwrap_or(Command::Check(cli::CheckArgs { paths: vec![] }));
+    match command {
         Command::Check(args) => run_check(args, &cli, &mut stdin, stdout, stderr, mode),
         Command::Init(args) => run_init(args, &cli, stdout, stderr),
     }
@@ -74,7 +73,7 @@ fn run_check<R: Read, W1: WriteColor, W2: WriteColor>(
 }
 
 fn handle_fs_error<W: WriteColor>(err: FsError, stderr: &mut W) -> i32 {
-    let message = format!("error: {}", err);
+    let message = format!("error: {err}");
     let _ = write_block(stderr, Some(Color::Red), &message);
     2
 }
@@ -107,8 +106,7 @@ fn handle_check_output<W1: WriteColor, W2: WriteColor>(
                     &finding.kind,
                     FindingKind::Violation { severity, .. }
                         if *severity == fence_core::Severity::Error
-                )
-                {
+                ) {
                     let line = format_finding(finding);
                     let _ = write_line(stdout, Some(Color::Red), &line);
                 }
@@ -122,7 +120,9 @@ fn handle_check_output<W1: WriteColor, W2: WriteColor>(
                 for finding in &report.findings {
                     let (color, line) = match &finding.kind {
                         FindingKind::Violation { severity, .. } => match severity {
-                            fence_core::Severity::Error => (Some(Color::Red), format_finding(finding)),
+                            fence_core::Severity::Error => {
+                                (Some(Color::Red), format_finding(finding))
+                            }
                             fence_core::Severity::Warning => {
                                 (Some(Color::Yellow), format_finding(finding))
                             }
@@ -223,7 +223,7 @@ fn collect_inputs<R: Read>(
 
     if use_stdin {
         let mut stdin_paths = fence_fs::stdin::read_paths(stdin, cwd)
-            .map_err(|err| format!("failed to read stdin: {}", err))?;
+            .map_err(|err| format!("failed to read stdin: {err}"))?;
         paths.append(&mut stdin_paths);
     }
 
@@ -260,10 +260,10 @@ fn run_init<W1: WriteColor, W2: WriteColor>(
     };
 
     if let Err(err) = std::fs::write(&path, content) {
-        return print_error(stderr, &format!("failed to write .fence.toml: {}", err));
+        return print_error(stderr, &format!("failed to write .fence.toml: {err}"));
     }
 
-    let _ = stdout.flush();
+    let _ = std::io::Write::flush(stdout);
     0
 }
 
@@ -271,7 +271,7 @@ fn baseline_config(cwd: &Path) -> Result<String, String> {
     let temp_path = cwd.join(".fence.baseline.tmp.toml");
     let template = default_config_text(&[]);
     std::fs::write(&temp_path, template)
-        .map_err(|err| format!("failed to create baseline config: {}", err))?;
+        .map_err(|err| format!("failed to create baseline config: {err}"))?;
 
     let options = CheckOptions {
         config_path: Some(temp_path.clone()),
@@ -280,7 +280,7 @@ fn baseline_config(cwd: &Path) -> Result<String, String> {
 
     let output = fence_fs::run_check(vec![cwd.to_path_buf()], options);
     let _ = std::fs::remove_file(&temp_path);
-    let output = output.map_err(|err| format!("baseline check failed: {}", err))?;
+    let output = output.map_err(|err| format!("baseline check failed: {err}"))?;
 
     let mut exempt = Vec::new();
     for outcome in output.outcomes {
@@ -305,14 +305,12 @@ fn baseline_config(cwd: &Path) -> Result<String, String> {
 
 fn default_config_text(exempt: &[String]) -> String {
     let mut output = String::new();
-    output.push_str(
-        "# fence: an \"electric fence\" that keeps files small for humans and LLMs.\n",
-    );
+    output.push_str("# fence: an \"electric fence\" that keeps files small for humans and LLMs.\n");
     output.push_str("# Counted lines are wc -l style (includes blanks/comments).\n\n");
     output.push_str("default_max_lines = 400\n\n");
     output.push_str("exclude = [\n");
     for pattern in fence_core::FenceConfig::init_template().exclude {
-        output.push_str(&format!("  \"{}\",\n", pattern));
+        output.push_str(&format!("  \"{pattern}\",\n"));
     }
     output.push_str("]\n\n");
 
@@ -321,7 +319,7 @@ fn default_config_text(exempt: &[String]) -> String {
     } else {
         output.push_str("exempt = [\n");
         for path in exempt {
-            output.push_str(&format!("  \"{}\",\n", path));
+            output.push_str(&format!("  \"{path}\",\n"));
         }
         output.push_str("]\n\n");
     }
@@ -343,7 +341,7 @@ fn write_line<W: WriteColor>(writer: &mut W, color: Option<Color>, line: &str) -
         spec.set_fg(Some(color));
         writer.set_color(&spec)?;
     }
-    writeln!(writer, "{}", line)?;
+    writeln!(writer, "{line}")?;
     writer.reset()?;
     Ok(())
 }
@@ -360,7 +358,7 @@ fn write_block<W: WriteColor>(writer: &mut W, color: Option<Color>, block: &str)
 }
 
 fn print_error<W: WriteColor>(stderr: &mut W, message: &str) -> i32 {
-    let _ = write_line(stderr, Some(Color::Red), &format!("error: {}", message));
+    let _ = write_line(stderr, Some(Color::Red), &format!("error: {message}"));
     2
 }
 
@@ -392,7 +390,7 @@ mod tests {
 
     impl Read for FailingReader {
         fn read(&mut self, _buf: &mut [u8]) -> io::Result<usize> {
-            Err(io::Error::new(io::ErrorKind::Other, "fail"))
+            Err(io::Error::other("fail"))
         }
     }
 

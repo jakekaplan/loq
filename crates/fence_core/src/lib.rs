@@ -7,6 +7,4 @@ pub mod report;
 
 pub use config::{CompiledConfig, ConfigError, ConfigOrigin, FenceConfig, Rule, Severity};
 pub use decide::{Decision, MatchBy};
-pub use report::{
-    FileOutcome, Finding, FindingKind, OutcomeKind, Report, SkipReason, Summary,
-};
+pub use report::{FileOutcome, Finding, FindingKind, OutcomeKind, Report, SkipReason, Summary};

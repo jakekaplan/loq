@@ -10,11 +10,17 @@ pub struct FileOutcome {
 
 #[derive(Debug, Clone)]
 pub enum OutcomeKind {
-    Excluded { pattern: String },
-    Exempt { pattern: String },
+    Excluded {
+        pattern: String,
+    },
+    Exempt {
+        pattern: String,
+    },
     NoLimit,
     Missing,
-    Unreadable { error: String },
+    Unreadable {
+        error: String,
+    },
     Binary,
     Violation {
         limit: usize,
@@ -45,7 +51,9 @@ pub enum FindingKind {
         actual: usize,
         over_by: usize,
     },
-    SkipWarning { reason: SkipReason },
+    SkipWarning {
+        reason: SkipReason,
+    },
 }
 
 #[derive(Debug, Clone)]
@@ -80,9 +88,7 @@ pub fn build_report(outcomes: &[FileOutcome], duration_ms: u128) -> Report {
 
     for outcome in outcomes {
         match &outcome.kind {
-            OutcomeKind::Excluded { .. }
-            | OutcomeKind::Exempt { .. }
-            | OutcomeKind::NoLimit => {
+            OutcomeKind::Excluded { .. } | OutcomeKind::Exempt { .. } | OutcomeKind::NoLimit => {
                 summary.skipped += 1;
             }
             OutcomeKind::Missing => {
@@ -153,8 +159,12 @@ pub fn sort_findings(findings: &mut [Finding]) {
         }
         match (&a.kind, &b.kind) {
             (
-                FindingKind::Violation { over_by: a_over, .. },
-                FindingKind::Violation { over_by: b_over, .. },
+                FindingKind::Violation {
+                    over_by: a_over, ..
+                },
+                FindingKind::Violation {
+                    over_by: b_over, ..
+                },
             ) => b_over.cmp(a_over).then_with(|| a.path.cmp(&b.path)),
             _ => a.path.cmp(&b.path),
         }

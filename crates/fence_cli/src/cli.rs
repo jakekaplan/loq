@@ -3,7 +3,11 @@ use std::path::PathBuf;
 use clap::{Args, Parser, Subcommand};
 
 #[derive(Parser, Debug)]
-#[command(name = "fence", version, about = "A fast file-size fence for LLM-friendly codebases")]
+#[command(
+    name = "fence",
+    version,
+    about = "A fast file-size fence for LLM-friendly codebases"
+)]
 pub struct Cli {
     #[command(subcommand)]
     pub command: Option<Command>,

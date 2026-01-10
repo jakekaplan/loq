@@ -35,7 +35,16 @@ impl ConfigDiscovery {
     }
 }
 
-pub fn find_config(path: &Path, discovery: &mut ConfigDiscovery) -> Result<Option<PathBuf>, FsError> {
+impl Default for ConfigDiscovery {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+pub fn find_config(
+    path: &Path,
+    discovery: &mut ConfigDiscovery,
+) -> Result<Option<PathBuf>, FsError> {
     let dir = path.parent().unwrap_or(Path::new("."));
     discovery.find_in_dir(dir)
 }

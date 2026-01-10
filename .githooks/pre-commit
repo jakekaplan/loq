@@ -1,0 +1,16 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+if ! command -v cargo >/dev/null 2>&1; then
+  echo "error: cargo is required for pre-commit checks" >&2
+  exit 1
+fi
+
+echo "Running cargo fmt --check"
+cargo fmt --check
+
+echo "Running cargo clippy --all-targets --all-features -- -D warnings"
+cargo clippy --all-targets --all-features -- -D warnings
+
+echo "Running cargo test --all"
+cargo test --all
