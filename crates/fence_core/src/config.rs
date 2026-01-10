@@ -4,17 +4,12 @@ use std::path::{Path, PathBuf};
 use globset::{GlobBuilder, GlobMatcher};
 use serde::Deserialize;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum Severity {
+    #[default]
     Error,
     Warning,
-}
-
-impl Default for Severity {
-    fn default() -> Self {
-        Self::Error
-    }
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -28,6 +23,8 @@ pub struct Rule {
 #[derive(Debug, Clone, Deserialize)]
 pub struct FenceConfig {
     pub default_max_lines: Option<usize>,
+    #[serde(default = "default_respect_gitignore")]
+    pub respect_gitignore: bool,
     #[serde(default)]
     pub exclude: Vec<String>,
     #[serde(default)]
@@ -40,20 +37,8 @@ impl FenceConfig {
     pub fn built_in_defaults() -> Self {
         Self {
             default_max_lines: Some(400),
-            exclude: vec![
-                ".git/**".to_string(),
-                "target/**".to_string(),
-                "node_modules/**".to_string(),
-                "vendor/**".to_string(),
-                "dist/**".to_string(),
-                "build/**".to_string(),
-                ".venv/**".to_string(),
-                "venv/**".to_string(),
-                "__pycache__/**".to_string(),
-                ".mypy_cache/**".to_string(),
-                ".pytest_cache/**".to_string(),
-                ".ruff_cache/**".to_string(),
-            ],
+            respect_gitignore: true,
+            exclude: Vec::new(),
             exempt: Vec::new(),
             rules: Vec::new(),
         }
@@ -62,20 +47,8 @@ impl FenceConfig {
     pub fn init_template() -> Self {
         Self {
             default_max_lines: Some(400),
-            exclude: vec![
-                ".git/**".to_string(),
-                "target/**".to_string(),
-                "node_modules/**".to_string(),
-                "vendor/**".to_string(),
-                "dist/**".to_string(),
-                "build/**".to_string(),
-                ".venv/**".to_string(),
-                "venv/**".to_string(),
-                "__pycache__/**".to_string(),
-                ".mypy_cache/**".to_string(),
-                ".pytest_cache/**".to_string(),
-                ".ruff_cache/**".to_string(),
-            ],
+            respect_gitignore: true,
+            exclude: Vec::new(),
             exempt: Vec::new(),
             rules: vec![
                 Rule {
@@ -104,6 +77,7 @@ pub struct CompiledConfig {
     pub origin: ConfigOrigin,
     pub root_dir: PathBuf,
     pub default_max_lines: Option<usize>,
+    pub respect_gitignore: bool,
     exclude: PatternList,
     exempt: PatternList,
     rules: Vec<CompiledRule>,
@@ -292,6 +266,7 @@ pub fn compile_config(
         origin,
         root_dir,
         default_max_lines: config.default_max_lines,
+        respect_gitignore: config.respect_gitignore,
         exclude,
         exempt,
         rules,
@@ -356,6 +331,7 @@ fn find_key_location(text: &str, key: &str) -> Option<(usize, usize)> {
 fn suggest_key(key: &str) -> Option<String> {
     let candidates = [
         "default_max_lines",
+        "respect_gitignore",
         "exclude",
         "exempt",
         "rules",
@@ -399,6 +375,10 @@ fn line_col_from_offset(text: &str, offset: usize) -> Option<(usize, usize)> {
     Some((line, col))
 }
 
+fn default_respect_gitignore() -> bool {
+    true
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -428,6 +408,13 @@ mod tests {
     }
 
     #[test]
+    fn respect_gitignore_defaults_true() {
+        let text = "default_max_lines = 400\n";
+        let config = parse_config(Path::new(".fence.toml"), text).unwrap();
+        assert!(config.respect_gitignore);
+    }
+
+    #[test]
     fn invalid_toml_reports_error() {
         let text = "default_max_lines =\n";
         let err = parse_config(Path::new(".fence.toml"), text).unwrap_err();
@@ -441,6 +428,7 @@ mod tests {
     fn invalid_glob_reports_error() {
         let config = FenceConfig {
             default_max_lines: Some(1),
+            respect_gitignore: true,
             exclude: vec![],
             exempt: vec![],
             rules: vec![Rule {
@@ -489,6 +477,7 @@ mod tests {
 
         let config = FenceConfig {
             default_max_lines: Some(1),
+            respect_gitignore: true,
             exclude: vec!["[[".to_string()],
             exempt: vec![],
             rules: vec![],

@@ -10,6 +10,7 @@ thiserror.workspace = true
 walkdir.workspace = true
 rayon.workspace = true
 pathdiff.workspace = true
+ignore.workspace = true
 
 [dev-dependencies]
 tempfile = "3"

@@ -53,6 +53,38 @@ fence init --baseline
 
 Config discovery walks upward from each file’s directory and uses the nearest `.fence.toml`. Patterns are matched against paths relative to the config directory.
 
+`respect_gitignore` defaults to true and applies the root `.gitignore` when scanning. The built-in defaults do not add any exclude patterns.
+
+## Development
+
+Install Rust (once):
+
+```bash
+rustup default stable
+```
+
+Common tasks:
+
+```bash
+# build
+cargo build
+
+# run the CLI locally
+cargo run -p fence -- check .
+
+# install locally
+cargo install --path crates/fence_cli
+
+# quick checks (fmt + clippy)
+just check
+```
+
+Enable git hooks in this repo:
+
+```bash
+git config core.hooksPath .githooks
+```
+
 ## Default `.fence.toml`
 
 ```toml
@@ -61,20 +93,9 @@ Config discovery walks upward from each file’s directory and uses the nearest 
 
 default_max_lines = 400
 
-exclude = [
-  ".git/**",
-  "target/**",
-  "node_modules/**",
-  "vendor/**",
-  "dist/**",
-  "build/**",
-  ".venv/**",
-  "venv/**",
-  "__pycache__/**",
-  ".mypy_cache/**",
-  ".pytest_cache/**",
-  ".ruff_cache/**",
-]
+respect_gitignore = true
+
+exclude = []
 
 exempt = []
 

@@ -1,16 +1,18 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-if ! command -v cargo >/dev/null 2>&1; then
-  echo "error: cargo is required for pre-commit checks" >&2
+if ! command -v just >/dev/null 2>&1; then
+  echo "error: just is required for pre-commit checks" >&2
+  echo "" >&2
+  echo "Install with one of:" >&2
+  echo "  brew install just      # macOS/Linux (Homebrew)" >&2
+  echo "  cargo install just     # Rust/Cargo" >&2
+  echo "  apt install just       # Debian/Ubuntu" >&2
+  echo "  pacman -S just         # Arch Linux" >&2
+  echo "" >&2
+  echo "More options: https://github.com/casey/just#installation" >&2
   exit 1
 fi
 
-echo "Running cargo fmt --check"
-cargo fmt --check
-
-echo "Running cargo clippy --all-targets --all-features -- -D warnings"
-cargo clippy --all-targets --all-features -- -D warnings
-
-echo "Running cargo test --all"
-cargo test --all
+echo "Running just check"
+just check

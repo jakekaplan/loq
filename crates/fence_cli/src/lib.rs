@@ -308,11 +308,17 @@ fn default_config_text(exempt: &[String]) -> String {
     output.push_str("# fence: an \"electric fence\" that keeps files small for humans and LLMs.\n");
     output.push_str("# Counted lines are wc -l style (includes blanks/comments).\n\n");
     output.push_str("default_max_lines = 400\n\n");
-    output.push_str("exclude = [\n");
-    for pattern in fence_core::FenceConfig::init_template().exclude {
-        output.push_str(&format!("  \"{pattern}\",\n"));
+    output.push_str("respect_gitignore = true\n\n");
+    let exclude = fence_core::FenceConfig::init_template().exclude;
+    if exclude.is_empty() {
+        output.push_str("exclude = []\n\n");
+    } else {
+        output.push_str("exclude = [\n");
+        for pattern in exclude {
+            output.push_str(&format!("  \"{pattern}\",\n"));
+        }
+        output.push_str("]\n\n");
     }
-    output.push_str("]\n\n");
 
     if exempt.is_empty() {
         output.push_str("exempt = []\n\n");

@@ -76,6 +76,7 @@ mod tests {
     fn rule_order_last_match_wins() {
         let config = FenceConfig {
             default_max_lines: Some(400),
+            respect_gitignore: true,
             exclude: vec![],
             exempt: vec![],
             rules: vec![
@@ -107,6 +108,7 @@ mod tests {
     fn default_fallback_when_no_rule() {
         let config = FenceConfig {
             default_max_lines: Some(123),
+            respect_gitignore: true,
             exclude: vec![],
             exempt: vec![],
             rules: vec![],
@@ -127,6 +129,7 @@ mod tests {
     fn skip_when_no_default_and_no_rule() {
         let config = FenceConfig {
             default_max_lines: None,
+            respect_gitignore: true,
             exclude: vec![],
             exempt: vec![],
             rules: vec![],
@@ -139,6 +142,7 @@ mod tests {
     fn exclude_beats_rules() {
         let config = FenceConfig {
             default_max_lines: Some(10),
+            respect_gitignore: true,
             exclude: vec!["**/*.txt".to_string()],
             exempt: vec![],
             rules: vec![Rule {

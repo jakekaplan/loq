@@ -10,6 +10,7 @@ use std::path::{Path, PathBuf};
 use fence_core::config::{compile_config, ConfigOrigin, FenceConfig};
 use fence_core::decide::{decide, Decision};
 use fence_core::report::{FileOutcome, OutcomeKind};
+use ignore::gitignore::{Gitignore, GitignoreBuilder};
 
 use rayon::prelude::*;
 
@@ -17,6 +18,7 @@ use rayon::prelude::*;
 pub enum FsError {
     Config(fence_core::config::ConfigError),
     Io(std::io::Error),
+    Gitignore(String),
 }
 
 impl std::fmt::Display for FsError {
@@ -24,6 +26,7 @@ impl std::fmt::Display for FsError {
         match self {
             FsError::Config(err) => write!(f, "{err}"),
             FsError::Io(err) => write!(f, "{err}"),
+            FsError::Gitignore(err) => write!(f, "{err}"),
         }
     }
 }
@@ -58,6 +61,7 @@ pub fn run_check(paths: Vec<PathBuf>, options: CheckOptions) -> Result<CheckOutp
     file_list.sort();
     file_list.dedup();
 
+    let root_gitignore = load_gitignore(&options.cwd)?;
     let mut verbose = Vec::new();
     let mut outcomes = Vec::new();
 
@@ -76,7 +80,8 @@ pub fn run_check(paths: Vec<PathBuf>, options: CheckOptions) -> Result<CheckOutp
             Some(&config_path),
         )?;
 
-        let (group_outcomes, group_verbose) = check_group(&file_list, &compiled, &options.cwd);
+        let (group_outcomes, group_verbose) =
+            check_group(&file_list, &compiled, &options.cwd, root_gitignore.as_ref());
         outcomes.extend(group_outcomes);
         verbose.extend(group_verbose);
         return Ok(CheckOutput { outcomes, verbose });
@@ -114,8 +119,12 @@ pub fn run_check(paths: Vec<PathBuf>, options: CheckOptions) -> Result<CheckOutp
             (compiled, ConfigOrigin::BuiltIn)
         };
 
-        let (group_outcomes, mut group_verbose) =
-            check_group(&group_paths, &compiled, &options.cwd);
+        let (group_outcomes, mut group_verbose) = check_group(
+            &group_paths,
+            &compiled,
+            &options.cwd,
+            root_gitignore.as_ref(),
+        );
         for entry in &mut group_verbose {
             entry.config_source = origin.clone();
         }
@@ -130,10 +139,11 @@ fn check_group(
     paths: &[PathBuf],
     compiled: &fence_core::config::CompiledConfig,
     cwd: &Path,
+    gitignore: Option<&Gitignore>,
 ) -> (Vec<FileOutcome>, Vec<VerboseInfo>) {
     let checked: Vec<(FileOutcome, Decision)> = paths
         .par_iter()
-        .map(|path| check_file(path, compiled, cwd))
+        .map(|path| check_file(path, compiled, cwd, gitignore))
         .collect();
     let mut outcomes = Vec::new();
     let mut verbose = Vec::new();
@@ -152,11 +162,30 @@ fn check_file(
     path: &Path,
     compiled: &fence_core::config::CompiledConfig,
     cwd: &Path,
+    gitignore: Option<&Gitignore>,
 ) -> (FileOutcome, Decision) {
     let display_path = pathdiff::diff_paths(path, cwd)
         .unwrap_or_else(|| path.to_path_buf())
         .to_string_lossy()
         .to_string();
+
+    if compiled.respect_gitignore {
+        if let Some(gitignore) = gitignore {
+            if is_gitignored(gitignore, path, cwd) {
+                let pattern = ".gitignore".to_string();
+                return (
+                    FileOutcome {
+                        path: path.to_path_buf(),
+                        display_path,
+                        kind: OutcomeKind::Excluded {
+                            pattern: pattern.clone(),
+                        },
+                    },
+                    Decision::Excluded { pattern },
+                );
+            }
+        }
+    }
 
     let relative =
         pathdiff::diff_paths(path, &compiled.root_dir).unwrap_or_else(|| path.to_path_buf());
@@ -238,6 +267,25 @@ fn check_file(
 
 fn normalize_path(path: &Path) -> String {
     path.to_string_lossy().replace('\\', "/")
+}
+
+fn load_gitignore(root: &Path) -> Result<Option<Gitignore>, FsError> {
+    let path = root.join(".gitignore");
+    if !path.is_file() {
+        return Ok(None);
+    }
+    let mut builder = GitignoreBuilder::new(root);
+    builder.add(path);
+    let gitignore = builder
+        .build()
+        .map_err(|err| FsError::Gitignore(err.to_string()))?;
+    Ok(Some(gitignore))
+}
+
+fn is_gitignored(gitignore: &Gitignore, path: &Path, root: &Path) -> bool {
+    let relative = pathdiff::diff_paths(path, root).unwrap_or_else(|| path.to_path_buf());
+    let matched = gitignore.matched_path_or_any_parents(&relative, path.is_dir());
+    matched.is_ignore() && !matched.is_whitelist()
 }
 
 #[cfg(test)]
@@ -345,6 +393,7 @@ mod tests {
         let temp = TempDir::new().unwrap();
         let config = fence_core::config::FenceConfig {
             default_max_lines: Some(1),
+            respect_gitignore: true,
             exclude: vec![],
             exempt: vec![],
             rules: vec![],
@@ -359,10 +408,54 @@ mod tests {
 
         let binary = temp.path().join("binary.txt");
         std::fs::write(&binary, b"\0binary").unwrap();
-        let (binary_outcome, _) = check_file(&binary, &compiled, temp.path());
+        let (binary_outcome, _) = check_file(&binary, &compiled, temp.path(), None);
         assert!(matches!(binary_outcome.kind, OutcomeKind::Binary));
 
-        let (dir_outcome, _) = check_file(temp.path(), &compiled, temp.path());
+        let (dir_outcome, _) = check_file(temp.path(), &compiled, temp.path(), None);
         assert!(matches!(dir_outcome.kind, OutcomeKind::Unreadable { .. }));
+    }
+
+    #[test]
+    fn gitignore_is_respected_by_default() {
+        let temp = TempDir::new().unwrap();
+        write_file(&temp, ".gitignore", "ignored.txt\n");
+        let file = write_file(&temp, "ignored.txt", "a\n");
+
+        let output = run_check(
+            vec![file],
+            CheckOptions {
+                config_path: None,
+                cwd: temp.path().to_path_buf(),
+            },
+        )
+        .unwrap();
+
+        assert!(matches!(
+            output.outcomes[0].kind,
+            OutcomeKind::Excluded { .. }
+        ));
+    }
+
+    #[test]
+    fn gitignore_can_be_disabled() {
+        let temp = TempDir::new().unwrap();
+        write_file(&temp, ".gitignore", "ignored.txt\n");
+        write_file(
+            &temp,
+            ".fence.toml",
+            "default_max_lines = 10\nrespect_gitignore = false\n",
+        );
+        let file = write_file(&temp, "ignored.txt", "a\n");
+
+        let output = run_check(
+            vec![file],
+            CheckOptions {
+                config_path: Some(temp.path().join(".fence.toml")),
+                cwd: temp.path().to_path_buf(),
+            },
+        )
+        .unwrap();
+
+        assert!(matches!(output.outcomes[0].kind, OutcomeKind::Pass { .. }));
     }
 }
