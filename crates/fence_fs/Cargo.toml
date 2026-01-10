@@ -1,0 +1,15 @@
+[package]
+name = "fence_fs"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+fence_core = { path = "../fence_core" }
+thiserror.workspace = true
+walkdir.workspace = true
+rayon.workspace = true
+pathdiff.workspace = true
+
+[dev-dependencies]
+tempfile = "3"

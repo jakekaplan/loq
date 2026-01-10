@@ -1,0 +1,26 @@
+[workspace]
+members = [
+  "crates/fence_core",
+  "crates/fence_fs",
+  "crates/fence_cli",
+]
+resolver = "2"
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+
+[workspace.dependencies]
+serde = { version = "1", features = ["derive"] }
+toml = "0.8"
+thiserror = "1"
+serde_ignored = "0.1"
+strsim = "0.11"
+globset = "0.4"
+walkdir = "2"
+rayon = "1.10"
+pathdiff = "0.2"
+clap = { version = "4", features = ["derive"] }
+termcolor = "1"
+anyhow = "1"

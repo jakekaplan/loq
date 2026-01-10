@@ -1,0 +1,163 @@
+use crate::config::Severity;
+use crate::report::{Finding, FindingKind, SkipReason, Summary};
+
+pub fn format_finding(finding: &Finding) -> String {
+    match &finding.kind {
+        FindingKind::Violation {
+            severity,
+            limit,
+            actual,
+            over_by,
+        } => format_violation(*severity, &finding.path, *actual, *limit, *over_by),
+        FindingKind::SkipWarning { reason } => format_skip_warning(&finding.path, reason),
+    }
+}
+
+pub fn format_violation(
+    severity: Severity,
+    path: &str,
+    actual: usize,
+    limit: usize,
+    over_by: usize,
+) -> String {
+    let label = match severity {
+        Severity::Error => "error",
+        Severity::Warning => "warning",
+    };
+    format!(
+        "{}[max-lines]: {}: {} lines (limit: {}, +{} over)",
+        label, path, actual, limit, over_by
+    )
+}
+
+pub fn format_skip_warning(path: &str, reason: &SkipReason) -> String {
+    match reason {
+        SkipReason::Binary => format!("warning[skip-binary]: {}: binary file skipped", path),
+        SkipReason::Unreadable(error) => format!(
+            "warning[skip-unreadable]: {}: unreadable file skipped ({})",
+            path, error
+        ),
+        SkipReason::Missing => {
+            format!("warning[skip-missing]: {}: missing file skipped", path)
+        }
+    }
+}
+
+pub fn format_summary(summary: &Summary) -> String {
+    let error_label = if summary.errors == 1 { "error" } else { "errors" };
+    let warning_label = if summary.warnings == 1 {
+        "warning"
+    } else {
+        "warnings"
+    };
+    format!(
+        "{} files checked, {} skipped, {} passed, {} {}, {} {} ({}ms)",
+        summary.total,
+        summary.skipped,
+        summary.passed,
+        summary.errors,
+        error_label,
+        summary.warnings,
+        warning_label,
+        summary.duration_ms
+    )
+}
+
+pub fn format_success(summary: &Summary) -> String {
+    format!(
+        "All checks passed! ({} files in {}ms)",
+        summary.total, summary.duration_ms
+    )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::report::Finding;
+
+    #[test]
+    fn format_error_line() {
+        let finding = Finding {
+            path: "src/lib.rs".into(),
+            kind: FindingKind::Violation {
+                severity: Severity::Error,
+                limit: 10,
+                actual: 12,
+                over_by: 2,
+            },
+        };
+        let line = format_finding(&finding);
+        assert_eq!(
+            line,
+            "error[max-lines]: src/lib.rs: 12 lines (limit: 10, +2 over)"
+        );
+    }
+
+    #[test]
+    fn format_skip_binary() {
+        let line = format_skip_warning("bin", &SkipReason::Binary);
+        assert_eq!(line, "warning[skip-binary]: bin: binary file skipped");
+    }
+
+    #[test]
+    fn format_warning_line() {
+        let finding = Finding {
+            path: "src/lib.rs".into(),
+            kind: FindingKind::Violation {
+                severity: Severity::Warning,
+                limit: 10,
+                actual: 12,
+                over_by: 2,
+            },
+        };
+        let line = format_finding(&finding);
+        assert_eq!(
+            line,
+            "warning[max-lines]: src/lib.rs: 12 lines (limit: 10, +2 over)"
+        );
+    }
+
+    #[test]
+    fn format_skip_unreadable_and_missing() {
+        let unreadable = format_skip_warning("bin", &SkipReason::Unreadable("denied".into()));
+        assert_eq!(
+            unreadable,
+            "warning[skip-unreadable]: bin: unreadable file skipped (denied)"
+        );
+        let missing = format_skip_warning("bin", &SkipReason::Missing);
+        assert_eq!(
+            missing,
+            "warning[skip-missing]: bin: missing file skipped"
+        );
+    }
+
+    #[test]
+    fn format_summary_pluralization() {
+        let summary = Summary {
+            total: 2,
+            skipped: 0,
+            passed: 0,
+            errors: 1,
+            warnings: 2,
+            duration_ms: 5,
+        };
+        let line = format_summary(&summary);
+        assert!(line.contains("1 error"));
+        assert!(line.contains("2 warnings"));
+    }
+
+    #[test]
+    fn format_summary_singular_warning() {
+        let summary = Summary {
+            total: 1,
+            skipped: 0,
+            passed: 1,
+            errors: 2,
+            warnings: 1,
+            duration_ms: 5,
+        };
+        let line = format_summary(&summary);
+        assert!(line.contains("2 errors"));
+        assert!(line.contains("1 warning"));
+    }
+}

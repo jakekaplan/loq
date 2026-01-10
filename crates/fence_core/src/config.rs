@@ -1,0 +1,484 @@
+use std::fmt;
+use std::path::{Path, PathBuf};
+
+use globset::{Glob, GlobMatcher};
+use serde::Deserialize;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum Severity {
+    Error,
+    Warning,
+}
+
+impl Default for Severity {
+    fn default() -> Self {
+        Self::Error
+    }
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct Rule {
+    pub path: String,
+    pub max_lines: usize,
+    #[serde(default)]
+    pub severity: Severity,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct FenceConfig {
+    pub default_max_lines: Option<usize>,
+    #[serde(default)]
+    pub exclude: Vec<String>,
+    #[serde(default)]
+    pub exempt: Vec<String>,
+    #[serde(default)]
+    pub rules: Vec<Rule>,
+}
+
+impl FenceConfig {
+    pub fn built_in_defaults() -> Self {
+        Self {
+            default_max_lines: Some(400),
+            exclude: vec![
+                ".git/**".to_string(),
+                "target/**".to_string(),
+                "node_modules/**".to_string(),
+                "vendor/**".to_string(),
+                "dist/**".to_string(),
+                "build/**".to_string(),
+                ".venv/**".to_string(),
+                "venv/**".to_string(),
+                "__pycache__/**".to_string(),
+                ".mypy_cache/**".to_string(),
+                ".pytest_cache/**".to_string(),
+                ".ruff_cache/**".to_string(),
+            ],
+            exempt: Vec::new(),
+            rules: Vec::new(),
+        }
+    }
+
+    pub fn init_template() -> Self {
+        Self {
+            default_max_lines: Some(400),
+            exclude: vec![
+                ".git/**".to_string(),
+                "target/**".to_string(),
+                "node_modules/**".to_string(),
+                "vendor/**".to_string(),
+                "dist/**".to_string(),
+                "build/**".to_string(),
+                ".venv/**".to_string(),
+                "venv/**".to_string(),
+                "__pycache__/**".to_string(),
+                ".mypy_cache/**".to_string(),
+                ".pytest_cache/**".to_string(),
+                ".ruff_cache/**".to_string(),
+            ],
+            exempt: Vec::new(),
+            rules: vec![Rule {
+                path: "**/*.tsx".to_string(),
+                max_lines: 300,
+                severity: Severity::Warning,
+            },
+            Rule {
+                path: "tests/**/*".to_string(),
+                max_lines: 500,
+                severity: Severity::Error,
+            }],
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub enum ConfigOrigin {
+    BuiltIn,
+    File(PathBuf),
+}
+
+#[derive(Debug, Clone)]
+pub struct CompiledConfig {
+    pub origin: ConfigOrigin,
+    pub root_dir: PathBuf,
+    pub default_max_lines: Option<usize>,
+    exclude: PatternList,
+    exempt: PatternList,
+    rules: Vec<CompiledRule>,
+}
+
+impl CompiledConfig {
+    pub fn exclude_patterns(&self) -> &PatternList {
+        &self.exclude
+    }
+
+    pub fn exempt_patterns(&self) -> &PatternList {
+        &self.exempt
+    }
+
+    pub fn rules(&self) -> &[CompiledRule] {
+        &self.rules
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct CompiledRule {
+    pub pattern: String,
+    pub max_lines: usize,
+    pub severity: Severity,
+    matcher: GlobMatcher,
+}
+
+impl CompiledRule {
+    pub fn is_match(&self, path: &str) -> bool {
+        self.matcher.is_match(path)
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct PatternList {
+    patterns: Vec<PatternMatcher>,
+}
+
+impl PatternList {
+    pub fn new(patterns: Vec<PatternMatcher>) -> Self {
+        Self { patterns }
+    }
+
+    pub fn matches(&self, path: &str) -> Option<&str> {
+        for pattern in &self.patterns {
+            if pattern.matcher.is_match(path) {
+                return Some(pattern.pattern.as_str());
+            }
+        }
+        None
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct PatternMatcher {
+    pattern: String,
+    matcher: GlobMatcher,
+}
+
+#[derive(Debug)]
+pub enum ConfigError {
+    Toml {
+        path: PathBuf,
+        message: String,
+        line_col: Option<(usize, usize)>,
+    },
+    UnknownKey {
+        path: PathBuf,
+        key: String,
+        line_col: Option<(usize, usize)>,
+        suggestion: Option<String>,
+    },
+    Glob {
+        path: PathBuf,
+        pattern: String,
+        message: String,
+    },
+}
+
+impl ConfigError {
+    pub fn render(&self) -> String {
+        match self {
+            ConfigError::Toml {
+                path,
+                message,
+                line_col,
+            } => format_error(path, line_col, message),
+            ConfigError::UnknownKey {
+                path,
+                key,
+                line_col,
+                suggestion,
+            } => {
+                let base = format_error(path, line_col, &format!("unknown key '{}'", key));
+                if let Some(suggestion) = suggestion {
+                    format!("{}\n       did you mean '{}'?", base, suggestion)
+                } else {
+                    base
+                }
+            }
+            ConfigError::Glob {
+                path,
+                pattern,
+                message,
+            } => format!(
+                "{} - invalid glob '{}': {}",
+                path.display(),
+                pattern,
+                message
+            ),
+        }
+    }
+}
+
+impl fmt::Display for ConfigError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(&self.render())
+    }
+}
+
+impl std::error::Error for ConfigError {}
+
+fn format_error(path: &Path, line_col: &Option<(usize, usize)>, message: &str) -> String {
+    let line = if let Some((line, col)) = line_col {
+        format!("{}:{}:{} - {}", path.display(), line, col, message)
+    } else {
+        format!("{} - {}", path.display(), message)
+    };
+    line
+}
+
+pub fn parse_config(path: &Path, text: &str) -> Result<FenceConfig, ConfigError> {
+    let mut deserializer = toml::Deserializer::new(text);
+    let mut unknown = Vec::new();
+    let parsed: FenceConfig = serde_ignored::deserialize(&mut deserializer, |path| {
+        if let Some(key) = extract_key(path) {
+            unknown.push(key);
+        }
+    })
+    .map_err(|err| ConfigError::Toml {
+        path: path.to_path_buf(),
+        message: err.to_string(),
+        line_col: err.line_col().map(|(line, col)| (line + 1, col + 1)),
+    })?;
+
+    if let Some(key) = unknown.into_iter().next() {
+        let line_col = find_key_location(text, &key);
+        let suggestion = suggest_key(&key);
+        return Err(ConfigError::UnknownKey {
+            path: path.to_path_buf(),
+            key,
+            line_col,
+            suggestion,
+        });
+    }
+
+    Ok(parsed)
+}
+
+pub fn compile_config(
+    origin: ConfigOrigin,
+    root_dir: PathBuf,
+    config: FenceConfig,
+    source_path: Option<&Path>,
+) -> Result<CompiledConfig, ConfigError> {
+    let path_for_errors = source_path.map(Path::to_path_buf).unwrap_or_else(|| {
+        PathBuf::from("<built-in defaults>")
+    });
+
+    let exclude = compile_patterns(&config.exclude, &path_for_errors)?;
+    let exempt = compile_patterns(&config.exempt, &path_for_errors)?;
+    let mut rules = Vec::new();
+    for rule in config.rules {
+        let matcher = compile_glob(&rule.path, &path_for_errors)?;
+        rules.push(CompiledRule {
+            pattern: rule.path,
+            max_lines: rule.max_lines,
+            severity: rule.severity,
+            matcher,
+        });
+    }
+
+    Ok(CompiledConfig {
+        origin,
+        root_dir,
+        default_max_lines: config.default_max_lines,
+        exclude,
+        exempt,
+        rules,
+    })
+}
+
+fn compile_patterns(
+    patterns: &[String],
+    source_path: &Path,
+) -> Result<PatternList, ConfigError> {
+    let mut compiled = Vec::new();
+    for pattern in patterns {
+        let matcher = compile_glob(pattern, source_path)?;
+        compiled.push(PatternMatcher {
+            pattern: pattern.clone(),
+            matcher,
+        });
+    }
+    Ok(PatternList::new(compiled))
+}
+
+fn compile_glob(
+    pattern: &str,
+    source_path: &Path,
+) -> Result<GlobMatcher, ConfigError> {
+    let mut builder = Glob::new(pattern)
+        .map_err(|err| ConfigError::Glob {
+            path: source_path.to_path_buf(),
+            pattern: pattern.to_string(),
+            message: err.to_string(),
+        })?
+        .builder();
+    #[cfg(windows)]
+    {
+        builder.case_insensitive(true);
+    }
+    Ok(builder.build().map_err(|err| ConfigError::Glob {
+        path: source_path.to_path_buf(),
+        pattern: pattern.to_string(),
+        message: err.to_string(),
+    })?
+    .compile_matcher())
+}
+
+fn extract_key(path: &serde_ignored::Path) -> Option<String> {
+    let path_str = path.to_string();
+    let mut last = path_str.split('.').last().unwrap_or(&path_str);
+    if let Some(pos) = last.find('[') {
+        last = &last[..pos];
+    }
+    if last.is_empty() {
+        None
+    } else {
+        Some(last.to_string())
+    }
+}
+
+fn find_key_location(text: &str, key: &str) -> Option<(usize, usize)> {
+    for (line_idx, line) in text.lines().enumerate() {
+        let trimmed = line.trim_start();
+        if trimmed.starts_with(key) {
+            let rest = &trimmed[key.len()..];
+            if rest.trim_start().starts_with('=') {
+                let leading = line.len().saturating_sub(trimmed.len());
+                return Some((line_idx + 1, leading + 1));
+            }
+        }
+    }
+    None
+}
+
+fn suggest_key(key: &str) -> Option<String> {
+    let candidates = [
+        "default_max_lines",
+        "exclude",
+        "exempt",
+        "rules",
+        "path",
+        "max_lines",
+        "severity",
+    ];
+    let mut best = None;
+    let mut best_score = usize::MAX;
+    for candidate in candidates {
+        let score = strsim::levenshtein(key, candidate);
+        if score < best_score {
+            best_score = score;
+            best = Some(candidate);
+        }
+    }
+    if best_score <= 3 {
+        best.map(|s| s.to_string())
+    } else {
+        None
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::path::PathBuf;
+
+    #[test]
+    fn unknown_key_detection() {
+        let text = "default_max_lines = 400\nmax_line = 10\n";
+        let err = parse_config(Path::new(".fence.toml"), text).unwrap_err();
+        match err {
+            ConfigError::UnknownKey { key, suggestion, .. } => {
+                assert_eq!(key, "max_line");
+                assert_eq!(suggestion, Some("max_lines".to_string()));
+            }
+            _ => panic!("expected unknown key"),
+        }
+    }
+
+    #[test]
+    fn rule_severity_defaults_to_error() {
+        let text = "default_max_lines = 400\n[[rules]]\npath = \"**/*.rs\"\nmax_lines = 10\n";
+        let config = parse_config(Path::new(".fence.toml"), text).unwrap();
+        assert_eq!(config.rules.len(), 1);
+        assert_eq!(config.rules[0].severity, Severity::Error);
+    }
+
+    #[test]
+    fn invalid_toml_reports_error() {
+        let text = "default_max_lines =\n";
+        let err = parse_config(Path::new(".fence.toml"), text).unwrap_err();
+        match err {
+            ConfigError::Toml { .. } => {}
+            _ => panic!("expected toml error"),
+        }
+    }
+
+    #[test]
+    fn invalid_glob_reports_error() {
+        let config = FenceConfig {
+            default_max_lines: Some(1),
+            exclude: vec![],
+            exempt: vec![],
+            rules: vec![Rule {
+                path: "[[".to_string(),
+                max_lines: 1,
+                severity: Severity::Error,
+            }],
+        };
+        let err = compile_config(ConfigOrigin::BuiltIn, PathBuf::from("."), config, None)
+            .unwrap_err();
+        match err {
+            ConfigError::Glob { .. } => {}
+            _ => panic!("expected glob error"),
+        }
+    }
+
+    #[test]
+    fn unknown_key_without_location() {
+        let text = "rules = [{ max_line = 10 }]\n";
+        let err = parse_config(Path::new(".fence.toml"), text).unwrap_err();
+        match err {
+            ConfigError::UnknownKey { line_col, .. } => {
+                assert!(line_col.is_none());
+            }
+            _ => panic!("expected unknown key"),
+        }
+    }
+
+    #[test]
+    fn unknown_key_without_suggestion() {
+        let text = "banana = 1\n";
+        let err = parse_config(Path::new(".fence.toml"), text).unwrap_err();
+        match err {
+            ConfigError::UnknownKey { suggestion, .. } => {
+                assert!(suggestion.is_none());
+            }
+            _ => panic!("expected unknown key"),
+        }
+    }
+
+    #[test]
+    fn render_errors_are_stable() {
+        let text = "default_max_lines =\n";
+        let err = parse_config(Path::new(".fence.toml"), text).unwrap_err();
+        assert!(err.render().contains(".fence.toml"));
+
+        let config = FenceConfig {
+            default_max_lines: Some(1),
+            exclude: vec!["[[".to_string()],
+            exempt: vec![],
+            rules: vec![],
+        };
+        let err = compile_config(ConfigOrigin::BuiltIn, PathBuf::from("."), config, None)
+            .unwrap_err();
+        assert!(err.render().contains("invalid glob"));
+    }
+}

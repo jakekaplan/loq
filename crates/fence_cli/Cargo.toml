@@ -1,0 +1,25 @@
+[package]
+name = "fence"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[lib]
+name = "fence_cli"
+path = "src/lib.rs"
+
+[[bin]]
+name = "fence"
+path = "src/main.rs"
+
+[dependencies]
+fence_core = { path = "../fence_core" }
+fence_fs = { path = "../fence_fs" }
+clap.workspace = true
+termcolor.workspace = true
+anyhow.workspace = true
+
+[dev-dependencies]
+assert_cmd = "2"
+predicates = "3"
+tempfile = "3"

@@ -1,0 +1,417 @@
+#![forbid(unsafe_code)]
+
+mod cli;
+
+use std::ffi::OsString;
+use std::io::{self, Read, Write};
+use std::path::{Path, PathBuf};
+use std::time::Instant;
+
+use clap::Parser;
+use fence_core::format::{format_finding, format_success, format_summary};
+use fence_core::report::{build_report, FindingKind};
+use fence_fs::{CheckOptions, CheckOutput, FsError, VerboseInfo};
+use termcolor::{Color, ColorChoice, ColorSpec, StandardStream, WriteColor};
+
+pub use cli::{Cli, Command};
+
+pub fn run_env() -> i32 {
+    let args = std::env::args_os();
+    let stdin = io::stdin();
+    let mut stdout = StandardStream::stdout(ColorChoice::Auto);
+    let mut stderr = StandardStream::stderr(ColorChoice::Auto);
+    run_with(args, stdin.lock(), &mut stdout, &mut stderr)
+}
+
+pub fn run_with<I, R, W1, W2>(
+    args: I,
+    mut stdin: R,
+    stdout: &mut W1,
+    stderr: &mut W2,
+) -> i32
+where
+    I: IntoIterator<Item = OsString>,
+    R: Read,
+    W1: WriteColor,
+    W2: WriteColor,
+{
+    let cli = Cli::parse_from(args);
+    let mode = output_mode(&cli);
+
+    match cli.command.unwrap_or(Command::Check(cli::CheckArgs { paths: vec![] })) {
+        Command::Check(args) => run_check(args, &cli, &mut stdin, stdout, stderr, mode),
+        Command::Init(args) => run_init(args, &cli, stdout, stderr),
+    }
+}
+
+fn run_check<R: Read, W1: WriteColor, W2: WriteColor>(
+    args: cli::CheckArgs,
+    cli: &Cli,
+    stdin: &mut R,
+    stdout: &mut W1,
+    stderr: &mut W2,
+    mode: OutputMode,
+) -> i32 {
+    let cwd = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
+    let inputs = match collect_inputs(args.paths, stdin, &cwd) {
+        Ok(paths) => paths,
+        Err(err) => return print_error(stderr, &err),
+    };
+
+    let options = CheckOptions {
+        config_path: cli.config.clone(),
+        cwd: cwd.clone(),
+    };
+
+    let start = Instant::now();
+    let output = match fence_fs::run_check(inputs, options) {
+        Ok(output) => output,
+        Err(err) => return handle_fs_error(err, stderr),
+    };
+    let duration_ms = start.elapsed().as_millis();
+
+    handle_check_output(output, duration_ms, stdout, stderr, mode)
+}
+
+fn handle_fs_error<W: WriteColor>(err: FsError, stderr: &mut W) -> i32 {
+    let message = format!("error: {}", err);
+    let _ = write_block(stderr, Some(Color::Red), &message);
+    2
+}
+
+fn handle_check_output<W1: WriteColor, W2: WriteColor>(
+    mut output: CheckOutput,
+    duration_ms: u128,
+    stdout: &mut W1,
+    _stderr: &mut W2,
+    mode: OutputMode,
+) -> i32 {
+    output
+        .outcomes
+        .sort_by(|a, b| a.display_path.cmp(&b.display_path));
+    output
+        .verbose
+        .sort_by(|a, b| a.display_path.cmp(&b.display_path));
+
+    let report = build_report(&output.outcomes, duration_ms);
+
+    if mode == OutputMode::Verbose {
+        print_verbose(&output.verbose, stdout);
+    }
+
+    match mode {
+        OutputMode::Silent => {}
+        OutputMode::Quiet => {
+            for finding in &report.findings {
+                if matches!(
+                    &finding.kind,
+                    FindingKind::Violation { severity, .. }
+                        if *severity == fence_core::Severity::Error
+                )
+                {
+                    let line = format_finding(finding);
+                    let _ = write_line(stdout, Some(Color::Red), &line);
+                }
+            }
+        }
+        _ => {
+            if report.findings.is_empty() {
+                let line = format_success(&report.summary);
+                let _ = write_line(stdout, Some(Color::Green), &line);
+            } else {
+                for finding in &report.findings {
+                    let (color, line) = match &finding.kind {
+                        FindingKind::Violation { severity, .. } => match severity {
+                            fence_core::Severity::Error => (Some(Color::Red), format_finding(finding)),
+                            fence_core::Severity::Warning => {
+                                (Some(Color::Yellow), format_finding(finding))
+                            }
+                        },
+                        FindingKind::SkipWarning { .. } => {
+                            (Some(Color::Yellow), format_finding(finding))
+                        }
+                    };
+                    let _ = write_line(stdout, color, &line);
+                }
+                let summary = format_summary(&report.summary);
+                let _ = write_line(stdout, None, &summary);
+            }
+        }
+    }
+
+    if report.summary.errors > 0 {
+        1
+    } else {
+        0
+    }
+}
+
+fn print_verbose<W: WriteColor>(verbose: &[VerboseInfo], stdout: &mut W) {
+    for entry in verbose {
+        let config_line = format!(
+            "verbose: config {} -> {}",
+            entry.display_path,
+            config_source_label(&entry.config_source)
+        );
+        let _ = write_line(stdout, None, &config_line);
+
+        let rule_line = match &entry.decision {
+            fence_core::Decision::Excluded { pattern } => format!(
+                "verbose: rule {} -> excluded (pattern: {})",
+                entry.display_path, pattern
+            ),
+            fence_core::Decision::Exempt { pattern } => format!(
+                "verbose: rule {} -> exempt (pattern: {})",
+                entry.display_path, pattern
+            ),
+            fence_core::Decision::Check {
+                limit,
+                severity,
+                matched_by,
+            } => match matched_by {
+                fence_core::MatchBy::Rule { pattern } => format!(
+                    "verbose: rule {} -> max-lines={} severity={} (matched: {})",
+                    entry.display_path,
+                    limit,
+                    severity_label(*severity),
+                    pattern
+                ),
+                fence_core::MatchBy::Default => format!(
+                    "verbose: rule {} -> default max-lines={} severity={}",
+                    entry.display_path,
+                    limit,
+                    severity_label(*severity)
+                ),
+            },
+            fence_core::Decision::SkipNoLimit => format!(
+                "verbose: rule {} -> no-limit (no default)",
+                entry.display_path
+            ),
+        };
+        let _ = write_line(stdout, None, &rule_line);
+    }
+}
+
+fn config_source_label(origin: &fence_core::ConfigOrigin) -> String {
+    match origin {
+        fence_core::ConfigOrigin::BuiltIn => "<built-in defaults>".to_string(),
+        fence_core::ConfigOrigin::File(path) => path.display().to_string(),
+    }
+}
+
+fn severity_label(severity: fence_core::Severity) -> &'static str {
+    match severity {
+        fence_core::Severity::Error => "error",
+        fence_core::Severity::Warning => "warning",
+    }
+}
+
+fn collect_inputs<R: Read>(
+    mut paths: Vec<PathBuf>,
+    stdin: &mut R,
+    cwd: &Path,
+) -> Result<Vec<PathBuf>, String> {
+    let mut use_stdin = false;
+    paths.retain(|path| {
+        if path == Path::new("-") {
+            use_stdin = true;
+            false
+        } else {
+            true
+        }
+    });
+
+    if use_stdin {
+        let mut stdin_paths = fence_fs::stdin::read_paths(stdin, cwd)
+            .map_err(|err| format!("failed to read stdin: {}", err))?;
+        paths.append(&mut stdin_paths);
+    }
+
+    if paths.is_empty() && !use_stdin {
+        paths.push(PathBuf::from("."));
+    }
+
+    Ok(paths)
+}
+
+fn run_init<W1: WriteColor, W2: WriteColor>(
+    args: cli::InitArgs,
+    cli: &Cli,
+    stdout: &mut W1,
+    stderr: &mut W2,
+) -> i32 {
+    if cli.config.is_some() || cli.quiet || cli.silent || cli.verbose {
+        return print_error(stderr, "init does not accept output or config flags");
+    }
+
+    let cwd = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
+    let path = cwd.join(".fence.toml");
+    if path.exists() {
+        return print_error(stderr, ".fence.toml already exists");
+    }
+
+    let content = if args.baseline {
+        match baseline_config(&cwd) {
+            Ok(content) => content,
+            Err(err) => return print_error(stderr, &err),
+        }
+    } else {
+        default_config_text(&[])
+    };
+
+    if let Err(err) = std::fs::write(&path, content) {
+        return print_error(stderr, &format!("failed to write .fence.toml: {}", err));
+    }
+
+    let _ = stdout.flush();
+    0
+}
+
+fn baseline_config(cwd: &Path) -> Result<String, String> {
+    let temp_path = cwd.join(".fence.baseline.tmp.toml");
+    let template = default_config_text(&[]);
+    std::fs::write(&temp_path, template)
+        .map_err(|err| format!("failed to create baseline config: {}", err))?;
+
+    let options = CheckOptions {
+        config_path: Some(temp_path.clone()),
+        cwd: cwd.to_path_buf(),
+    };
+
+    let output = fence_fs::run_check(vec![cwd.to_path_buf()], options);
+    let _ = std::fs::remove_file(&temp_path);
+    let output = output.map_err(|err| format!("baseline check failed: {}", err))?;
+
+    let mut exempt = Vec::new();
+    for outcome in output.outcomes {
+        if let fence_core::OutcomeKind::Violation {
+            severity: fence_core::Severity::Error,
+            ..
+        } = outcome.kind
+        {
+            let mut path = outcome.display_path.replace('\\', "/");
+            if path.starts_with("./") {
+                path = path.trim_start_matches("./").to_string();
+            }
+            exempt.push(path);
+        }
+    }
+
+    exempt.sort();
+    exempt.dedup();
+
+    Ok(default_config_text(&exempt))
+}
+
+fn default_config_text(exempt: &[String]) -> String {
+    let mut output = String::new();
+    output.push_str(
+        "# fence: an \"electric fence\" that keeps files small for humans and LLMs.\n",
+    );
+    output.push_str("# Counted lines are wc -l style (includes blanks/comments).\n\n");
+    output.push_str("default_max_lines = 400\n\n");
+    output.push_str("exclude = [\n");
+    for pattern in fence_core::FenceConfig::init_template().exclude {
+        output.push_str(&format!("  \"{}\",\n", pattern));
+    }
+    output.push_str("]\n\n");
+
+    if exempt.is_empty() {
+        output.push_str("exempt = []\n\n");
+    } else {
+        output.push_str("exempt = [\n");
+        for path in exempt {
+            output.push_str(&format!("  \"{}\",\n", path));
+        }
+        output.push_str("]\n\n");
+    }
+
+    output.push_str("# Last match wins. Put general rules first and overrides later.\n");
+    output.push_str("[[rules]]\n");
+    output.push_str("path = \"**/*.tsx\"\n");
+    output.push_str("max_lines = 300\n");
+    output.push_str("severity = \"warning\"\n\n");
+    output.push_str("[[rules]]\n");
+    output.push_str("path = \"tests/**/*\"\n");
+    output.push_str("max_lines = 500\n");
+    output
+}
+
+fn write_line<W: WriteColor>(writer: &mut W, color: Option<Color>, line: &str) -> io::Result<()> {
+    if let Some(color) = color {
+        let mut spec = ColorSpec::new();
+        spec.set_fg(Some(color));
+        writer.set_color(&spec)?;
+    }
+    writeln!(writer, "{}", line)?;
+    writer.reset()?;
+    Ok(())
+}
+
+fn write_block<W: WriteColor>(writer: &mut W, color: Option<Color>, block: &str) -> io::Result<()> {
+    for (idx, line) in block.lines().enumerate() {
+        if idx == 0 {
+            write_line(writer, color, line)?;
+        } else {
+            write_line(writer, None, line)?;
+        }
+    }
+    Ok(())
+}
+
+fn print_error<W: WriteColor>(stderr: &mut W, message: &str) -> i32 {
+    let _ = write_line(stderr, Some(Color::Red), &format!("error: {}", message));
+    2
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum OutputMode {
+    Default,
+    Quiet,
+    Silent,
+    Verbose,
+}
+
+fn output_mode(cli: &Cli) -> OutputMode {
+    if cli.silent {
+        OutputMode::Silent
+    } else if cli.quiet {
+        OutputMode::Quiet
+    } else if cli.verbose {
+        OutputMode::Verbose
+    } else {
+        OutputMode::Default
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    struct FailingReader;
+
+    impl Read for FailingReader {
+        fn read(&mut self, _buf: &mut [u8]) -> io::Result<usize> {
+            Err(io::Error::new(io::ErrorKind::Other, "fail"))
+        }
+    }
+
+    #[test]
+    fn collect_inputs_reports_stdin_error() {
+        let err = collect_inputs(vec![PathBuf::from("-")], &mut FailingReader, Path::new("."))
+            .unwrap_err();
+        assert!(err.contains("failed to read stdin"));
+    }
+
+    #[test]
+    fn output_mode_precedence() {
+        let cli = Cli {
+            command: None,
+            quiet: true,
+            silent: true,
+            verbose: true,
+            config: None,
+        };
+        assert_eq!(output_mode(&cli), OutputMode::Silent);
+    }
+}
