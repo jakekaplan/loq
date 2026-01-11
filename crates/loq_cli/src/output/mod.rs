@@ -177,10 +177,15 @@ pub fn write_summary<W: WriteColor>(writer: &mut W, summary: &Summary) -> io::Re
     let total = summary.passed + violations;
 
     if violations > 0 {
+        let violation_word = if violations == 1 {
+            "violation"
+        } else {
+            "violations"
+        };
         let files_word = if total == 1 { "file" } else { "files" };
         writeln!(
             writer,
-            "Found {violations} violations in {} checked {files_word}.",
+            "Found {violations} {violation_word} in {} checked {files_word}.",
             format_number(total)
         )?;
     } else {
@@ -192,9 +197,23 @@ pub fn write_summary<W: WriteColor>(writer: &mut W, summary: &Summary) -> io::Re
     }
     writeln!(writer)?;
 
-    write_stat_line(writer, "✖", Color::Red, summary.errors, "Error")?;
-    write_stat_line(writer, "⚠", Color::Yellow, summary.warnings, "Warning")?;
-    write_stat_line(writer, "✔", Color::Green, summary.passed, "Passed")?;
+    write_count_line(writer, "✖", Color::Red, summary.errors, "Error", "Errors")?;
+    write_count_line(
+        writer,
+        "⚠",
+        Color::Yellow,
+        summary.warnings,
+        "Warning",
+        "Warnings",
+    )?;
+    write_count_line(
+        writer,
+        "✔",
+        Color::Green,
+        summary.passed,
+        "Passed",
+        "Passed",
+    )?;
     writeln!(writer)?;
 
     writer.set_color(&dimmed())?;
@@ -202,18 +221,19 @@ pub fn write_summary<W: WriteColor>(writer: &mut W, summary: &Summary) -> io::Re
     writer.reset()
 }
 
-fn write_stat_line<W: WriteColor>(
+fn write_count_line<W: WriteColor>(
     writer: &mut W,
     symbol: &str,
     color: Color,
     count: usize,
-    label: &str,
+    singular: &str,
+    plural: &str,
 ) -> io::Result<()> {
     writer.set_color(&fg(color))?;
     write!(writer, "  {symbol}  ")?;
     writer.reset()?;
-    let plural = if count == 1 { "" } else { "s" };
-    writeln!(writer, "{} {label}{plural}", format_number(count))
+    let label = if count == 1 { singular } else { plural };
+    writeln!(writer, "{} {label}", format_number(count))
 }
 
 pub fn print_error<W: WriteColor>(stderr: &mut W, message: &str) -> crate::ExitStatus {

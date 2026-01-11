@@ -29,16 +29,23 @@ fn colorspec_helpers_build_correctly() {
 }
 
 #[test]
-fn write_stat_line_singular() {
-    let out = output_string(|w| write_stat_line(w, "✔", Color::Green, 1, "Error"));
+fn write_count_line_singular() {
+    let out = output_string(|w| write_count_line(w, "✔", Color::Green, 1, "Error", "Errors"));
     assert!(out.contains("1 Error"));
     assert!(!out.contains("Errors"));
 }
 
 #[test]
-fn write_stat_line_plural() {
-    let out = output_string(|w| write_stat_line(w, "✔", Color::Green, 5, "Error"));
+fn write_count_line_plural() {
+    let out = output_string(|w| write_count_line(w, "✔", Color::Green, 5, "Error", "Errors"));
     assert!(out.contains("5 Errors"));
+}
+
+#[test]
+fn write_count_line_passed_no_plural() {
+    let out = output_string(|w| write_count_line(w, "✔", Color::Green, 5, "Passed", "Passed"));
+    assert!(out.contains("5 Passed"));
+    assert!(!out.contains("Passeds"));
 }
 
 #[test]
