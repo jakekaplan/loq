@@ -181,4 +181,41 @@ mod tests {
             _ => panic!("expected excluded"),
         }
     }
+
+    #[test]
+    fn exempt_beats_rules() {
+        let config = LoqConfig {
+            default_max_lines: Some(10),
+            respect_gitignore: true,
+            exclude: vec![],
+            exempt: vec!["legacy.rs".to_string()],
+            rules: vec![Rule {
+                path: "**/*.rs".to_string(),
+                max_lines: 1,
+                severity: Severity::Error,
+            }],
+        };
+        let decision = decide(&compiled(config), "legacy.rs");
+        match decision {
+            Decision::Exempt { pattern } => assert_eq!(pattern, "legacy.rs"),
+            _ => panic!("expected exempt, got {decision:?}"),
+        }
+    }
+
+    #[test]
+    fn exclude_beats_exempt() {
+        // When a file matches both exclude and exempt, exclude wins
+        let config = LoqConfig {
+            default_max_lines: Some(10),
+            respect_gitignore: true,
+            exclude: vec!["**/*.gen.rs".to_string()],
+            exempt: vec!["**/*.gen.rs".to_string()],
+            rules: vec![],
+        };
+        let decision = decide(&compiled(config), "output.gen.rs");
+        match decision {
+            Decision::Excluded { pattern } => assert_eq!(pattern, "**/*.gen.rs"),
+            _ => panic!("expected excluded, got {decision:?}"),
+        }
+    }
 }

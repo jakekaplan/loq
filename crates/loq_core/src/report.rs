@@ -362,4 +362,40 @@ mod tests {
         assert_eq!(findings[1].path, "b");
         assert_eq!(findings[2].path, "a");
     }
+
+    #[test]
+    fn excluded_exempt_nolimit_are_skipped() {
+        let outcomes = vec![
+            FileOutcome {
+                path: "excluded.txt".into(),
+                display_path: "excluded.txt".into(),
+                config_source: ConfigOrigin::BuiltIn,
+                kind: OutcomeKind::Excluded {
+                    pattern: "*.txt".to_string(),
+                },
+            },
+            FileOutcome {
+                path: "exempt.rs".into(),
+                display_path: "exempt.rs".into(),
+                config_source: ConfigOrigin::BuiltIn,
+                kind: OutcomeKind::Exempt {
+                    pattern: "exempt.rs".to_string(),
+                },
+            },
+            FileOutcome {
+                path: "nolimit.js".into(),
+                display_path: "nolimit.js".into(),
+                config_source: ConfigOrigin::BuiltIn,
+                kind: OutcomeKind::NoLimit,
+            },
+        ];
+        let report = build_report(&outcomes, 0);
+        assert_eq!(report.summary.total, 3);
+        assert_eq!(report.summary.skipped, 3);
+        assert_eq!(report.summary.passed, 0);
+        assert_eq!(report.summary.errors, 0);
+        assert_eq!(report.summary.warnings, 0);
+        // No findings for excluded/exempt/nolimit
+        assert!(report.findings.is_empty());
+    }
 }

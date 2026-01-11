@@ -229,4 +229,34 @@ mod tests {
         let loc = find_key_location(text, "missing");
         assert!(loc.is_none());
     }
+
+    #[test]
+    fn invalid_severity_reports_error() {
+        let text = r#"
+[[rules]]
+path = "**/*.rs"
+max_lines = 100
+severity = "critical"
+"#;
+        let err = parse_config(Path::new("loq.toml"), text).unwrap_err();
+        match err {
+            ConfigError::Toml { message, .. } => {
+                assert!(
+                    message.contains("unknown variant"),
+                    "expected 'unknown variant' error, got: {message}"
+                );
+            }
+            _ => panic!("expected Toml error, got {err:?}"),
+        }
+    }
+
+    #[test]
+    fn negative_max_lines_reports_error() {
+        let text = "default_max_lines = -1\n";
+        let err = parse_config(Path::new("loq.toml"), text).unwrap_err();
+        match err {
+            ConfigError::Toml { .. } => {}
+            _ => panic!("expected Toml error, got {err:?}"),
+        }
+    }
 }

@@ -319,4 +319,177 @@ mod tests {
         };
         assert_eq!(output_mode(&cli), OutputMode::Silent);
     }
+
+    #[test]
+    fn collect_inputs_empty_defaults_to_cwd() {
+        let mut empty_stdin: &[u8] = b"";
+        let result = collect_inputs(vec![], &mut empty_stdin, Path::new("/repo")).unwrap();
+        assert_eq!(result, vec![PathBuf::from(".")]);
+    }
+
+    #[test]
+    fn collect_inputs_stdin_only_no_default() {
+        // When using stdin ("-"), don't add "." even if stdin is empty
+        let mut empty_stdin: &[u8] = b"";
+        let result = collect_inputs(
+            vec![PathBuf::from("-")],
+            &mut empty_stdin,
+            Path::new("/repo"),
+        )
+        .unwrap();
+        assert!(result.is_empty());
+    }
+
+    #[test]
+    fn collect_inputs_stdin_with_paths() {
+        let mut stdin: &[u8] = b"file1.rs\nfile2.rs\n";
+        let result =
+            collect_inputs(vec![PathBuf::from("-")], &mut stdin, Path::new("/repo")).unwrap();
+        assert_eq!(result.len(), 2);
+        assert_eq!(result[0], PathBuf::from("/repo/file1.rs"));
+        assert_eq!(result[1], PathBuf::from("/repo/file2.rs"));
+    }
+
+    #[test]
+    fn collect_inputs_mixed_paths_and_stdin() {
+        let mut stdin: &[u8] = b"from_stdin.rs\n";
+        let result = collect_inputs(
+            vec![PathBuf::from("explicit.rs"), PathBuf::from("-")],
+            &mut stdin,
+            Path::new("/repo"),
+        )
+        .unwrap();
+        assert_eq!(result.len(), 2);
+        assert!(result.contains(&PathBuf::from("explicit.rs")));
+        assert!(result.contains(&PathBuf::from("/repo/from_stdin.rs")));
+    }
+
+    #[test]
+    fn handle_fs_error_returns_exit_code_2() {
+        use termcolor::NoColor;
+        let mut stderr = NoColor::new(Vec::new());
+        let err = FsError::Io(std::io::Error::other("test error"));
+        let code = handle_fs_error(err, &mut stderr);
+        assert_eq!(code, 2);
+        let output = String::from_utf8(stderr.into_inner()).unwrap();
+        assert!(output.contains("error:"));
+    }
+
+    #[test]
+    fn handle_check_output_silent_mode() {
+        use termcolor::NoColor;
+        let mut stdout = NoColor::new(Vec::new());
+        let output = loq_fs::CheckOutput {
+            outcomes: vec![],
+            walk_errors: vec![],
+        };
+        let code = handle_check_output(output, 0, &mut stdout, OutputMode::Silent);
+        assert_eq!(code, 0);
+        assert!(stdout.into_inner().is_empty());
+    }
+
+    #[test]
+    fn handle_check_output_quiet_mode_shows_errors_only() {
+        use loq_core::report::{FileOutcome, OutcomeKind};
+        use loq_core::{ConfigOrigin, MatchBy, Severity};
+        use termcolor::NoColor;
+
+        let mut stdout = NoColor::new(Vec::new());
+        let output = loq_fs::CheckOutput {
+            outcomes: vec![
+                FileOutcome {
+                    path: "error.txt".into(),
+                    display_path: "error.txt".into(),
+                    config_source: ConfigOrigin::BuiltIn,
+                    kind: OutcomeKind::Violation {
+                        limit: 10,
+                        actual: 20,
+                        severity: Severity::Error,
+                        matched_by: MatchBy::Default,
+                    },
+                },
+                FileOutcome {
+                    path: "warning.txt".into(),
+                    display_path: "warning.txt".into(),
+                    config_source: ConfigOrigin::BuiltIn,
+                    kind: OutcomeKind::Violation {
+                        limit: 10,
+                        actual: 15,
+                        severity: Severity::Warning,
+                        matched_by: MatchBy::Default,
+                    },
+                },
+            ],
+            walk_errors: vec![],
+        };
+        let code = handle_check_output(output, 0, &mut stdout, OutputMode::Quiet);
+        assert_eq!(code, 1);
+        let output_str = String::from_utf8(stdout.into_inner()).unwrap();
+        // Should show error violation
+        assert!(output_str.contains("error.txt"));
+        // Should NOT show warning in quiet mode
+        assert!(!output_str.contains("warning.txt"));
+    }
+
+    #[test]
+    fn handle_check_output_default_mode_skips_skip_warnings() {
+        use loq_core::report::{FileOutcome, OutcomeKind};
+        use loq_core::ConfigOrigin;
+        use termcolor::NoColor;
+
+        let mut stdout = NoColor::new(Vec::new());
+        let output = loq_fs::CheckOutput {
+            outcomes: vec![FileOutcome {
+                path: "missing.txt".into(),
+                display_path: "missing.txt".into(),
+                config_source: ConfigOrigin::BuiltIn,
+                kind: OutcomeKind::Missing,
+            }],
+            walk_errors: vec![],
+        };
+        let code = handle_check_output(output, 0, &mut stdout, OutputMode::Default);
+        assert_eq!(code, 0);
+        let output_str = String::from_utf8(stdout.into_inner()).unwrap();
+        // Skip warnings are hidden in default mode
+        assert!(!output_str.contains("missing.txt") || output_str.contains("passed"));
+    }
+
+    #[test]
+    fn handle_check_output_verbose_mode_shows_skip_warnings() {
+        use loq_core::report::{FileOutcome, OutcomeKind};
+        use loq_core::ConfigOrigin;
+        use termcolor::NoColor;
+
+        let mut stdout = NoColor::new(Vec::new());
+        let output = loq_fs::CheckOutput {
+            outcomes: vec![FileOutcome {
+                path: "missing.txt".into(),
+                display_path: "missing.txt".into(),
+                config_source: ConfigOrigin::BuiltIn,
+                kind: OutcomeKind::Missing,
+            }],
+            walk_errors: vec![],
+        };
+        let code = handle_check_output(output, 0, &mut stdout, OutputMode::Verbose);
+        assert_eq!(code, 0);
+        let output_str = String::from_utf8(stdout.into_inner()).unwrap();
+        // Verbose mode shows skip warnings
+        assert!(output_str.contains("missing.txt"));
+    }
+
+    #[test]
+    fn handle_check_output_with_walk_errors() {
+        use loq_fs::walk::WalkError;
+        use termcolor::NoColor;
+
+        let mut stdout = NoColor::new(Vec::new());
+        let output = loq_fs::CheckOutput {
+            outcomes: vec![],
+            walk_errors: vec![WalkError("permission denied".into())],
+        };
+        let _code = handle_check_output(output, 0, &mut stdout, OutputMode::Default);
+        let output_str = String::from_utf8(stdout.into_inner()).unwrap();
+        // Walk errors are mentioned
+        assert!(output_str.contains("skipped"));
+    }
 }

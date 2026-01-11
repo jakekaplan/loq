@@ -129,4 +129,43 @@ mod tests {
         let found = find_config(&file, &mut discovery).unwrap();
         assert!(found.is_none());
     }
+
+    #[test]
+    fn directory_named_loq_toml_is_ignored() {
+        let temp = TempDir::new().unwrap();
+        let root = temp.path();
+
+        // Create a DIRECTORY named loq.toml (unusual but possible)
+        std::fs::create_dir(root.join("loq.toml")).unwrap();
+
+        // Create actual config file in parent
+        std::fs::create_dir(root.join("sub")).unwrap();
+        std::fs::write(root.join("sub/file.txt"), "hello").unwrap();
+
+        let mut discovery = ConfigDiscovery::new();
+        let found = find_config(&root.join("sub/file.txt"), &mut discovery).unwrap();
+
+        // Should NOT find the directory, returns None (or would find parent config if exists)
+        assert!(found.is_none());
+    }
+
+    #[test]
+    fn finds_file_config_over_directory_config() {
+        let temp = TempDir::new().unwrap();
+        let root = temp.path();
+
+        // Parent has a DIRECTORY named loq.toml
+        std::fs::create_dir(root.join("loq.toml")).unwrap();
+
+        // Subdirectory has actual config FILE
+        std::fs::create_dir(root.join("sub")).unwrap();
+        std::fs::write(root.join("sub/loq.toml"), "default_max_lines = 100").unwrap();
+        std::fs::write(root.join("sub/file.txt"), "hello").unwrap();
+
+        let mut discovery = ConfigDiscovery::new();
+        let found = find_config(&root.join("sub/file.txt"), &mut discovery).unwrap();
+
+        // Should find the file config in sub/, ignoring the directory in parent
+        assert_eq!(found.unwrap(), root.join("sub/loq.toml"));
+    }
 }

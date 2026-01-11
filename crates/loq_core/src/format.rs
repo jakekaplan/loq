@@ -173,4 +173,34 @@ mod tests {
         assert!(line.contains("2 errors"));
         assert!(line.contains("1 warning"));
     }
+
+    #[test]
+    fn format_finding_skip_warning() {
+        let finding = Finding {
+            path: "missing.txt".into(),
+            config_source: ConfigOrigin::BuiltIn,
+            kind: FindingKind::SkipWarning {
+                reason: SkipReason::Missing,
+            },
+        };
+        let line = format_finding(&finding);
+        assert_eq!(
+            line,
+            "warning[skip-missing]: missing.txt: missing file skipped"
+        );
+    }
+
+    #[test]
+    fn format_success_message() {
+        let summary = Summary {
+            total: 10,
+            skipped: 2,
+            passed: 8,
+            errors: 0,
+            warnings: 0,
+            duration_ms: 42,
+        };
+        let line = format_success(&summary);
+        assert_eq!(line, "All checks passed! (10 files in 42ms)");
+    }
 }

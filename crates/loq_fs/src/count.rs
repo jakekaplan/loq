@@ -170,4 +170,43 @@ mod tests {
         let result = inspect_file(file.path()).unwrap();
         assert_eq!(result, FileInspection::Text { lines: 1000 });
     }
+
+    #[test]
+    fn binary_detection_only_checks_first_chunk() {
+        // Current behavior: null bytes are only detected in the first 8KB chunk.
+        // A file with null bytes AFTER the first chunk is treated as text.
+        // This is a deliberate performance trade-off.
+        let mut content = vec![b'a'; 8192]; // Fill first chunk with 'a'
+        content.push(0); // Null byte in second chunk
+        content.push(b'\n');
+        let file = write_temp(&content);
+        let result = inspect_file(file.path()).unwrap();
+        // This returns Text, not Binary - the null byte in chunk 2 is not detected
+        assert_eq!(result, FileInspection::Text { lines: 1 });
+    }
+
+    #[test]
+    fn crlf_line_endings_counted_by_lf() {
+        // Windows-style CRLF (\r\n) - we count \n only, so this is 3 lines
+        let file = write_temp(b"line1\r\nline2\r\nline3\r\n");
+        let result = inspect_file(file.path()).unwrap();
+        assert_eq!(result, FileInspection::Text { lines: 3 });
+    }
+
+    #[test]
+    fn mixed_line_endings() {
+        // Mix of \n and \r\n - we only count \n
+        let file = write_temp(b"unix\nwindows\r\nmore unix\n");
+        let result = inspect_file(file.path()).unwrap();
+        assert_eq!(result, FileInspection::Text { lines: 3 });
+    }
+
+    #[test]
+    fn cr_only_not_counted_as_line() {
+        // Old Mac style \r only - NOT counted as line endings
+        let file = write_temp(b"line1\rline2\rline3\r");
+        let result = inspect_file(file.path()).unwrap();
+        // No \n chars, but file doesn't end in \n, so we count 1 line
+        assert_eq!(result, FileInspection::Text { lines: 1 });
+    }
 }

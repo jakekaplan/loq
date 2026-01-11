@@ -184,4 +184,48 @@ mod tests {
             .iter()
             .any(|path| path.ends_with("ignored.txt")));
     }
+
+    #[cfg(unix)]
+    #[test]
+    fn symlink_to_file_not_followed_by_default() {
+        use std::os::unix::fs::symlink;
+
+        let temp = TempDir::new().unwrap();
+        let root = temp.path();
+        std::fs::write(root.join("real.txt"), "content").unwrap();
+        symlink(root.join("real.txt"), root.join("link.txt")).unwrap();
+
+        let options = WalkOptions {
+            respect_gitignore: false,
+        };
+        let result = expand_paths(&[root.to_path_buf()], &options);
+
+        // Real file is included
+        assert!(result.paths.iter().any(|p| p.ends_with("real.txt")));
+        // Symlink is NOT followed by default (ignore crate behavior)
+        assert!(!result.paths.iter().any(|p| p.ends_with("link.txt")));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn symlink_to_parent_dir_does_not_loop() {
+        use std::os::unix::fs::symlink;
+
+        let temp = TempDir::new().unwrap();
+        let root = temp.path();
+        std::fs::create_dir(root.join("sub")).unwrap();
+        std::fs::write(root.join("sub/file.txt"), "content").unwrap();
+        // Create symlink pointing back to parent - could cause infinite loop
+        symlink(root, root.join("sub/parent_link")).unwrap();
+
+        let options = WalkOptions {
+            respect_gitignore: false,
+        };
+        // This should complete without hanging (ignore crate doesn't follow dir symlinks)
+        let result = expand_paths(&[root.to_path_buf()], &options);
+
+        // Should find the file but not loop infinitely
+        assert!(result.paths.iter().any(|p| p.ends_with("file.txt")));
+        // The symlink itself is not a file, so it won't appear in paths
+    }
 }
