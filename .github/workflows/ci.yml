@@ -33,7 +33,9 @@ jobs:
         run: cargo test --doc
 
       - name: Coverage
-        run: cargo llvm-cov --workspace --lcov --output-path lcov.info --fail-under-lines 95
+        run: |
+          cargo llvm-cov --workspace --lcov --output-path lcov.info
+          cargo llvm-cov report --fail-under-lines 95
 
   security:
     runs-on: ubuntu-latest
