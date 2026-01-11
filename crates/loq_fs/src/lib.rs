@@ -229,8 +229,14 @@ fn check_file(
     }
 }
 
+#[cfg(windows)]
 fn normalize_path(path: &Path) -> String {
     path.to_string_lossy().replace('\\', "/")
+}
+
+#[cfg(not(windows))]
+fn normalize_path(path: &Path) -> String {
+    path.to_string_lossy().into_owned()
 }
 
 fn load_gitignore(root: &Path) -> Result<Option<Gitignore>, FsError> {

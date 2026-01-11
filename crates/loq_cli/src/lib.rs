@@ -17,6 +17,7 @@ use anyhow::{Context, Result};
 use clap::Parser;
 use loq_core::report::{build_report, FindingKind};
 use loq_fs::{CheckOptions, CheckOutput, FsError};
+use tempfile::NamedTempFile;
 use termcolor::{Color, ColorChoice, StandardStream, WriteColor};
 
 use output::{print_error, write_block, write_finding, write_summary, write_walk_errors};
@@ -197,18 +198,19 @@ fn run_init<W1: WriteColor, W2: WriteColor>(
 }
 
 fn baseline_config(cwd: &Path) -> Result<String> {
-    let temp_path = cwd.join(format!("loq.baseline.{}.tmp.toml", std::process::id()));
     let template = default_config_text(&[]);
-    std::fs::write(&temp_path, &template).context("failed to create baseline config")?;
+    let mut temp_file =
+        NamedTempFile::new_in(cwd).context("failed to create baseline temp file")?;
+    std::io::Write::write_all(&mut temp_file, template.as_bytes())
+        .context("failed to write baseline config")?;
 
     let options = CheckOptions {
-        config_path: Some(temp_path.clone()),
+        config_path: Some(temp_file.path().to_path_buf()),
         cwd: cwd.to_path_buf(),
     };
 
-    let output = loq_fs::run_check(vec![cwd.to_path_buf()], options);
-    let _ = std::fs::remove_file(&temp_path);
-    let output = output.context("baseline check failed")?;
+    let output =
+        loq_fs::run_check(vec![cwd.to_path_buf()], options).context("baseline check failed")?;
 
     let mut exempt = Vec::new();
     for outcome in output.outcomes {
