@@ -131,8 +131,8 @@ fn verbose_includes_config_and_rule() {
         .args(["--verbose", "check", "a.txt"])
         .assert()
         .failure()
-        .stdout(predicate::str::contains("verbose: config"))
-        .stdout(predicate::str::contains("verbose: rule"));
+        .stdout(predicate::str::contains("config:"))
+        .stdout(predicate::str::contains("rule:"));
 }
 
 #[test]
@@ -244,65 +244,21 @@ severity = "warning"
 }
 
 #[test]
-fn verbose_shows_excluded_decision() {
-    let temp = TempDir::new().unwrap();
-    let config = "default_max_lines = 100\nexclude = [\"*.log\"]\n";
-    write_file(&temp, ".fence.toml", config);
-    write_file(&temp, "debug.log", "log content\n");
-
-    cargo_bin_cmd!("fence")
-        .current_dir(temp.path())
-        .args(["--verbose", "check", "debug.log"])
-        .assert()
-        .success()
-        .stdout(predicate::str::contains("excluded"));
-}
-
-#[test]
-fn verbose_shows_exempt_decision() {
-    let temp = TempDir::new().unwrap();
-    let config = "default_max_lines = 1\nexempt = [\"legacy.txt\"]\n";
-    write_file(&temp, ".fence.toml", config);
-    write_file(&temp, "legacy.txt", "a\nb\nc\n");
-
-    cargo_bin_cmd!("fence")
-        .current_dir(temp.path())
-        .args(["--verbose", "check", "legacy.txt"])
-        .assert()
-        .success()
-        .stdout(predicate::str::contains("exempt"));
-}
-
-#[test]
-fn verbose_shows_no_limit_decision() {
-    let temp = TempDir::new().unwrap();
-    write_file(&temp, ".fence.toml", "exempt = []\n");
-    write_file(&temp, "a.txt", "content\n");
-
-    cargo_bin_cmd!("fence")
-        .current_dir(temp.path())
-        .args(["--verbose", "check", "a.txt"])
-        .assert()
-        .success()
-        .stdout(predicate::str::contains("no-limit"));
-}
-
-#[test]
 fn verbose_shows_matched_rule_pattern() {
     let temp = TempDir::new().unwrap();
     let config = r#"default_max_lines = 100
 [[rules]]
 path = "**/*.rs"
-max_lines = 50
+max_lines = 1
 "#;
     write_file(&temp, ".fence.toml", config);
-    write_file(&temp, "main.rs", "fn main() {}\n");
+    write_file(&temp, "main.rs", "fn main() {}\nfn other() {}\n");
 
     cargo_bin_cmd!("fence")
         .current_dir(temp.path())
         .args(["--verbose", "check", "main.rs"])
         .assert()
-        .success()
+        .failure()
         .stdout(predicate::str::contains("matched: **/*.rs"));
 }
 
@@ -349,12 +305,13 @@ severity = "warning"
 #[test]
 fn verbose_shows_builtin_config_source() {
     let temp = TempDir::new().unwrap();
-    write_file(&temp, "a.txt", "content\n");
+    let contents = repeat_lines(401);
+    write_file(&temp, "a.txt", &contents);
 
     cargo_bin_cmd!("fence")
         .current_dir(temp.path())
         .args(["--verbose", "check", "a.txt"])
         .assert()
-        .success()
+        .failure()
         .stdout(predicate::str::contains("<built-in defaults>"));
 }

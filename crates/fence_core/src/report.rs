@@ -1,10 +1,11 @@
-use crate::config::Severity;
+use crate::config::{ConfigOrigin, Severity};
 use crate::decide::MatchBy;
 
 #[derive(Debug, Clone)]
 pub struct FileOutcome {
     pub path: std::path::PathBuf,
     pub display_path: String,
+    pub config_source: ConfigOrigin,
     pub kind: OutcomeKind,
 }
 
@@ -50,6 +51,7 @@ pub enum FindingKind {
         limit: usize,
         actual: usize,
         over_by: usize,
+        matched_by: MatchBy,
     },
     SkipWarning {
         reason: SkipReason,
@@ -59,6 +61,7 @@ pub enum FindingKind {
 #[derive(Debug, Clone)]
 pub struct Finding {
     pub path: String,
+    pub config_source: ConfigOrigin,
     pub kind: FindingKind,
 }
 
@@ -95,6 +98,7 @@ pub fn build_report(outcomes: &[FileOutcome], duration_ms: u128) -> Report {
                 summary.skipped += 1;
                 findings.push(Finding {
                     path: outcome.display_path.clone(),
+                    config_source: outcome.config_source.clone(),
                     kind: FindingKind::SkipWarning {
                         reason: SkipReason::Missing,
                     },
@@ -104,6 +108,7 @@ pub fn build_report(outcomes: &[FileOutcome], duration_ms: u128) -> Report {
                 summary.skipped += 1;
                 findings.push(Finding {
                     path: outcome.display_path.clone(),
+                    config_source: outcome.config_source.clone(),
                     kind: FindingKind::SkipWarning {
                         reason: SkipReason::Unreadable(error.clone()),
                     },
@@ -113,6 +118,7 @@ pub fn build_report(outcomes: &[FileOutcome], duration_ms: u128) -> Report {
                 summary.skipped += 1;
                 findings.push(Finding {
                     path: outcome.display_path.clone(),
+                    config_source: outcome.config_source.clone(),
                     kind: FindingKind::SkipWarning {
                         reason: SkipReason::Binary,
                     },
@@ -125,16 +131,18 @@ pub fn build_report(outcomes: &[FileOutcome], duration_ms: u128) -> Report {
                 severity,
                 limit,
                 actual,
-                ..
+                matched_by,
             } => {
                 let over_by = actual.saturating_sub(*limit);
                 findings.push(Finding {
                     path: outcome.display_path.clone(),
+                    config_source: outcome.config_source.clone(),
                     kind: FindingKind::Violation {
                         severity: *severity,
                         limit: *limit,
                         actual: *actual,
                         over_by,
+                        matched_by: matched_by.clone(),
                     },
                 });
                 match severity {
@@ -165,7 +173,7 @@ pub fn sort_findings(findings: &mut [Finding]) {
                 FindingKind::Violation {
                     over_by: b_over, ..
                 },
-            ) => b_over.cmp(a_over).then_with(|| a.path.cmp(&b.path)),
+            ) => a_over.cmp(b_over).then_with(|| a.path.cmp(&b.path)),
             _ => a.path.cmp(&b.path),
         }
     });
@@ -173,17 +181,18 @@ pub fn sort_findings(findings: &mut [Finding]) {
 
 fn finding_rank(kind: &FindingKind) -> u8 {
     match kind {
+        FindingKind::SkipWarning { .. } => 0,
         FindingKind::Violation { severity, .. } => match severity {
-            Severity::Error => 0,
             Severity::Warning => 1,
+            Severity::Error => 2,
         },
-        FindingKind::SkipWarning { .. } => 2,
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::config::ConfigOrigin;
 
     #[test]
     fn summary_counts_each_file_once() {
@@ -191,6 +200,7 @@ mod tests {
             FileOutcome {
                 path: "a".into(),
                 display_path: "a".into(),
+                config_source: ConfigOrigin::BuiltIn,
                 kind: OutcomeKind::Pass {
                     limit: 10,
                     actual: 5,
@@ -201,6 +211,7 @@ mod tests {
             FileOutcome {
                 path: "b".into(),
                 display_path: "b".into(),
+                config_source: ConfigOrigin::BuiltIn,
                 kind: OutcomeKind::Violation {
                     limit: 10,
                     actual: 20,
@@ -211,6 +222,7 @@ mod tests {
             FileOutcome {
                 path: "c".into(),
                 display_path: "c".into(),
+                config_source: ConfigOrigin::BuiltIn,
                 kind: OutcomeKind::Violation {
                     limit: 10,
                     actual: 12,
@@ -221,16 +233,19 @@ mod tests {
             FileOutcome {
                 path: "d".into(),
                 display_path: "d".into(),
+                config_source: ConfigOrigin::BuiltIn,
                 kind: OutcomeKind::Missing,
             },
             FileOutcome {
                 path: "e".into(),
                 display_path: "e".into(),
+                config_source: ConfigOrigin::BuiltIn,
                 kind: OutcomeKind::Binary,
             },
             FileOutcome {
                 path: "f".into(),
                 display_path: "f".into(),
+                config_source: ConfigOrigin::BuiltIn,
                 kind: OutcomeKind::Unreadable {
                     error: "denied".into(),
                 },
@@ -249,32 +264,38 @@ mod tests {
         let mut findings = vec![
             Finding {
                 path: "b".into(),
+                config_source: ConfigOrigin::BuiltIn,
                 kind: FindingKind::Violation {
                     severity: Severity::Warning,
                     limit: 10,
                     actual: 12,
                     over_by: 2,
+                    matched_by: MatchBy::Default,
                 },
             },
             Finding {
                 path: "a".into(),
+                config_source: ConfigOrigin::BuiltIn,
                 kind: FindingKind::Violation {
                     severity: Severity::Error,
                     limit: 10,
                     actual: 20,
                     over_by: 10,
+                    matched_by: MatchBy::Default,
                 },
             },
             Finding {
                 path: "c".into(),
+                config_source: ConfigOrigin::BuiltIn,
                 kind: FindingKind::SkipWarning {
                     reason: SkipReason::Missing,
                 },
             },
         ];
         sort_findings(&mut findings);
-        assert_eq!(findings[0].path, "a");
+        // Skip warnings first, then warnings, then errors (biggest at bottom near summary)
+        assert_eq!(findings[0].path, "c");
         assert_eq!(findings[1].path, "b");
-        assert_eq!(findings[2].path, "c");
+        assert_eq!(findings[2].path, "a");
     }
 }

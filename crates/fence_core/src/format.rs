@@ -8,6 +8,7 @@ pub fn format_finding(finding: &Finding) -> String {
             limit,
             actual,
             over_by,
+            ..
         } => format_violation(*severity, &finding.path, *actual, *limit, *over_by),
         FindingKind::SkipWarning { reason } => format_skip_warning(&finding.path, reason),
     }
@@ -73,17 +74,21 @@ pub fn format_success(summary: &Summary) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::config::ConfigOrigin;
+    use crate::decide::MatchBy;
     use crate::report::Finding;
 
     #[test]
     fn format_error_line() {
         let finding = Finding {
             path: "src/lib.rs".into(),
+            config_source: ConfigOrigin::BuiltIn,
             kind: FindingKind::Violation {
                 severity: Severity::Error,
                 limit: 10,
                 actual: 12,
                 over_by: 2,
+                matched_by: MatchBy::Default,
             },
         };
         let line = format_finding(&finding);
@@ -103,11 +108,13 @@ mod tests {
     fn format_warning_line() {
         let finding = Finding {
             path: "src/lib.rs".into(),
+            config_source: ConfigOrigin::BuiltIn,
             kind: FindingKind::Violation {
                 severity: Severity::Warning,
                 limit: 10,
                 actual: 12,
                 over_by: 2,
+                matched_by: MatchBy::Default,
             },
         };
         let line = format_finding(&finding);

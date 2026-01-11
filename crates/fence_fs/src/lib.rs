@@ -29,16 +29,8 @@ pub struct CheckOptions {
     pub cwd: PathBuf,
 }
 
-#[derive(Debug, Clone)]
-pub struct VerboseInfo {
-    pub display_path: String,
-    pub config_source: ConfigOrigin,
-    pub decision: Decision,
-}
-
 pub struct CheckOutput {
     pub outcomes: Vec<FileOutcome>,
-    pub verbose: Vec<VerboseInfo>,
 }
 
 fn load_config_from_path(path: PathBuf, fallback_cwd: &Path) -> Result<CompiledConfig, FsError> {
@@ -64,16 +56,14 @@ pub fn run_check(paths: Vec<PathBuf>, options: CheckOptions) -> Result<CheckOutp
     file_list.dedup();
 
     let root_gitignore = load_gitignore(&options.cwd)?;
-    let mut verbose = Vec::new();
     let mut outcomes = Vec::new();
 
     if let Some(config_path) = options.config_path {
         let compiled = load_config_from_path(config_path, &options.cwd)?;
-        let (group_outcomes, group_verbose) =
+        let group_outcomes =
             check_group(&file_list, &compiled, &options.cwd, root_gitignore.as_ref());
         outcomes.extend(group_outcomes);
-        verbose.extend(group_verbose);
-        return Ok(CheckOutput { outcomes, verbose });
+        return Ok(CheckOutput { outcomes });
     }
 
     let mut discovery = discover::ConfigDiscovery::new();
@@ -94,17 +84,16 @@ pub fn run_check(paths: Vec<PathBuf>, options: CheckOptions) -> Result<CheckOutp
             }
         };
 
-        let (group_outcomes, group_verbose) = check_group(
+        let group_outcomes = check_group(
             &group_paths,
             &compiled,
             &options.cwd,
             root_gitignore.as_ref(),
         );
         outcomes.extend(group_outcomes);
-        verbose.extend(group_verbose);
     }
 
-    Ok(CheckOutput { outcomes, verbose })
+    Ok(CheckOutput { outcomes })
 }
 
 fn check_group(
@@ -112,22 +101,11 @@ fn check_group(
     compiled: &fence_core::config::CompiledConfig,
     cwd: &Path,
     gitignore: Option<&Gitignore>,
-) -> (Vec<FileOutcome>, Vec<VerboseInfo>) {
-    let checked: Vec<(FileOutcome, Decision)> = paths
+) -> Vec<FileOutcome> {
+    paths
         .par_iter()
         .map(|path| check_file(path, compiled, cwd, gitignore))
-        .collect();
-    let mut outcomes = Vec::new();
-    let mut verbose = Vec::new();
-    for (outcome, decision) in checked {
-        verbose.push(VerboseInfo {
-            display_path: outcome.display_path.clone(),
-            config_source: compiled.origin.clone(),
-            decision,
-        });
-        outcomes.push(outcome);
-    }
-    (outcomes, verbose)
+        .collect()
 }
 
 fn check_file(
@@ -135,26 +113,24 @@ fn check_file(
     compiled: &fence_core::config::CompiledConfig,
     cwd: &Path,
     gitignore: Option<&Gitignore>,
-) -> (FileOutcome, Decision) {
+) -> FileOutcome {
     let display_path = pathdiff::diff_paths(path, cwd)
         .unwrap_or_else(|| path.to_path_buf())
         .to_string_lossy()
         .to_string();
+    let config_source = compiled.origin.clone();
 
     if compiled.respect_gitignore {
         if let Some(gitignore) = gitignore {
             if is_gitignored(gitignore, path, cwd) {
-                let pattern = ".gitignore".to_string();
-                return (
-                    FileOutcome {
-                        path: path.to_path_buf(),
-                        display_path,
-                        kind: OutcomeKind::Excluded {
-                            pattern: pattern.clone(),
-                        },
+                return FileOutcome {
+                    path: path.to_path_buf(),
+                    display_path,
+                    config_source,
+                    kind: OutcomeKind::Excluded {
+                        pattern: ".gitignore".to_string(),
                     },
-                    Decision::Excluded { pattern },
-                );
+                };
             }
         }
     }
@@ -165,76 +141,50 @@ fn check_file(
 
     let decision = decide(compiled, &relative_str);
 
-    let outcome = match &decision {
-        Decision::Excluded { pattern } => FileOutcome {
-            path: path.to_path_buf(),
-            display_path,
-            kind: OutcomeKind::Excluded {
-                pattern: pattern.clone(),
-            },
+    let kind = match &decision {
+        Decision::Excluded { pattern } => OutcomeKind::Excluded {
+            pattern: pattern.clone(),
         },
-        Decision::Exempt { pattern } => FileOutcome {
-            path: path.to_path_buf(),
-            display_path,
-            kind: OutcomeKind::Exempt {
-                pattern: pattern.clone(),
-            },
+        Decision::Exempt { pattern } => OutcomeKind::Exempt {
+            pattern: pattern.clone(),
         },
-        Decision::SkipNoLimit => FileOutcome {
-            path: path.to_path_buf(),
-            display_path,
-            kind: OutcomeKind::NoLimit,
-        },
+        Decision::SkipNoLimit => OutcomeKind::NoLimit,
         Decision::Check {
             limit,
             severity,
             matched_by,
         } => match count::inspect_file(path) {
-            Ok(count::FileInspection::Binary) => FileOutcome {
-                path: path.to_path_buf(),
-                display_path,
-                kind: OutcomeKind::Binary,
-            },
+            Ok(count::FileInspection::Binary) => OutcomeKind::Binary,
             Ok(count::FileInspection::Text { lines }) => {
                 if lines > *limit {
-                    FileOutcome {
-                        path: path.to_path_buf(),
-                        display_path,
-                        kind: OutcomeKind::Violation {
-                            limit: *limit,
-                            actual: lines,
-                            severity: *severity,
-                            matched_by: matched_by.clone(),
-                        },
+                    OutcomeKind::Violation {
+                        limit: *limit,
+                        actual: lines,
+                        severity: *severity,
+                        matched_by: matched_by.clone(),
                     }
                 } else {
-                    FileOutcome {
-                        path: path.to_path_buf(),
-                        display_path,
-                        kind: OutcomeKind::Pass {
-                            limit: *limit,
-                            actual: lines,
-                            severity: *severity,
-                            matched_by: matched_by.clone(),
-                        },
+                    OutcomeKind::Pass {
+                        limit: *limit,
+                        actual: lines,
+                        severity: *severity,
+                        matched_by: matched_by.clone(),
                     }
                 }
             }
-            Err(count::CountError::Missing) => FileOutcome {
-                path: path.to_path_buf(),
-                display_path,
-                kind: OutcomeKind::Missing,
-            },
-            Err(count::CountError::Unreadable(error)) => FileOutcome {
-                path: path.to_path_buf(),
-                display_path,
-                kind: OutcomeKind::Unreadable {
-                    error: error.to_string(),
-                },
+            Err(count::CountError::Missing) => OutcomeKind::Missing,
+            Err(count::CountError::Unreadable(error)) => OutcomeKind::Unreadable {
+                error: error.to_string(),
             },
         },
     };
-    (outcome, decision)
+
+    FileOutcome {
+        path: path.to_path_buf(),
+        display_path,
+        config_source,
+        kind,
+    }
 }
 
 fn normalize_path(path: &Path) -> String {
@@ -380,10 +330,10 @@ mod tests {
 
         let binary = temp.path().join("binary.txt");
         std::fs::write(&binary, b"\0binary").unwrap();
-        let (binary_outcome, _) = check_file(&binary, &compiled, temp.path(), None);
+        let binary_outcome = check_file(&binary, &compiled, temp.path(), None);
         assert!(matches!(binary_outcome.kind, OutcomeKind::Binary));
 
-        let (dir_outcome, _) = check_file(temp.path(), &compiled, temp.path(), None);
+        let dir_outcome = check_file(temp.path(), &compiled, temp.path(), None);
         assert!(matches!(dir_outcome.kind, OutcomeKind::Unreadable { .. }));
     }
 

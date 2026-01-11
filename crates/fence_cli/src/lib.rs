@@ -8,9 +8,9 @@ use std::path::{Path, PathBuf};
 use std::time::Instant;
 
 use clap::Parser;
-use fence_core::format::{format_finding, format_success, format_summary};
-use fence_core::report::{build_report, FindingKind};
-use fence_fs::{CheckOptions, CheckOutput, FsError, VerboseInfo};
+use fence_core::format::{format_finding, format_success};
+use fence_core::report::{build_report, Finding, FindingKind, Summary};
+use fence_fs::{CheckOptions, CheckOutput, FsError};
 use termcolor::{Color, ColorChoice, ColorSpec, StandardStream, WriteColor};
 
 pub use cli::{Cli, Command};
@@ -87,15 +87,8 @@ fn handle_check_output<W: WriteColor>(
     output
         .outcomes
         .sort_by(|a, b| a.display_path.cmp(&b.display_path));
-    output
-        .verbose
-        .sort_by(|a, b| a.display_path.cmp(&b.display_path));
 
     let report = build_report(&output.outcomes, duration_ms);
-
-    if mode == OutputMode::Verbose {
-        print_verbose(&output.verbose, stdout);
-    }
 
     match mode {
         OutputMode::Silent => {}
@@ -136,9 +129,13 @@ fn handle_check_output<W: WriteColor>(
                         }
                     };
                     let _ = write_line(stdout, color, &line);
+                    if mode == OutputMode::Verbose {
+                        print_finding_verbose(finding, stdout);
+                    }
                 }
-                let summary = format_summary(&report.summary);
-                let _ = write_line(stdout, None, &summary);
+                let _ = writeln!(stdout);
+                let _ = write_label(stdout, "Summary");
+                let _ = write_summary(stdout, &report.summary);
             }
         }
     }
@@ -150,46 +147,28 @@ fn handle_check_output<W: WriteColor>(
     }
 }
 
-fn print_verbose<W: WriteColor>(verbose: &[VerboseInfo], stdout: &mut W) {
-    for entry in verbose {
-        let config_line = format!(
-            "verbose: config {} -> {}",
-            entry.display_path,
-            config_source_label(&entry.config_source)
-        );
-        let _ = write_line(stdout, None, &config_line);
+fn print_finding_verbose<W: WriteColor>(finding: &Finding, stdout: &mut W) {
+    let config_line = format!("  config: {}", config_source_label(&finding.config_source));
+    let _ = write_line(stdout, None, &config_line);
 
-        let rule_line = match &entry.decision {
-            fence_core::Decision::Excluded { pattern } => format!(
-                "verbose: rule {} -> excluded (pattern: {})",
-                entry.display_path, pattern
-            ),
-            fence_core::Decision::Exempt { pattern } => format!(
-                "verbose: rule {} -> exempt (pattern: {})",
-                entry.display_path, pattern
-            ),
-            fence_core::Decision::Check {
+    if let FindingKind::Violation {
+        limit,
+        severity,
+        matched_by,
+        ..
+    } = &finding.kind
+    {
+        let rule_line = match matched_by {
+            fence_core::MatchBy::Rule { pattern } => format!(
+                "  rule: max-lines={} severity={} (matched: {})",
                 limit,
-                severity,
-                matched_by,
-            } => match matched_by {
-                fence_core::MatchBy::Rule { pattern } => format!(
-                    "verbose: rule {} -> max-lines={} severity={} (matched: {})",
-                    entry.display_path,
-                    limit,
-                    severity_label(*severity),
-                    pattern
-                ),
-                fence_core::MatchBy::Default => format!(
-                    "verbose: rule {} -> default max-lines={} severity={}",
-                    entry.display_path,
-                    limit,
-                    severity_label(*severity)
-                ),
-            },
-            fence_core::Decision::SkipNoLimit => format!(
-                "verbose: rule {} -> no-limit (no default)",
-                entry.display_path
+                severity_label(*severity),
+                pattern
+            ),
+            fence_core::MatchBy::Default => format!(
+                "  rule: default max-lines={} severity={}",
+                limit,
+                severity_label(*severity)
             ),
         };
         let _ = write_line(stdout, None, &rule_line);
@@ -364,6 +343,55 @@ fn write_block<W: WriteColor>(writer: &mut W, color: Option<Color>, block: &str)
             write_line(writer, None, line)?;
         }
     }
+    Ok(())
+}
+
+fn write_label<W: WriteColor>(writer: &mut W, label: &str) -> io::Result<()> {
+    let mut spec = ColorSpec::new();
+    spec.set_dimmed(true);
+    writer.set_color(&spec)?;
+    writeln!(writer, "{label}")?;
+    writer.reset()?;
+    Ok(())
+}
+
+fn write_summary<W: WriteColor>(writer: &mut W, summary: &Summary) -> io::Result<()> {
+    let error_label = if summary.errors == 1 {
+        "error"
+    } else {
+        "errors"
+    };
+    let warning_label = if summary.warnings == 1 {
+        "warning"
+    } else {
+        "warnings"
+    };
+
+    write!(
+        writer,
+        "{} files checked ({} skipped): ",
+        summary.total, summary.skipped
+    )?;
+
+    let mut spec = ColorSpec::new();
+    spec.set_fg(Some(Color::Green));
+    writer.set_color(&spec)?;
+    write!(writer, "{} passed", summary.passed)?;
+    writer.reset()?;
+
+    write!(writer, " | ")?;
+    spec.set_fg(Some(Color::Red));
+    writer.set_color(&spec)?;
+    write!(writer, "{} {}", summary.errors, error_label)?;
+    writer.reset()?;
+
+    write!(writer, " | ")?;
+    spec.set_fg(Some(Color::Yellow));
+    writer.set_color(&spec)?;
+    write!(writer, "{} {}", summary.warnings, warning_label)?;
+    writer.reset()?;
+
+    writeln!(writer, " [{}ms]", summary.duration_ms)?;
     Ok(())
 }
 
