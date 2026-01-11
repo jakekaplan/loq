@@ -23,8 +23,8 @@ jobs:
       - name: Clippy
         run: cargo clippy --all-targets --all-features -- -D warnings
 
-      - name: Fence (self-check)
-        run: cargo run -p fence -- check .
+      - name: Loq (self-check)
+        run: cargo run -p loq -- check .
 
       - name: Test
         run: cargo test --all

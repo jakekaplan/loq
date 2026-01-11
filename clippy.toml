@@ -1,4 +1,4 @@
-# Clippy configuration for fence
+# Clippy configuration for loq
 # https://doc.rust-lang.org/clippy/configuration.html
 
 # MSRV - matches rust-toolchain.toml

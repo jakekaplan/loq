@@ -1,6 +1,6 @@
-# Contributing to fence
+# Contributing to loq
 
-Thanks for your interest in contributing to fence!
+Thanks for your interest in contributing to loq!
 
 ## Development Setup
 
@@ -22,8 +22,8 @@ cargo clippy --all-targets --all-features -- -D warnings
 # Test
 cargo test --all
 
-# Self-check (fence checks fence)
-cargo run -p fence -- check .
+# Self-check (loq checks loq)
+cargo run -p loq -- check .
 ```
 
 If you have [just](https://github.com/casey/just) installed:
@@ -43,16 +43,16 @@ just ci
 
 ```
 crates/
-  fence_core/   # Domain logic (config, rules, reporting)
-  fence_fs/     # Filesystem operations (walking, counting)
-  fence_cli/    # CLI interface
+  loq_core/   # Domain logic (config, rules, reporting)
+  loq_fs/     # Filesystem operations (walking, counting)
+  loq_cli/    # CLI interface
 ```
 
 ## Running Benchmarks
 
 ```bash
 # Criterion benchmarks
-cargo bench -p fence_fs
+cargo bench -p loq_fs
 
 # Real-world benchmark (requires hyperfine)
 just bench https://github.com/owner/repo

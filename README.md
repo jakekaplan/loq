@@ -1,26 +1,28 @@
-# fence
+# loq
 
-fence is a fast, minimal "electric fence" for file sizes. It keeps codebases LLM-context-friendly and human-maintainable by enforcing hard per-file line limits.
+Enforce file size constraints.
 
-LLMs happily generate big files. Big files burn context, slow reviews, and become dumping grounds. fence is a hard constraint: you do not negotiate with a fence. You hit it and stop.
+loq is a fast, minimal tool that keeps codebases LLM-context-friendly and human-maintainable by enforcing hard per-file line limits. The name visually resembles "loc" (lines of code).
+
+LLMs happily generate big files. Big files burn context, slow reviews, and become dumping grounds. loq provides a hard constraint that stops files from growing too large.
 
 ## Install
 
 ```bash
-cargo install fence
+cargo install loq
 ```
 
 ## Quick start
 
 ```bash
 # zero-config: uses built-in defaults
-fence
+loq
 
 # explicit check
-fence check src/
+loq check src/
 
 # stdin list
-git diff --cached --name-only | fence check -
+git diff --cached --name-only | loq check -
 ```
 
 ## Output
@@ -42,16 +44,16 @@ Summary:
 Create a config with defaults:
 
 ```bash
-fence init
+loq init
 ```
 
 Baseline a legacy repo (exempts current errors, blocks new ones):
 
 ```bash
-fence init --baseline
+loq init --baseline
 ```
 
-Config discovery walks upward from each file’s directory and uses the nearest `.fence.toml`. Patterns are matched against paths relative to the config directory.
+Config discovery walks upward from each file’s directory and uses the nearest `loq.toml`. Patterns are matched against paths relative to the config directory.
 
 `respect_gitignore` defaults to true and applies the root `.gitignore` when scanning. The built-in defaults do not add any exclude patterns.
 
@@ -70,10 +72,10 @@ Common tasks:
 cargo build
 
 # run the CLI locally
-cargo run -p fence -- check .
+cargo run -p loq -- check .
 
 # install locally
-cargo install --path crates/fence_cli
+cargo install --path crates/loq_cli
 
 # quick checks (fmt + clippy)
 just check
@@ -88,10 +90,10 @@ Enable git hooks in this repo:
 git config core.hooksPath .githooks
 ```
 
-## Default `.fence.toml`
+## Default `loq.toml`
 
 ```toml
-# fence: an "electric fence" that keeps files small for humans and LLMs.
+# loq: enforce file size constraints
 # Counted lines are wc -l style (includes blanks/comments).
 
 default_max_lines = 500

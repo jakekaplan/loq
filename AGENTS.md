@@ -4,10 +4,10 @@ Agent guidance for this Rust repository.
 
 ## Project Overview
 
-`fence` is a Rust CLI tool organized as a workspace:
-- `fence_core` - Core logic (library)
-- `fence_fs` - Filesystem operations (library)
-- `fence_cli` - Command-line interface (binary)
+`loq` is a Rust CLI tool organized as a workspace:
+- `loq_core` - Core logic (library)
+- `loq_fs` - Filesystem operations (library)
+- `loq_cli` - Command-line interface (binary)
 
 ## Dev Environment
 
@@ -55,8 +55,8 @@ CI runs on ubuntu, macos, and windows.
 
 ### Error Handling
 
-- **Libraries** (`fence_core`, `fence_fs`): Use typed errors with `thiserror`
-- **Binary** (`fence_cli`): Use `anyhow` at the boundary with `.context()`
+- **Libraries** (`loq_core`, `loq_fs`): Use typed errors with `thiserror`
+- **Binary** (`loq_cli`): Use `anyhow` at the boundary with `.context()`
 - Never `unwrap()` or `expect()` in production paths unless there is a clear invariant (comment why)
 
 ### Logging
@@ -89,9 +89,9 @@ CI runs on ubuntu, macos, and windows.
 .
 ├── Cargo.toml              # workspace manifest
 ├── crates/
-│   ├── fence_core/         # core library
-│   ├── fence_fs/           # filesystem operations
-│   └── fence_cli/          # CLI binary
+│   ├── loq_core/         # core library
+│   ├── loq_fs/           # filesystem operations
+│   └── loq_cli/          # CLI binary
 └── .github/workflows/ci.yml
 ```
 

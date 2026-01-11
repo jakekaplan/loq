@@ -233,8 +233,6 @@ fn baseline_config(cwd: &Path) -> Result<String> {
 
 fn default_config_text(exempt: &[String]) -> String {
     let mut output = String::new();
-    output.push_str("# loq: enforce file size constraints\n");
-    output.push_str("# Counted lines are wc -l style (includes blanks/comments).\n\n");
     output.push_str("default_max_lines = 500\n\n");
     output.push_str("respect_gitignore = true\n\n");
     let exclude = loq_core::LoqConfig::init_template().exclude;
