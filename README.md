@@ -27,16 +27,23 @@ git diff --cached --name-only | loq check -
 
 ## Output
 
-Violations are structured and LLM-parseable:
+Violations show the file, line count, and how far over the limit:
 
 ```
-error[max-lines]: src/utils.py: 512 lines (limit: 500, +12 over)
+✖  src/utils.py
+   512 lines   (+12 over limit)
 ```
 
 Summary:
 
 ```
-10 files checked, 2 skipped, 5 passed, 2 errors, 1 warning (15ms)
+Found 2 violations in 150 checked files.
+
+  ✖  2 Errors
+  ⚠  0 Warnings
+  ✔  148 Passed
+
+  Time: 12ms
 ```
 
 ## Config
