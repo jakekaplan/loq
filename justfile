@@ -16,7 +16,6 @@ clippy:
 check: fmt-check clippy
 
 # Run tests
-
 test:
     cargo test --all
 
