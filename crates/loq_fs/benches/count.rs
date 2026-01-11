@@ -5,7 +5,7 @@ use std::io::Write;
 use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion};
 use tempfile::NamedTempFile;
 
-use fence_fs::count::inspect_file;
+use loq_fs::count::inspect_file;
 
 fn create_test_file(lines: usize) -> NamedTempFile {
     let mut file = NamedTempFile::new().unwrap();

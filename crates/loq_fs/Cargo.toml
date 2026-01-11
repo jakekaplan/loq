@@ -1,11 +1,11 @@
 [package]
-name = "fence_fs"
+name = "loq_fs"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
 
 [dependencies]
-fence_core = { path = "../fence_core" }
+loq_core = { path = "../loq_core" }
 rayon.workspace = true
 pathdiff.workspace = true
 ignore.workspace = true

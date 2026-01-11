@@ -1,4 +1,4 @@
-//! Core domain logic for fence - a file size enforcement tool.
+//! Core domain logic for loq - a file size enforcement tool.
 //!
 //! This crate provides the foundational types and logic for enforcing file size
 //! limits across a codebase. It handles configuration parsing, rule matching,
@@ -21,7 +21,7 @@ pub mod format;
 pub mod parse;
 pub mod report;
 
-pub use config::{CompiledConfig, ConfigError, ConfigOrigin, FenceConfig, Rule, Severity};
+pub use config::{CompiledConfig, ConfigError, ConfigOrigin, LoqConfig, Rule, Severity};
 pub use decide::{Decision, MatchBy};
 pub use parse::parse_config;
 pub use report::{FileOutcome, Finding, FindingKind, OutcomeKind, Report, SkipReason, Summary};

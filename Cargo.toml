@@ -1,8 +1,8 @@
 [workspace]
 members = [
-  "crates/fence_core",
-  "crates/fence_fs",
-  "crates/fence_cli",
+  "crates/loq_core",
+  "crates/loq_fs",
+  "crates/loq_cli",
 ]
 resolver = "2"
 

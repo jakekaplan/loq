@@ -89,16 +89,16 @@ pub fn decide(config: &CompiledConfig, path: &str) -> Decision {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::config::{compile_config, ConfigOrigin, FenceConfig, Rule};
+    use crate::config::{compile_config, ConfigOrigin, LoqConfig, Rule};
     use std::path::PathBuf;
 
-    fn compiled(config: FenceConfig) -> CompiledConfig {
+    fn compiled(config: LoqConfig) -> CompiledConfig {
         compile_config(ConfigOrigin::BuiltIn, PathBuf::from("."), config, None).unwrap()
     }
 
     #[test]
     fn rule_order_last_match_wins() {
-        let config = FenceConfig {
+        let config = LoqConfig {
             default_max_lines: Some(500),
             respect_gitignore: true,
             exclude: vec![],
@@ -130,7 +130,7 @@ mod tests {
 
     #[test]
     fn default_fallback_when_no_rule() {
-        let config = FenceConfig {
+        let config = LoqConfig {
             default_max_lines: Some(123),
             respect_gitignore: true,
             exclude: vec![],
@@ -151,7 +151,7 @@ mod tests {
 
     #[test]
     fn skip_when_no_default_and_no_rule() {
-        let config = FenceConfig {
+        let config = LoqConfig {
             default_max_lines: None,
             respect_gitignore: true,
             exclude: vec![],
@@ -164,7 +164,7 @@ mod tests {
 
     #[test]
     fn exclude_beats_rules() {
-        let config = FenceConfig {
+        let config = LoqConfig {
             default_max_lines: Some(10),
             respect_gitignore: true,
             exclude: vec!["**/*.txt".to_string()],

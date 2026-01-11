@@ -1,6 +1,6 @@
 //! Configuration file discovery.
 //!
-//! Finds `.fence.toml` files by walking up the directory tree.
+//! Finds `loq.toml` files by walking up the directory tree.
 //! Results are cached for performance when checking many files.
 
 use std::path::{Path, PathBuf};
@@ -11,7 +11,7 @@ use crate::FsError;
 
 /// Cached config file discovery.
 ///
-/// Caches the results of searching for `.fence.toml` files to avoid
+/// Caches the results of searching for `loq.toml` files to avoid
 /// repeated filesystem lookups when checking many files in the same tree.
 pub struct ConfigDiscovery {
     cache: FxHashMap<PathBuf, Option<PathBuf>>,
@@ -27,14 +27,14 @@ impl ConfigDiscovery {
 
     /// Finds a config file in or above the given directory.
     ///
-    /// Searches upward from `dir` looking for `.fence.toml`.
+    /// Searches upward from `dir` looking for `loq.toml`.
     /// Results are cached for subsequent lookups.
     pub fn find_in_dir(&mut self, dir: &Path) -> Result<Option<PathBuf>, FsError> {
         if let Some(cached) = self.cache.get(dir) {
             return Ok(cached.clone());
         }
 
-        let candidate = dir.join(".fence.toml");
+        let candidate = dir.join("loq.toml");
         if candidate.is_file() {
             let value = Some(candidate);
             self.cache.insert(dir.to_path_buf(), value.clone());
@@ -58,7 +58,7 @@ impl Default for ConfigDiscovery {
 
 /// Finds the config file applicable to a given file path.
 ///
-/// Looks for `.fence.toml` starting from the file's parent directory.
+/// Looks for `loq.toml` starting from the file's parent directory.
 pub fn find_config(
     path: &Path,
     discovery: &mut ConfigDiscovery,
@@ -78,15 +78,15 @@ mod tests {
         let root = temp.path();
         let sub = root.join("sub");
         std::fs::create_dir_all(&sub).unwrap();
-        std::fs::write(root.join(".fence.toml"), "default_max_lines = 10").unwrap();
-        std::fs::write(sub.join(".fence.toml"), "default_max_lines = 20").unwrap();
+        std::fs::write(root.join("loq.toml"), "default_max_lines = 10").unwrap();
+        std::fs::write(sub.join("loq.toml"), "default_max_lines = 20").unwrap();
 
         let file = sub.join("file.txt");
         std::fs::write(&file, "hello").unwrap();
 
         let mut discovery = ConfigDiscovery::new();
         let found = find_config(&file, &mut discovery).unwrap();
-        assert_eq!(found.unwrap(), sub.join(".fence.toml"));
+        assert_eq!(found.unwrap(), sub.join("loq.toml"));
     }
 
     #[test]
@@ -104,7 +104,7 @@ mod tests {
     fn cache_hit_returns_cached_value() {
         let temp = TempDir::new().unwrap();
         let root = temp.path();
-        std::fs::write(root.join(".fence.toml"), "default_max_lines = 10").unwrap();
+        std::fs::write(root.join("loq.toml"), "default_max_lines = 10").unwrap();
 
         let file1 = root.join("file1.txt");
         let file2 = root.join("file2.txt");

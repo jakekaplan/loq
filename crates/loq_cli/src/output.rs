@@ -1,8 +1,8 @@
 use std::io;
 
-use fence_core::report::{Finding, FindingKind, SkipReason, Summary};
-use fence_core::{ConfigOrigin, Severity};
-use fence_fs::walk::WalkError;
+use loq_core::report::{Finding, FindingKind, SkipReason, Summary};
+use loq_core::{ConfigOrigin, Severity};
+use loq_fs::walk::WalkError;
 use termcolor::{Color, ColorSpec, WriteColor};
 
 pub fn severity_label(severity: Severity) -> &'static str {
@@ -92,7 +92,7 @@ pub fn write_finding<W: WriteColor>(
                 writer.set_color(&spec)?;
 
                 let rule_str = match matched_by {
-                    fence_core::MatchBy::Rule { pattern } => {
+                    loq_core::MatchBy::Rule { pattern } => {
                         format!(
                             "max-lines={} severity={} (match: {})",
                             limit,
@@ -100,7 +100,7 @@ pub fn write_finding<W: WriteColor>(
                             pattern
                         )
                     }
-                    fence_core::MatchBy::Default => {
+                    loq_core::MatchBy::Default => {
                         format!(
                             "max-lines={} severity={} (default)",
                             limit,

@@ -23,7 +23,7 @@ fn default_check_success() {
     let temp = TempDir::new().unwrap();
     write_file(&temp, "src/main.rs", "fn main() {}\n");
 
-    cargo_bin_cmd!("fence")
+    cargo_bin_cmd!("loq")
         .current_dir(temp.path())
         .assert()
         .success()
@@ -35,7 +35,7 @@ fn check_explicit_files() {
     let temp = TempDir::new().unwrap();
     write_file(&temp, "a.txt", "a\n");
 
-    cargo_bin_cmd!("fence")
+    cargo_bin_cmd!("loq")
         .current_dir(temp.path())
         .args(["check", "a.txt"])
         .assert()
@@ -48,7 +48,7 @@ fn check_reads_stdin_list() {
     let temp = TempDir::new().unwrap();
     write_file(&temp, "a.txt", "a\n");
 
-    cargo_bin_cmd!("fence")
+    cargo_bin_cmd!("loq")
         .current_dir(temp.path())
         .args(["check", "-"])
         .write_stdin("a.txt\n")
@@ -62,7 +62,7 @@ fn exit_code_error_on_violation() {
     let contents = repeat_lines(501);
     write_file(&temp, "big.txt", &contents);
 
-    cargo_bin_cmd!("fence")
+    cargo_bin_cmd!("loq")
         .current_dir(temp.path())
         .args(["check", "big.txt"])
         .assert()
@@ -80,10 +80,10 @@ path = "**/*.txt"
 max_lines = 1
 severity = "warning"
 "#;
-    write_file(&temp, ".fence.toml", config);
+    write_file(&temp, "loq.toml", config);
     write_file(&temp, "warn.txt", "a\nb\n");
 
-    let output = cargo_bin_cmd!("fence")
+    let output = cargo_bin_cmd!("loq")
         .current_dir(temp.path())
         .args(["--quiet", "check", "warn.txt"])
         .output()
@@ -98,7 +98,7 @@ fn silent_prints_nothing() {
     let contents = repeat_lines(501);
     write_file(&temp, "big.txt", &contents);
 
-    let output = cargo_bin_cmd!("fence")
+    let output = cargo_bin_cmd!("loq")
         .current_dir(temp.path())
         .args(["--silent", "check", "big.txt"])
         .output()
@@ -113,7 +113,7 @@ fn missing_file_warns() {
     let temp = TempDir::new().unwrap();
 
     // Missing files are only shown in verbose mode
-    cargo_bin_cmd!("fence")
+    cargo_bin_cmd!("loq")
         .current_dir(temp.path())
         .args(["--verbose", "check", "missing.txt"])
         .assert()
@@ -126,10 +126,10 @@ fn missing_file_warns() {
 fn verbose_includes_config_and_rule() {
     let temp = TempDir::new().unwrap();
     let config = "default_max_lines = 1\n";
-    write_file(&temp, ".fence.toml", config);
+    write_file(&temp, "loq.toml", config);
     write_file(&temp, "a.txt", "a\nb\n");
 
-    cargo_bin_cmd!("fence")
+    cargo_bin_cmd!("loq")
         .current_dir(temp.path())
         .args(["--verbose", "check", "a.txt"])
         .assert()
@@ -142,7 +142,7 @@ fn verbose_includes_config_and_rule() {
 fn verbose_includes_skip_warnings() {
     let temp = TempDir::new().unwrap();
 
-    cargo_bin_cmd!("fence")
+    cargo_bin_cmd!("loq")
         .current_dir(temp.path())
         .args(["--verbose", "check", "missing.txt"])
         .assert()
@@ -155,22 +155,22 @@ fn verbose_includes_skip_warnings() {
 fn init_writes_config() {
     let temp = TempDir::new().unwrap();
 
-    cargo_bin_cmd!("fence")
+    cargo_bin_cmd!("loq")
         .current_dir(temp.path())
         .args(["init"])
         .assert()
         .success();
 
-    let content = std::fs::read_to_string(temp.path().join(".fence.toml")).unwrap();
+    let content = std::fs::read_to_string(temp.path().join("loq.toml")).unwrap();
     assert!(content.contains("default_max_lines = 500"));
 }
 
 #[test]
 fn init_fails_when_exists() {
     let temp = TempDir::new().unwrap();
-    write_file(&temp, ".fence.toml", "default_max_lines = 10\n");
+    write_file(&temp, "loq.toml", "default_max_lines = 10\n");
 
-    cargo_bin_cmd!("fence")
+    cargo_bin_cmd!("loq")
         .current_dir(temp.path())
         .args(["init"])
         .assert()
@@ -179,17 +179,16 @@ fn init_fails_when_exists() {
 }
 
 #[test]
-fn init_rejects_flags() {
+fn init_accepts_verbosity_flags() {
     let temp = TempDir::new().unwrap();
 
-    cargo_bin_cmd!("fence")
+    cargo_bin_cmd!("loq")
         .current_dir(temp.path())
         .args(["--quiet", "init"])
         .assert()
-        .failure()
-        .stderr(predicate::str::contains(
-            "init does not accept output or config flags",
-        ));
+        .success();
+
+    assert!(temp.path().join("loq.toml").exists());
 }
 
 #[test]
@@ -198,13 +197,13 @@ fn init_baseline_adds_exempt() {
     let contents = repeat_lines(501);
     write_file(&temp, "src/legacy.txt", &contents);
 
-    cargo_bin_cmd!("fence")
+    cargo_bin_cmd!("loq")
         .current_dir(temp.path())
         .args(["init", "--baseline"])
         .assert()
         .success();
 
-    let content = std::fs::read_to_string(temp.path().join(".fence.toml")).unwrap();
+    let content = std::fs::read_to_string(temp.path().join("loq.toml")).unwrap();
     assert!(content.contains("\"src/legacy.txt\""));
 }
 
@@ -214,7 +213,7 @@ fn config_error_is_reported() {
     write_file(&temp, "bad.toml", "max_line = 10\n");
     write_file(&temp, "a.txt", "a\n");
 
-    cargo_bin_cmd!("fence")
+    cargo_bin_cmd!("loq")
         .current_dir(temp.path())
         .args(["--config", "bad.toml", "check", "a.txt"])
         .assert()
@@ -231,12 +230,12 @@ path = "warn.txt"
 max_lines = 1
 severity = "warning"
 "#;
-    write_file(&temp, ".fence.toml", config);
+    write_file(&temp, "loq.toml", config);
     write_file(&temp, "warn.txt", "a\nb\n");
     let big = repeat_lines(501);
     write_file(&temp, "error.txt", &big);
 
-    let output = cargo_bin_cmd!("fence")
+    let output = cargo_bin_cmd!("loq")
         .current_dir(temp.path())
         .args(["--quiet"])
         .output()
@@ -255,10 +254,10 @@ fn verbose_shows_matched_rule_pattern() {
 path = "**/*.rs"
 max_lines = 1
 "#;
-    write_file(&temp, ".fence.toml", config);
+    write_file(&temp, "loq.toml", config);
     write_file(&temp, "main.rs", "fn main() {}\nfn other() {}\n");
 
-    cargo_bin_cmd!("fence")
+    cargo_bin_cmd!("loq")
         .current_dir(temp.path())
         .args(["--verbose", "check", "main.rs"])
         .assert()
@@ -275,10 +274,10 @@ path = "**/*.txt"
 max_lines = 1
 severity = "warning"
 "#;
-    write_file(&temp, ".fence.toml", config);
+    write_file(&temp, "loq.toml", config);
     write_file(&temp, "warn.txt", "a\nb\nc\n");
 
-    cargo_bin_cmd!("fence")
+    cargo_bin_cmd!("loq")
         .current_dir(temp.path())
         .args(["check", "warn.txt"])
         .assert()
@@ -296,10 +295,10 @@ path = "**/*.txt"
 max_lines = 1
 severity = "warning"
 "#;
-    write_file(&temp, ".fence.toml", config);
+    write_file(&temp, "loq.toml", config);
     write_file(&temp, "warn.txt", "a\nb\nc\n");
 
-    cargo_bin_cmd!("fence")
+    cargo_bin_cmd!("loq")
         .current_dir(temp.path())
         .args(["--verbose", "check", "warn.txt"])
         .assert()
@@ -313,7 +312,7 @@ fn verbose_shows_builtin_config_source() {
     let contents = repeat_lines(501);
     write_file(&temp, "a.txt", &contents);
 
-    cargo_bin_cmd!("fence")
+    cargo_bin_cmd!("loq")
         .current_dir(temp.path())
         .args(["--verbose", "check", "a.txt"])
         .assert()

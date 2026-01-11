@@ -1,4 +1,4 @@
-//! Filesystem operations for fence.
+//! Filesystem operations for loq.
 //!
 //! This crate handles file discovery, walking directories, counting lines,
 //! and orchestrating checks across multiple files with parallel processing.
@@ -13,10 +13,10 @@ pub mod walk;
 
 use std::path::{Path, PathBuf};
 
-use fence_core::config::{compile_config, CompiledConfig, ConfigOrigin, FenceConfig};
-use fence_core::decide::{decide, Decision};
-use fence_core::report::{FileOutcome, OutcomeKind};
 use ignore::gitignore::{Gitignore, GitignoreBuilder};
+use loq_core::config::{compile_config, CompiledConfig, ConfigOrigin, LoqConfig};
+use loq_core::decide::{decide, Decision};
+use loq_core::report::{FileOutcome, OutcomeKind};
 use rayon::prelude::*;
 use thiserror::Error;
 
@@ -25,7 +25,7 @@ use thiserror::Error;
 pub enum FsError {
     /// Configuration parsing or compilation error.
     #[error("{0}")]
-    Config(#[from] fence_core::config::ConfigError),
+    Config(#[from] loq_core::config::ConfigError),
     /// General I/O error.
     #[error("{0}")]
     Io(std::io::Error),
@@ -68,7 +68,7 @@ fn load_config_from_path(path: PathBuf, fallback_cwd: &Path) -> Result<CompiledC
         path: config_path.clone(),
         error,
     })?;
-    let config = fence_core::parse_config(&config_path, &text)?;
+    let config = loq_core::parse_config(&config_path, &text)?;
     let compiled = compile_config(
         ConfigOrigin::File(config_path.clone()),
         root_dir,
@@ -119,7 +119,7 @@ pub fn run_check(paths: Vec<PathBuf>, options: CheckOptions) -> Result<CheckOutp
         let compiled = match config_path {
             Some(path) => load_config_from_path(path, &options.cwd)?,
             None => {
-                let config = FenceConfig::built_in_defaults();
+                let config = LoqConfig::built_in_defaults();
                 compile_config(ConfigOrigin::BuiltIn, options.cwd.clone(), config, None)?
             }
         };
@@ -141,7 +141,7 @@ pub fn run_check(paths: Vec<PathBuf>, options: CheckOptions) -> Result<CheckOutp
 
 fn check_group(
     paths: &[PathBuf],
-    compiled: &fence_core::config::CompiledConfig,
+    compiled: &loq_core::config::CompiledConfig,
     cwd: &Path,
     gitignore: Option<&Gitignore>,
 ) -> Vec<FileOutcome> {
@@ -153,7 +153,7 @@ fn check_group(
 
 fn check_file(
     path: &Path,
-    compiled: &fence_core::config::CompiledConfig,
+    compiled: &loq_core::config::CompiledConfig,
     cwd: &Path,
     gitignore: Option<&Gitignore>,
 ) -> FileOutcome {
@@ -273,7 +273,7 @@ mod tests {
         let temp = TempDir::new().unwrap();
         write_file(
             &temp,
-            ".fence.toml",
+            "loq.toml",
             "default_max_lines = 1\nexclude = [\"**/*.txt\"]\n",
         );
         let file = write_file(&temp, "a.txt", "a\nb\n");
@@ -281,7 +281,7 @@ mod tests {
         let output = run_check(
             vec![file],
             CheckOptions {
-                config_path: Some(temp.path().join(".fence.toml")),
+                config_path: Some(temp.path().join("loq.toml")),
                 cwd: temp.path().to_path_buf(),
             },
         )
@@ -298,7 +298,7 @@ mod tests {
         let temp = TempDir::new().unwrap();
         write_file(
             &temp,
-            ".fence.toml",
+            "loq.toml",
             "default_max_lines = 1\nexempt = [\"a.txt\"]\n",
         );
         let file = write_file(&temp, "a.txt", "a\nb\n");
@@ -306,7 +306,7 @@ mod tests {
         let output = run_check(
             vec![file],
             CheckOptions {
-                config_path: Some(temp.path().join(".fence.toml")),
+                config_path: Some(temp.path().join("loq.toml")),
                 cwd: temp.path().to_path_buf(),
             },
         )
@@ -321,13 +321,13 @@ mod tests {
     #[test]
     fn no_default_skips_files() {
         let temp = TempDir::new().unwrap();
-        write_file(&temp, ".fence.toml", "exempt = []\n");
+        write_file(&temp, "loq.toml", "exempt = []\n");
         let file = write_file(&temp, "a.txt", "a\n");
 
         let output = run_check(
             vec![file],
             CheckOptions {
-                config_path: Some(temp.path().join(".fence.toml")),
+                config_path: Some(temp.path().join("loq.toml")),
                 cwd: temp.path().to_path_buf(),
             },
         )
@@ -339,13 +339,13 @@ mod tests {
     #[test]
     fn missing_files_reported() {
         let temp = TempDir::new().unwrap();
-        write_file(&temp, ".fence.toml", "default_max_lines = 1\nexempt = []\n");
+        write_file(&temp, "loq.toml", "default_max_lines = 1\nexempt = []\n");
         let missing = temp.path().join("missing.txt");
 
         let output = run_check(
             vec![missing],
             CheckOptions {
-                config_path: Some(temp.path().join(".fence.toml")),
+                config_path: Some(temp.path().join("loq.toml")),
                 cwd: temp.path().to_path_buf(),
             },
         )
@@ -357,15 +357,15 @@ mod tests {
     #[test]
     fn binary_and_unreadable_are_reported() {
         let temp = TempDir::new().unwrap();
-        let config = fence_core::config::FenceConfig {
+        let config = loq_core::config::LoqConfig {
             default_max_lines: Some(1),
             respect_gitignore: true,
             exclude: vec![],
             exempt: vec![],
             rules: vec![],
         };
-        let compiled = fence_core::config::compile_config(
-            fence_core::config::ConfigOrigin::BuiltIn,
+        let compiled = loq_core::config::compile_config(
+            loq_core::config::ConfigOrigin::BuiltIn,
             temp.path().to_path_buf(),
             config,
             None,
@@ -408,7 +408,7 @@ mod tests {
         write_file(&temp, ".gitignore", "ignored.txt\n");
         write_file(
             &temp,
-            ".fence.toml",
+            "loq.toml",
             "default_max_lines = 10\nrespect_gitignore = false\n",
         );
         let file = write_file(&temp, "ignored.txt", "a\n");
@@ -416,7 +416,7 @@ mod tests {
         let output = run_check(
             vec![file],
             CheckOptions {
-                config_path: Some(temp.path().join(".fence.toml")),
+                config_path: Some(temp.path().join("loq.toml")),
                 cwd: temp.path().to_path_buf(),
             },
         )

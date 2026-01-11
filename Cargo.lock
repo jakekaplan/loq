@@ -304,48 +304,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "37909eebbb50d72f9059c3b6d82c0463f2ff062c9e95845c43a6c9c0355411be"
 
 [[package]]
-name = "fence"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "assert_cmd",
- "clap",
- "fence_core",
- "fence_fs",
- "predicates",
- "tempfile",
- "termcolor",
-]
-
-[[package]]
-name = "fence_core"
-version = "0.1.0"
-dependencies = [
- "globset",
- "serde",
- "serde_ignored",
- "strsim",
- "tempfile",
- "thiserror",
- "toml",
-]
-
-[[package]]
-name = "fence_fs"
-version = "0.1.0"
-dependencies = [
- "criterion",
- "fence_core",
- "ignore",
- "memchr",
- "pathdiff",
- "rayon",
- "rustc-hash",
- "tempfile",
- "thiserror",
-]
-
-[[package]]
 name = "float-cmp"
 version = "0.10.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -493,6 +451,48 @@ name = "log"
 version = "0.4.29"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5e5032e24019045c762d3c0f28f5b6b8bbf38563a65908389bf7978758920897"
+
+[[package]]
+name = "loq"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "assert_cmd",
+ "clap",
+ "loq_core",
+ "loq_fs",
+ "predicates",
+ "tempfile",
+ "termcolor",
+]
+
+[[package]]
+name = "loq_core"
+version = "0.1.0"
+dependencies = [
+ "globset",
+ "serde",
+ "serde_ignored",
+ "strsim",
+ "tempfile",
+ "thiserror",
+ "toml",
+]
+
+[[package]]
+name = "loq_fs"
+version = "0.1.0"
+dependencies = [
+ "criterion",
+ "ignore",
+ "loq_core",
+ "memchr",
+ "pathdiff",
+ "rayon",
+ "rustc-hash",
+ "tempfile",
+ "thiserror",
+]
 
 [[package]]
 name = "memchr"

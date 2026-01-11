@@ -1,20 +1,20 @@
 [package]
-name = "fence"
+name = "loq"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
 
 [lib]
-name = "fence_cli"
+name = "loq_cli"
 path = "src/lib.rs"
 
 [[bin]]
-name = "fence"
+name = "loq"
 path = "src/main.rs"
 
 [dependencies]
-fence_core = { path = "../fence_core" }
-fence_fs = { path = "../fence_fs" }
+loq_core = { path = "../loq_core" }
+loq_fs = { path = "../loq_fs" }
 anyhow.workspace = true
 clap.workspace = true
 termcolor.workspace = true

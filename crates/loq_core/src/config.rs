@@ -1,6 +1,6 @@
 //! Configuration types and compilation.
 //!
-//! Defines the structure of `.fence.toml` files and compiles glob patterns
+//! Defines the structure of `loq.toml` files and compiles glob patterns
 //! into efficient matchers.
 
 use std::path::{Path, PathBuf};
@@ -32,9 +32,9 @@ pub struct Rule {
     pub severity: Severity,
 }
 
-/// Parsed `.fence.toml` configuration (before compilation).
+/// Parsed `loq.toml` configuration (before compilation).
 #[derive(Debug, Clone, Deserialize)]
-pub struct FenceConfig {
+pub struct LoqConfig {
     /// Default line limit for files not matching any rule.
     pub default_max_lines: Option<usize>,
     /// Whether to skip files matched by `.gitignore`.
@@ -51,7 +51,7 @@ pub struct FenceConfig {
     pub rules: Vec<Rule>,
 }
 
-impl FenceConfig {
+impl LoqConfig {
     /// Returns the built-in defaults used when no config file is found.
     pub fn built_in_defaults() -> Self {
         Self {
@@ -63,7 +63,7 @@ impl FenceConfig {
         }
     }
 
-    /// Returns a template config for `fence init`.
+    /// Returns a template config for `loq init`.
     pub fn init_template() -> Self {
         Self {
             default_max_lines: Some(500),
@@ -238,12 +238,12 @@ fn format_unknown_key_error(
 
 /// Compiles a parsed configuration into efficient matchers.
 ///
-/// Takes a `FenceConfig` and compiles all glob patterns into matchers.
+/// Takes a `LoqConfig` and compiles all glob patterns into matchers.
 /// The `root_dir` is used for relative path matching during checks.
 pub fn compile_config(
     origin: ConfigOrigin,
     root_dir: PathBuf,
-    config: FenceConfig,
+    config: LoqConfig,
     source_path: Option<&Path>,
 ) -> Result<CompiledConfig, ConfigError> {
     let path_for_errors = source_path
@@ -314,7 +314,7 @@ mod tests {
 
     #[test]
     fn invalid_glob_reports_error() {
-        let config = FenceConfig {
+        let config = LoqConfig {
             default_max_lines: Some(1),
             respect_gitignore: true,
             exclude: vec![],
@@ -335,7 +335,7 @@ mod tests {
 
     #[test]
     fn glob_error_display_is_stable() {
-        let config = FenceConfig {
+        let config = LoqConfig {
             default_max_lines: Some(1),
             respect_gitignore: true,
             exclude: vec!["[[".to_string()],

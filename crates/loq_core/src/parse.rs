@@ -1,19 +1,19 @@
 //! TOML configuration parsing with validation.
 //!
-//! Parses `.fence.toml` files and detects unknown keys with suggestions.
+//! Parses `loq.toml` files and detects unknown keys with suggestions.
 
 use std::path::Path;
 
-use crate::config::{ConfigError, FenceConfig};
+use crate::config::{ConfigError, LoqConfig};
 
-/// Parses a `.fence.toml` file and validates its structure.
+/// Parses a `loq.toml` file and validates its structure.
 ///
 /// Returns an error if the TOML is malformed or contains unknown keys.
 /// Unknown keys trigger a suggestion if a similar valid key exists.
-pub fn parse_config(path: &Path, text: &str) -> Result<FenceConfig, ConfigError> {
+pub fn parse_config(path: &Path, text: &str) -> Result<LoqConfig, ConfigError> {
     let deserializer = toml::Deserializer::new(text);
     let mut unknown = Vec::new();
-    let parsed: FenceConfig = serde_ignored::deserialize(deserializer, |path| {
+    let parsed: LoqConfig = serde_ignored::deserialize(deserializer, |path| {
         if let Some(key) = extract_key(&path) {
             unknown.push(key);
         }
@@ -121,7 +121,7 @@ mod tests {
     #[test]
     fn unknown_key_detection() {
         let text = "default_max_lines = 500\nmax_line = 10\n";
-        let err = parse_config(Path::new(".fence.toml"), text).unwrap_err();
+        let err = parse_config(Path::new("loq.toml"), text).unwrap_err();
         match err {
             ConfigError::UnknownKey {
                 key, suggestion, ..
@@ -136,7 +136,7 @@ mod tests {
     #[test]
     fn rule_severity_defaults_to_error() {
         let text = "default_max_lines = 500\n[[rules]]\npath = \"**/*.rs\"\nmax_lines = 10\n";
-        let config = parse_config(Path::new(".fence.toml"), text).unwrap();
+        let config = parse_config(Path::new("loq.toml"), text).unwrap();
         assert_eq!(config.rules.len(), 1);
         assert_eq!(config.rules[0].severity, Severity::Error);
     }
@@ -144,14 +144,14 @@ mod tests {
     #[test]
     fn respect_gitignore_defaults_true() {
         let text = "default_max_lines = 500\n";
-        let config = parse_config(Path::new(".fence.toml"), text).unwrap();
+        let config = parse_config(Path::new("loq.toml"), text).unwrap();
         assert!(config.respect_gitignore);
     }
 
     #[test]
     fn invalid_toml_reports_error() {
         let text = "default_max_lines =\n";
-        let err = parse_config(Path::new(".fence.toml"), text).unwrap_err();
+        let err = parse_config(Path::new("loq.toml"), text).unwrap_err();
         match err {
             ConfigError::Toml { .. } => {}
             _ => panic!("expected toml error"),
@@ -161,7 +161,7 @@ mod tests {
     #[test]
     fn unknown_key_without_location() {
         let text = "rules = [{ path = \"src/*.rs\", max_lines = 10, max_line = 20 }]\n";
-        let err = parse_config(Path::new(".fence.toml"), text).unwrap_err();
+        let err = parse_config(Path::new("loq.toml"), text).unwrap_err();
         match err {
             ConfigError::UnknownKey { line_col, .. } => {
                 assert!(line_col.is_none());
@@ -173,7 +173,7 @@ mod tests {
     #[test]
     fn unknown_key_without_suggestion() {
         let text = "banana = 1\n";
-        let err = parse_config(Path::new(".fence.toml"), text).unwrap_err();
+        let err = parse_config(Path::new("loq.toml"), text).unwrap_err();
         match err {
             ConfigError::UnknownKey { suggestion, .. } => {
                 assert!(suggestion.is_none());

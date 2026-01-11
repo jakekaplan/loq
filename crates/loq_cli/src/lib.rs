@@ -1,6 +1,6 @@
-//! Command-line interface for fence.
+//! Command-line interface for loq.
 //!
-//! Provides the main entry point and CLI argument handling for the fence tool.
+//! Provides the main entry point and CLI argument handling for the loq tool.
 
 #![forbid(unsafe_code)]
 #![warn(missing_docs)]
@@ -15,8 +15,8 @@ use std::time::Instant;
 
 use anyhow::{Context, Result};
 use clap::Parser;
-use fence_core::report::{build_report, FindingKind};
-use fence_fs::{CheckOptions, CheckOutput, FsError};
+use loq_core::report::{build_report, FindingKind};
+use loq_fs::{CheckOptions, CheckOutput, FsError};
 use termcolor::{Color, ColorChoice, StandardStream, WriteColor};
 
 use output::{print_error, write_block, write_finding, write_summary, write_walk_errors};
@@ -75,7 +75,7 @@ fn run_check<R: Read, W1: WriteColor, W2: WriteColor>(
     };
 
     let start = Instant::now();
-    let output = match fence_fs::run_check(inputs, options) {
+    let output = match loq_fs::run_check(inputs, options) {
         Ok(output) => output,
         Err(err) => return handle_fs_error(err, stderr),
     };
@@ -109,7 +109,7 @@ fn handle_check_output<W: WriteColor>(
                 if matches!(
                     &finding.kind,
                     FindingKind::Violation { severity, .. }
-                        if *severity == fence_core::Severity::Error
+                        if *severity == loq_core::Severity::Error
                 ) {
                     let _ = write_finding(stdout, finding, false);
                 }
@@ -156,7 +156,7 @@ fn collect_inputs<R: Read>(
 
     if use_stdin {
         let mut stdin_paths =
-            fence_fs::stdin::read_paths(stdin, cwd).context("failed to read stdin")?;
+            loq_fs::stdin::read_paths(stdin, cwd).context("failed to read stdin")?;
         paths.append(&mut stdin_paths);
     }
 
@@ -169,18 +169,14 @@ fn collect_inputs<R: Read>(
 
 fn run_init<W1: WriteColor, W2: WriteColor>(
     args: cli::InitArgs,
-    cli: &Cli,
+    _cli: &Cli,
     stdout: &mut W1,
     stderr: &mut W2,
 ) -> i32 {
-    if cli.config.is_some() || cli.quiet || cli.silent || cli.verbose {
-        return print_error(stderr, "init does not accept output or config flags");
-    }
-
     let cwd = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
-    let path = cwd.join(".fence.toml");
+    let path = cwd.join("loq.toml");
     if path.exists() {
-        return print_error(stderr, ".fence.toml already exists");
+        return print_error(stderr, "loq.toml already exists");
     }
 
     let content = if args.baseline {
@@ -193,7 +189,7 @@ fn run_init<W1: WriteColor, W2: WriteColor>(
     };
 
     if let Err(err) = std::fs::write(&path, content) {
-        return print_error(stderr, &format!("failed to write .fence.toml: {err}"));
+        return print_error(stderr, &format!("failed to write loq.toml: {err}"));
     }
 
     let _ = std::io::Write::flush(stdout);
@@ -201,7 +197,7 @@ fn run_init<W1: WriteColor, W2: WriteColor>(
 }
 
 fn baseline_config(cwd: &Path) -> Result<String> {
-    let temp_path = cwd.join(format!(".fence.baseline.{}.tmp.toml", std::process::id()));
+    let temp_path = cwd.join(format!("loq.baseline.{}.tmp.toml", std::process::id()));
     let template = default_config_text(&[]);
     std::fs::write(&temp_path, &template).context("failed to create baseline config")?;
 
@@ -210,14 +206,14 @@ fn baseline_config(cwd: &Path) -> Result<String> {
         cwd: cwd.to_path_buf(),
     };
 
-    let output = fence_fs::run_check(vec![cwd.to_path_buf()], options);
+    let output = loq_fs::run_check(vec![cwd.to_path_buf()], options);
     let _ = std::fs::remove_file(&temp_path);
     let output = output.context("baseline check failed")?;
 
     let mut exempt = Vec::new();
     for outcome in output.outcomes {
-        if let fence_core::OutcomeKind::Violation {
-            severity: fence_core::Severity::Error,
+        if let loq_core::OutcomeKind::Violation {
+            severity: loq_core::Severity::Error,
             ..
         } = outcome.kind
         {
@@ -237,11 +233,11 @@ fn baseline_config(cwd: &Path) -> Result<String> {
 
 fn default_config_text(exempt: &[String]) -> String {
     let mut output = String::new();
-    output.push_str("# fence: an \"electric fence\" that keeps files small for humans and LLMs.\n");
+    output.push_str("# loq: enforce file size constraints\n");
     output.push_str("# Counted lines are wc -l style (includes blanks/comments).\n\n");
     output.push_str("default_max_lines = 500\n\n");
     output.push_str("respect_gitignore = true\n\n");
-    let exclude = fence_core::FenceConfig::init_template().exclude;
+    let exclude = loq_core::LoqConfig::init_template().exclude;
     if exclude.is_empty() {
         output.push_str("exclude = []\n\n");
     } else {

@@ -1,5 +1,5 @@
 [package]
-name = "fence_core"
+name = "loq_core"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
