@@ -22,10 +22,10 @@ fn create_test_file(lines: usize) -> NamedTempFile {
 fn bench_line_counting(c: &mut Criterion) {
     let mut group = c.benchmark_group("line_counting");
 
-    for size in [100, 1000, 10000, 100000] {
+    for size in [100, 1000, 10_000, 100_000] {
         let file = create_test_file(size);
         group.bench_with_input(BenchmarkId::new("inspect_file", size), &file, |b, file| {
-            b.iter(|| inspect_file(black_box(file.path())))
+            b.iter(|| inspect_file(black_box(file.path())));
         });
     }
 

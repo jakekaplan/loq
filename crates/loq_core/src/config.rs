@@ -65,11 +65,13 @@ impl Default for LoqConfig {
 
 impl LoqConfig {
     /// Returns the built-in defaults used when no config file is found.
+    #[must_use]
     pub fn built_in_defaults() -> Self {
         Self::default()
     }
 
     /// Returns a template config for `loq init`.
+    #[must_use]
     pub fn init_template() -> Self {
         Self {
             rules: vec![
@@ -116,16 +118,19 @@ pub struct CompiledConfig {
 
 impl CompiledConfig {
     /// Returns the exclude pattern list.
-    pub fn exclude_patterns(&self) -> &PatternList {
+    #[must_use]
+    pub const fn exclude_patterns(&self) -> &PatternList {
         &self.exclude
     }
 
     /// Returns the exempt pattern list.
-    pub fn exempt_patterns(&self) -> &PatternList {
+    #[must_use]
+    pub const fn exempt_patterns(&self) -> &PatternList {
         &self.exempt
     }
 
     /// Returns the compiled rules.
+    #[must_use]
     pub fn rules(&self) -> &[CompiledRule] {
         &self.rules
     }
@@ -145,6 +150,7 @@ pub struct CompiledRule {
 
 impl CompiledRule {
     /// Tests if the given path matches this rule's pattern.
+    #[must_use]
     pub fn is_match(&self, path: &str) -> bool {
         self.matcher.is_match(path)
     }
@@ -158,11 +164,12 @@ pub struct PatternList {
 
 impl PatternList {
     /// Creates a new pattern list from compiled matchers.
-    pub(crate) fn new(patterns: Vec<PatternMatcher>) -> Self {
+    pub(crate) const fn new(patterns: Vec<PatternMatcher>) -> Self {
         Self { patterns }
     }
 
     /// Returns the first matching pattern, or `None` if no match.
+    #[must_use]
     pub fn matches(&self, path: &str) -> Option<&str> {
         for pattern in &self.patterns {
             if pattern.matcher.is_match(path) {
@@ -217,6 +224,7 @@ pub enum ConfigError {
     },
 }
 
+#[allow(clippy::ref_option)]
 fn format_toml_error(path: &Path, line_col: &Option<(usize, usize)>, message: &str) -> String {
     if let Some((line, col)) = line_col {
         format!("{}:{}:{} - {}", path.display(), line, col, message)
@@ -225,6 +233,7 @@ fn format_toml_error(path: &Path, line_col: &Option<(usize, usize)>, message: &s
     }
 }
 
+#[allow(clippy::ref_option)]
 fn format_unknown_key_error(
     path: &Path,
     key: &str,
@@ -249,9 +258,8 @@ pub fn compile_config(
     config: LoqConfig,
     source_path: Option<&Path>,
 ) -> Result<CompiledConfig, ConfigError> {
-    let path_for_errors = source_path
-        .map(Path::to_path_buf)
-        .unwrap_or_else(|| PathBuf::from("<built-in defaults>"));
+    let path_for_errors =
+        source_path.map_or_else(|| PathBuf::from("<built-in defaults>"), Path::to_path_buf);
 
     let exclude = compile_patterns(&config.exclude, &path_for_errors)?;
     let exempt = compile_patterns(&config.exempt, &path_for_errors)?;
@@ -306,7 +314,7 @@ fn compile_glob(pattern: &str, source_path: &Path) -> Result<GlobMatcher, Config
     Ok(glob.compile_matcher())
 }
 
-fn default_respect_gitignore() -> bool {
+const fn default_respect_gitignore() -> bool {
     true
 }
 

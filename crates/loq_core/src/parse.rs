@@ -87,7 +87,7 @@ fn suggest_key(key: &str) -> Option<String> {
         }
     }
     if best_score <= 3 {
-        best.map(|s| s.to_string())
+        best.map(ToString::to_string)
     } else {
         None
     }

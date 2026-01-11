@@ -23,7 +23,7 @@ fn dimmed() -> ColorSpec {
     spec
 }
 
-pub fn severity_label(severity: Severity) -> &'static str {
+pub const fn severity_label(severity: Severity) -> &'static str {
     match severity {
         Severity::Error => "error",
         Severity::Warning => "warning",
@@ -138,9 +138,10 @@ fn relative_config_path(origin: &ConfigOrigin) -> String {
         ConfigOrigin::BuiltIn => "<built-in>".to_string(),
         ConfigOrigin::File(path) => {
             // Just show the filename
-            path.file_name()
-                .map(|n| n.to_string_lossy().into_owned())
-                .unwrap_or_else(|| path.display().to_string())
+            path.file_name().map_or_else(
+                || path.display().to_string(),
+                |n| n.to_string_lossy().into_owned(),
+            )
         }
     }
 }

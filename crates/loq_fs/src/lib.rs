@@ -58,21 +58,20 @@ pub struct CheckOutput {
     pub walk_errors: Vec<walk::WalkError>,
 }
 
-fn load_config_from_path(path: PathBuf, fallback_cwd: &Path) -> Result<CompiledConfig, FsError> {
+fn load_config_from_path(path: &Path, fallback_cwd: &Path) -> Result<CompiledConfig, FsError> {
     let root_dir = path
         .parent()
-        .map(Path::to_path_buf)
-        .unwrap_or_else(|| fallback_cwd.to_path_buf());
-    let text = std::fs::read_to_string(&path).map_err(|error| FsError::ConfigRead {
-        path: path.clone(),
+        .map_or_else(|| fallback_cwd.to_path_buf(), Path::to_path_buf);
+    let text = std::fs::read_to_string(path).map_err(|error| FsError::ConfigRead {
+        path: path.to_path_buf(),
         error,
     })?;
-    let config = loq_core::parse_config(&path, &text)?;
+    let config = loq_core::parse_config(path, &text)?;
     let compiled = compile_config(
-        ConfigOrigin::File(path.clone()),
+        ConfigOrigin::File(path.to_path_buf()),
         root_dir,
         config,
-        Some(&path),
+        Some(path),
     )?;
     Ok(compiled)
 }
@@ -94,7 +93,7 @@ pub fn run_check(paths: Vec<PathBuf>, options: CheckOptions) -> Result<CheckOutp
     let root_gitignore = load_gitignore(&options.cwd)?;
     let mut outcomes = Vec::new();
 
-    if let Some(config_path) = options.config_path {
+    if let Some(ref config_path) = options.config_path {
         let compiled = load_config_from_path(config_path, &options.cwd)?;
         let group_outcomes =
             check_group(&file_list, &compiled, &options.cwd, root_gitignore.as_ref());
@@ -115,12 +114,11 @@ pub fn run_check(paths: Vec<PathBuf>, options: CheckOptions) -> Result<CheckOutp
     }
 
     for (config_path, group_paths) in groups {
-        let compiled = match config_path {
-            Some(path) => load_config_from_path(path, &options.cwd)?,
-            None => {
-                let config = LoqConfig::built_in_defaults();
-                compile_config(ConfigOrigin::BuiltIn, options.cwd.clone(), config, None)?
-            }
+        let compiled = if let Some(ref path) = config_path {
+            load_config_from_path(path, &options.cwd)?
+        } else {
+            let config = LoqConfig::built_in_defaults();
+            compile_config(ConfigOrigin::BuiltIn, options.cwd.clone(), config, None)?
         };
 
         let group_outcomes = check_group(

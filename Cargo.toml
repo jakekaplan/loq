@@ -28,6 +28,19 @@ termcolor = "1"
 memchr = "2"
 rustc-hash = "2"
 
+[workspace.lints.clippy]
+pedantic = { level = "warn", priority = -1 }
+must_use_candidate = "warn"
+missing_const_for_fn = "warn"
+redundant_clone = "warn"
+# Allow these pedantic lints - too strict for this project
+missing_errors_doc = "allow"
+missing_panics_doc = "allow"
+needless_pass_by_value = "allow"
+
+[workspace.lints.rust]
+unsafe_code = "forbid"
+
 [profile.release]
 lto = "thin"
 codegen-units = 1

@@ -14,14 +14,14 @@ use crate::output::{print_error, write_block, write_finding, write_summary, writ
 use crate::ExitStatus;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum OutputMode {
+pub enum OutputMode {
     Default,
     Quiet,
     Silent,
     Verbose,
 }
 
-pub(crate) fn output_mode(cli: &Cli) -> OutputMode {
+pub const fn output_mode(cli: &Cli) -> OutputMode {
     if cli.silent {
         OutputMode::Silent
     } else if cli.quiet {
@@ -33,7 +33,7 @@ pub(crate) fn output_mode(cli: &Cli) -> OutputMode {
     }
 }
 
-pub(crate) fn run_check<R: Read, W1: WriteColor, W2: WriteColor>(
+pub fn run_check<R: Read, W1: WriteColor, W2: WriteColor>(
     args: &CheckArgs,
     cli: &Cli,
     stdin: &mut R,
@@ -55,14 +55,14 @@ pub(crate) fn run_check<R: Read, W1: WriteColor, W2: WriteColor>(
     let start = Instant::now();
     let output = match loq_fs::run_check(inputs, options) {
         Ok(output) => output,
-        Err(err) => return handle_fs_error(err, stderr),
+        Err(err) => return handle_fs_error(&err, stderr),
     };
     let duration_ms = start.elapsed().as_millis();
 
     handle_check_output(output, duration_ms, stdout, mode)
 }
 
-fn handle_fs_error<W: WriteColor>(err: FsError, stderr: &mut W) -> ExitStatus {
+fn handle_fs_error<W: WriteColor>(err: &FsError, stderr: &mut W) -> ExitStatus {
     let message = format!("error: {err}");
     let _ = write_block(stderr, Some(Color::Red), &message);
     ExitStatus::Error
@@ -224,7 +224,7 @@ mod tests {
         use termcolor::NoColor;
         let mut stderr = NoColor::new(Vec::new());
         let err = FsError::Io(std::io::Error::other("test error"));
-        let status = handle_fs_error(err, &mut stderr);
+        let status = handle_fs_error(&err, &mut stderr);
         assert_eq!(status, ExitStatus::Error);
         let output = String::from_utf8(stderr.into_inner()).unwrap();
         assert!(output.contains("error:"));

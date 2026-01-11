@@ -13,7 +13,7 @@ use crate::cli::InitArgs;
 use crate::output::print_error;
 use crate::ExitStatus;
 
-pub(crate) fn run_init<W1: WriteColor, W2: WriteColor>(
+pub fn run_init<W1: WriteColor, W2: WriteColor>(
     args: &InitArgs,
     stdout: &mut W1,
     stderr: &mut W2,

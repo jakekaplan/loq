@@ -19,6 +19,7 @@ pub struct ConfigDiscovery {
 
 impl ConfigDiscovery {
     /// Creates a new discovery instance with an empty cache.
+    #[must_use]
     pub fn new() -> Self {
         Self {
             cache: FxHashMap::default(),

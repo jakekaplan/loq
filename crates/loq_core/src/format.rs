@@ -6,6 +6,7 @@ use crate::config::Severity;
 use crate::report::{Finding, FindingKind, SkipReason, Summary};
 
 /// Formats a finding for display.
+#[must_use]
 pub fn format_finding(finding: &Finding) -> String {
     match &finding.kind {
         FindingKind::Violation {
@@ -20,6 +21,7 @@ pub fn format_finding(finding: &Finding) -> String {
 }
 
 /// Formats a violation message.
+#[must_use]
 pub fn format_violation(
     severity: Severity,
     path: &str,
@@ -35,6 +37,7 @@ pub fn format_violation(
 }
 
 /// Formats a skip warning message.
+#[must_use]
 pub fn format_skip_warning(path: &str, reason: &SkipReason) -> String {
     match reason {
         SkipReason::Binary => format!("warning[skip-binary]: {path}: binary file skipped"),
@@ -48,6 +51,7 @@ pub fn format_skip_warning(path: &str, reason: &SkipReason) -> String {
 }
 
 /// Formats the summary line with counts.
+#[must_use]
 pub fn format_summary(summary: &Summary) -> String {
     let error_label = if summary.errors == 1 {
         "error"
@@ -73,6 +77,7 @@ pub fn format_summary(summary: &Summary) -> String {
 }
 
 /// Formats a success message when all checks pass.
+#[must_use]
 pub fn format_success(summary: &Summary) -> String {
     format!(
         "All checks passed! ({} files in {}ms)",

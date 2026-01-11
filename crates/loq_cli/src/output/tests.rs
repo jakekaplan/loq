@@ -87,7 +87,7 @@ fn format_number_thousands() {
 
 #[test]
 fn format_number_millions() {
-    assert_eq!(format_number(1234567), "1,234,567");
+    assert_eq!(format_number(1_234_567), "1,234,567");
 }
 
 #[test]

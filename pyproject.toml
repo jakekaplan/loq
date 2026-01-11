@@ -42,3 +42,5 @@ module-name = "loq"
 bindings = "bin"
 # Strip symbols for smaller binaries
 strip = true
+# Include LICENSE in sdist
+include = ["LICENSE"]

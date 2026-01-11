@@ -46,6 +46,7 @@ pub enum Decision {
 /// Decides what action to take for a file path.
 ///
 /// Checks patterns in order: exclude, exempt, rules (last match wins), default.
+#[must_use]
 pub fn decide(config: &CompiledConfig, path: &str) -> Decision {
     if let Some(pattern) = config.exclude_patterns().matches(path) {
         return Decision::Excluded {

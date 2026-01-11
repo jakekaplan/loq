@@ -36,14 +36,15 @@ pub enum ExitStatus {
 impl From<ExitStatus> for ExitCode {
     fn from(status: ExitStatus) -> Self {
         match status {
-            ExitStatus::Success => ExitCode::from(0),
-            ExitStatus::Failure => ExitCode::from(1),
-            ExitStatus::Error => ExitCode::from(2),
+            ExitStatus::Success => Self::from(0),
+            ExitStatus::Failure => Self::from(1),
+            ExitStatus::Error => Self::from(2),
         }
     }
 }
 
 /// Runs the CLI using environment args and stdio.
+#[must_use]
 pub fn run_env() -> ExitStatus {
     let args = std::env::args_os();
     let stdin = io::stdin();

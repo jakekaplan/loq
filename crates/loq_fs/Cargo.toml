@@ -22,3 +22,6 @@ criterion = "0.5"
 [[bench]]
 name = "count"
 harness = false
+
+[lints]
+workspace = true

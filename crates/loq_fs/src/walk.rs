@@ -31,6 +31,7 @@ pub struct WalkOptions {
 ///
 /// Directories are walked recursively. Non-existent paths are included
 /// (to be reported as missing later). Uses parallel walking for performance.
+#[must_use]
 pub fn expand_paths(paths: &[PathBuf], options: &WalkOptions) -> WalkResult {
     let mut files = Vec::new();
     let mut errors = Vec::new();
@@ -42,10 +43,10 @@ pub fn expand_paths(paths: &[PathBuf], options: &WalkOptions) -> WalkResult {
                 files.extend(result.paths);
                 errors.extend(result.errors);
             } else {
-                files.push(path.to_path_buf());
+                files.push(path.clone());
             }
         } else {
-            files.push(path.to_path_buf());
+            files.push(path.clone());
         }
     }
 
@@ -78,7 +79,7 @@ fn walk_directory(path: &PathBuf, options: &WalkOptions) -> WalkResult {
         Box::new(move |entry| {
             match entry {
                 Ok(e) => {
-                    if e.file_type().map(|t| t.is_file()).unwrap_or(false) {
+                    if e.file_type().is_some_and(|t| t.is_file()) {
                         let _ = path_tx.send(e.into_path());
                     }
                 }
@@ -130,7 +131,7 @@ mod tests {
         let options = WalkOptions {
             respect_gitignore: false,
         };
-        let result = expand_paths(&[file.clone(), missing.clone()], &options);
+        let result = expand_paths(&[file, missing], &options);
         assert_eq!(result.paths.len(), 2);
         assert!(result.paths.iter().any(|path| path.ends_with("a.txt")));
         assert!(result

@@ -142,6 +142,7 @@ pub struct Report {
 ///
 /// Aggregates outcomes into findings and summary statistics.
 /// Findings are sorted by severity (skip warnings, then warnings, then errors).
+#[must_use]
 pub fn build_report(outcomes: &[FileOutcome], duration_ms: u128) -> Report {
     let mut findings = Vec::new();
     let mut summary = Summary {
@@ -243,7 +244,7 @@ pub fn sort_findings(findings: &mut [Finding]) {
     });
 }
 
-fn finding_rank(kind: &FindingKind) -> u8 {
+const fn finding_rank(kind: &FindingKind) -> u8 {
     match kind {
         FindingKind::SkipWarning { .. } => 0,
         FindingKind::Violation { severity, .. } => match severity {
