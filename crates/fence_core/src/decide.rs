@@ -75,7 +75,7 @@ mod tests {
     #[test]
     fn rule_order_last_match_wins() {
         let config = FenceConfig {
-            default_max_lines: Some(400),
+            default_max_lines: Some(500),
             respect_gitignore: true,
             exclude: vec![],
             exempt: vec![],

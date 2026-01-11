@@ -40,7 +40,7 @@ fn load_config_from_path(path: PathBuf, fallback_cwd: &Path) -> Result<CompiledC
         .map(Path::to_path_buf)
         .unwrap_or_else(|| fallback_cwd.to_path_buf());
     let text = std::fs::read_to_string(&config_path).map_err(FsError::Io)?;
-    let config = fence_core::config::parse_config(&config_path, &text)?;
+    let config = fence_core::parse_config(&config_path, &text)?;
     let compiled = compile_config(
         ConfigOrigin::File(config_path.clone()),
         root_dir,

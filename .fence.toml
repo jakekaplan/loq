@@ -1,0 +1,12 @@
+# fence: an "electric fence" that keeps files small for humans and LLMs.
+# Counted lines are wc -l style (includes blanks/comments).
+
+default_max_lines = 500
+
+respect_gitignore = true
+
+exclude = [
+  "Cargo.lock",
+]
+
+exempt = []

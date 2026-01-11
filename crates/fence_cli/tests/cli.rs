@@ -59,7 +59,7 @@ fn check_reads_stdin_list() {
 #[test]
 fn exit_code_error_on_violation() {
     let temp = TempDir::new().unwrap();
-    let contents = repeat_lines(401);
+    let contents = repeat_lines(501);
     write_file(&temp, "big.txt", &contents);
 
     cargo_bin_cmd!("fence")
@@ -74,7 +74,7 @@ fn exit_code_error_on_violation() {
 #[test]
 fn quiet_suppresses_warnings_and_summary() {
     let temp = TempDir::new().unwrap();
-    let config = r#"default_max_lines = 400
+    let config = r#"default_max_lines = 500
 [[rules]]
 path = "**/*.txt"
 max_lines = 1
@@ -95,7 +95,7 @@ severity = "warning"
 #[test]
 fn silent_prints_nothing() {
     let temp = TempDir::new().unwrap();
-    let contents = repeat_lines(401);
+    let contents = repeat_lines(501);
     write_file(&temp, "big.txt", &contents);
 
     let output = cargo_bin_cmd!("fence")
@@ -162,7 +162,7 @@ fn init_writes_config() {
         .success();
 
     let content = std::fs::read_to_string(temp.path().join(".fence.toml")).unwrap();
-    assert!(content.contains("default_max_lines = 400"));
+    assert!(content.contains("default_max_lines = 500"));
 }
 
 #[test]
@@ -195,7 +195,7 @@ fn init_rejects_flags() {
 #[test]
 fn init_baseline_adds_exempt() {
     let temp = TempDir::new().unwrap();
-    let contents = repeat_lines(401);
+    let contents = repeat_lines(501);
     write_file(&temp, "src/legacy.txt", &contents);
 
     cargo_bin_cmd!("fence")
@@ -233,7 +233,7 @@ severity = "warning"
 "#;
     write_file(&temp, ".fence.toml", config);
     write_file(&temp, "warn.txt", "a\nb\n");
-    let big = repeat_lines(401);
+    let big = repeat_lines(501);
     write_file(&temp, "error.txt", &big);
 
     let output = cargo_bin_cmd!("fence")
@@ -310,7 +310,7 @@ severity = "warning"
 #[test]
 fn verbose_shows_builtin_config_source() {
     let temp = TempDir::new().unwrap();
-    let contents = repeat_lines(401);
+    let contents = repeat_lines(501);
     write_file(&temp, "a.txt", &contents);
 
     cargo_bin_cmd!("fence")

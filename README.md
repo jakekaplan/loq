@@ -28,7 +28,7 @@ git diff --cached --name-only | fence check -
 Violations are structured and LLM-parseable:
 
 ```
-error[max-lines]: src/utils.py: 512 lines (limit: 400, +112 over)
+error[max-lines]: src/utils.py: 512 lines (limit: 500, +12 over)
 ```
 
 Summary:
@@ -94,7 +94,7 @@ git config core.hooksPath .githooks
 # fence: an "electric fence" that keeps files small for humans and LLMs.
 # Counted lines are wc -l style (includes blanks/comments).
 
-default_max_lines = 400
+default_max_lines = 500
 
 respect_gitignore = true
 
