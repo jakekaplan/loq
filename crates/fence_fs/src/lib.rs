@@ -51,7 +51,10 @@ fn load_config_from_path(path: PathBuf, fallback_cwd: &Path) -> Result<CompiledC
 }
 
 pub fn run_check(paths: Vec<PathBuf>, options: CheckOptions) -> Result<CheckOutput, FsError> {
-    let mut file_list = walk::expand_paths(&paths)?;
+    let walk_options = walk::WalkOptions {
+        respect_gitignore: false,
+    };
+    let mut file_list = walk::expand_paths(&paths, &walk_options)?;
     file_list.sort();
     file_list.dedup();
 
@@ -114,7 +117,8 @@ fn check_file(
     cwd: &Path,
     gitignore: Option<&Gitignore>,
 ) -> FileOutcome {
-    let display_path = pathdiff::diff_paths(path, cwd)
+    let canonical_path = path.canonicalize().unwrap_or_else(|_| path.to_path_buf());
+    let display_path = pathdiff::diff_paths(&canonical_path, cwd)
         .unwrap_or_else(|| path.to_path_buf())
         .to_string_lossy()
         .to_string();
@@ -122,7 +126,7 @@ fn check_file(
 
     if compiled.respect_gitignore {
         if let Some(gitignore) = gitignore {
-            if is_gitignored(gitignore, path, cwd) {
+            if is_gitignored(gitignore, &canonical_path, cwd) {
                 return FileOutcome {
                     path: path.to_path_buf(),
                     display_path,
@@ -135,8 +139,8 @@ fn check_file(
         }
     }
 
-    let relative =
-        pathdiff::diff_paths(path, &compiled.root_dir).unwrap_or_else(|| path.to_path_buf());
+    let relative = pathdiff::diff_paths(&canonical_path, &compiled.root_dir)
+        .unwrap_or_else(|| path.to_path_buf());
     let relative_str = normalize_path(&relative);
 
     let decision = decide(compiled, &relative_str);

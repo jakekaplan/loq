@@ -6,11 +6,12 @@ license.workspace = true
 
 [dependencies]
 fence_core = { path = "../fence_core" }
-walkdir.workspace = true
 rayon.workspace = true
 pathdiff.workspace = true
 ignore.workspace = true
 thiserror.workspace = true
+memchr.workspace = true
+rustc-hash.workspace = true
 
 [dev-dependencies]
 tempfile = "3"

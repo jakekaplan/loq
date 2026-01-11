@@ -1,16 +1,17 @@
-use std::collections::HashMap;
 use std::path::{Path, PathBuf};
+
+use rustc_hash::FxHashMap;
 
 use crate::FsError;
 
 pub struct ConfigDiscovery {
-    cache: HashMap<PathBuf, Option<PathBuf>>,
+    cache: FxHashMap<PathBuf, Option<PathBuf>>,
 }
 
 impl ConfigDiscovery {
     pub fn new() -> Self {
         Self {
-            cache: HashMap::new(),
+            cache: FxHashMap::default(),
         }
     }
 

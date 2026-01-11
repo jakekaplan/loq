@@ -8,7 +8,6 @@ use std::path::{Path, PathBuf};
 use std::time::Instant;
 
 use clap::Parser;
-use fence_core::format::{format_finding, format_success};
 use fence_core::report::{build_report, Finding, FindingKind, Summary};
 use fence_fs::{CheckOptions, CheckOutput, FsError};
 use termcolor::{Color, ColorChoice, ColorSpec, StandardStream, WriteColor};
@@ -99,44 +98,19 @@ fn handle_check_output<W: WriteColor>(
                     FindingKind::Violation { severity, .. }
                         if *severity == fence_core::Severity::Error
                 ) {
-                    let line = format_finding(finding);
-                    let _ = write_line(stdout, Some(Color::Red), &line);
+                    let _ = write_finding(stdout, finding, false);
                 }
             }
         }
         _ => {
-            if report.findings.is_empty() {
-                let line = format_success(&report.summary);
-                let _ = write_line(stdout, Some(Color::Green), &line);
-            } else {
-                for finding in &report.findings {
-                    if mode != OutputMode::Verbose
-                        && matches!(finding.kind, FindingKind::SkipWarning { .. })
-                    {
-                        continue;
-                    }
-                    let (color, line) = match &finding.kind {
-                        FindingKind::Violation { severity, .. } => match severity {
-                            fence_core::Severity::Error => {
-                                (Some(Color::Red), format_finding(finding))
-                            }
-                            fence_core::Severity::Warning => {
-                                (Some(Color::Yellow), format_finding(finding))
-                            }
-                        },
-                        FindingKind::SkipWarning { .. } => {
-                            (Some(Color::Yellow), format_finding(finding))
-                        }
-                    };
-                    let _ = write_line(stdout, color, &line);
-                    if mode == OutputMode::Verbose {
-                        print_finding_verbose(finding, stdout);
-                    }
+            let verbose = mode == OutputMode::Verbose;
+            for finding in &report.findings {
+                if !verbose && matches!(finding.kind, FindingKind::SkipWarning { .. }) {
+                    continue;
                 }
-                let _ = writeln!(stdout);
-                let _ = write_label(stdout, "Summary");
-                let _ = write_summary(stdout, &report.summary);
+                let _ = write_finding(stdout, finding, verbose);
             }
+            let _ = write_summary(stdout, &report.summary);
         }
     }
 
@@ -144,41 +118,6 @@ fn handle_check_output<W: WriteColor>(
         1
     } else {
         0
-    }
-}
-
-fn print_finding_verbose<W: WriteColor>(finding: &Finding, stdout: &mut W) {
-    let config_line = format!("  config: {}", config_source_label(&finding.config_source));
-    let _ = write_line(stdout, None, &config_line);
-
-    if let FindingKind::Violation {
-        limit,
-        severity,
-        matched_by,
-        ..
-    } = &finding.kind
-    {
-        let rule_line = match matched_by {
-            fence_core::MatchBy::Rule { pattern } => format!(
-                "  rule: max-lines={} severity={} (matched: {})",
-                limit,
-                severity_label(*severity),
-                pattern
-            ),
-            fence_core::MatchBy::Default => format!(
-                "  rule: default max-lines={} severity={}",
-                limit,
-                severity_label(*severity)
-            ),
-        };
-        let _ = write_line(stdout, None, &rule_line);
-    }
-}
-
-fn config_source_label(origin: &fence_core::ConfigOrigin) -> String {
-    match origin {
-        fence_core::ConfigOrigin::BuiltIn => "<built-in defaults>".to_string(),
-        fence_core::ConfigOrigin::File(path) => path.display().to_string(),
     }
 }
 
@@ -335,6 +274,134 @@ fn write_line<W: WriteColor>(writer: &mut W, color: Option<Color>, line: &str) -
     Ok(())
 }
 
+fn write_finding<W: WriteColor>(
+    writer: &mut W,
+    finding: &Finding,
+    verbose: bool,
+) -> io::Result<()> {
+    let (symbol, color, over_by) = match &finding.kind {
+        FindingKind::Violation {
+            severity, over_by, ..
+        } => match severity {
+            fence_core::Severity::Error => ("✖", Color::Red, Some(*over_by)),
+            fence_core::Severity::Warning => ("⚠", Color::Yellow, Some(*over_by)),
+        },
+        FindingKind::SkipWarning { .. } => ("⚠", Color::Yellow, None),
+    };
+
+    // Line 1: symbol + path (directory dimmed, filename bold)
+    let mut spec = ColorSpec::new();
+    spec.set_fg(Some(color));
+    writer.set_color(&spec)?;
+    write!(writer, "{symbol}  ")?;
+    writer.reset()?;
+
+    let path = &finding.path;
+    if let Some(pos) = path.rfind('/') {
+        let (dir, file) = path.split_at(pos + 1);
+        spec.set_dimmed(true);
+        spec.set_fg(None);
+        writer.set_color(&spec)?;
+        write!(writer, "{dir}")?;
+        writer.reset()?;
+        spec.set_dimmed(false);
+        spec.set_bold(true);
+        writer.set_color(&spec)?;
+        writeln!(writer, "{file}")?;
+    } else {
+        spec.set_bold(true);
+        spec.set_fg(None);
+        writer.set_color(&spec)?;
+        writeln!(writer, "{path}")?;
+    }
+    writer.reset()?;
+
+    // Line 2: indented details
+    match &finding.kind {
+        FindingKind::Violation {
+            actual,
+            limit,
+            severity,
+            matched_by,
+            ..
+        } => {
+            let over = over_by.unwrap_or(0);
+            write!(writer, "   {} lines   ", format_number(*actual))?;
+            spec.set_fg(Some(color));
+            spec.set_bold(false);
+            writer.set_color(&spec)?;
+            writeln!(writer, "(+{} over limit)", format_number(over))?;
+            writer.reset()?;
+
+            // Verbose: tree structure with rule and config
+            if verbose {
+                spec.set_dimmed(true);
+                writer.set_color(&spec)?;
+
+                let rule_str = match matched_by {
+                    fence_core::MatchBy::Rule { pattern } => {
+                        format!(
+                            "max-lines={} severity={} (match: {})",
+                            limit,
+                            severity_label(*severity),
+                            pattern
+                        )
+                    }
+                    fence_core::MatchBy::Default => {
+                        format!(
+                            "max-lines={} severity={} (default)",
+                            limit,
+                            severity_label(*severity)
+                        )
+                    }
+                };
+                writeln!(writer, "   ├─ rule:   {rule_str}")?;
+
+                let config_str = relative_config_path(&finding.config_source);
+                writeln!(writer, "   └─ config: {config_str}")?;
+                writer.reset()?;
+            }
+        }
+        FindingKind::SkipWarning { reason } => {
+            let msg = match reason {
+                fence_core::report::SkipReason::Binary => "binary file skipped",
+                fence_core::report::SkipReason::Unreadable(e) => {
+                    return writeln!(writer, "   unreadable: {e}");
+                }
+                fence_core::report::SkipReason::Missing => "file not found",
+            };
+            writeln!(writer, "   {msg}")?;
+        }
+    }
+
+    writeln!(writer)?; // blank line between findings
+    Ok(())
+}
+
+fn relative_config_path(origin: &fence_core::ConfigOrigin) -> String {
+    match origin {
+        fence_core::ConfigOrigin::BuiltIn => "<built-in>".to_string(),
+        fence_core::ConfigOrigin::File(path) => {
+            // Just show the filename
+            path.file_name()
+                .map(|n| n.to_string_lossy().into_owned())
+                .unwrap_or_else(|| path.display().to_string())
+        }
+    }
+}
+
+fn format_number(n: usize) -> String {
+    let s = n.to_string();
+    let mut result = String::new();
+    for (i, c) in s.chars().rev().enumerate() {
+        if i > 0 && i % 3 == 0 {
+            result.insert(0, ',');
+        }
+        result.insert(0, c);
+    }
+    result
+}
+
 fn write_block<W: WriteColor>(writer: &mut W, color: Option<Color>, block: &str) -> io::Result<()> {
     for (idx, line) in block.lines().enumerate() {
         if idx == 0 {
@@ -346,52 +413,78 @@ fn write_block<W: WriteColor>(writer: &mut W, color: Option<Color>, block: &str)
     Ok(())
 }
 
-fn write_label<W: WriteColor>(writer: &mut W, label: &str) -> io::Result<()> {
-    let mut spec = ColorSpec::new();
-    spec.set_dimmed(true);
-    writer.set_color(&spec)?;
-    writeln!(writer, "{label}")?;
-    writer.reset()?;
-    Ok(())
-}
-
 fn write_summary<W: WriteColor>(writer: &mut W, summary: &Summary) -> io::Result<()> {
-    let error_label = if summary.errors == 1 {
-        "error"
-    } else {
-        "errors"
-    };
-    let warning_label = if summary.warnings == 1 {
-        "warning"
-    } else {
-        "warnings"
-    };
-
-    write!(
-        writer,
-        "{} files checked ({} skipped): ",
-        summary.total, summary.skipped
-    )?;
-
     let mut spec = ColorSpec::new();
-    spec.set_fg(Some(Color::Green));
-    writer.set_color(&spec)?;
-    write!(writer, "{} passed", summary.passed)?;
-    writer.reset()?;
+    let violations = summary.errors + summary.warnings;
 
-    write!(writer, " | ")?;
+    // Header line
+    if violations > 0 {
+        let files_word = if summary.passed + violations == 1 {
+            "file"
+        } else {
+            "files"
+        };
+        writeln!(
+            writer,
+            "Found {} violations in {} checked {}.",
+            violations,
+            format_number(summary.passed + violations),
+            files_word
+        )?;
+    } else {
+        writeln!(
+            writer,
+            "All {} files passed.",
+            format_number(summary.passed)
+        )?;
+    }
+    writeln!(writer)?;
+
+    // Errors line
     spec.set_fg(Some(Color::Red));
     writer.set_color(&spec)?;
-    write!(writer, "{} {}", summary.errors, error_label)?;
+    write!(writer, "  ✖  ")?;
     writer.reset()?;
+    let error_label = if summary.errors == 1 {
+        "Error"
+    } else {
+        "Errors"
+    };
+    writeln!(writer, "{} {}", format_number(summary.errors), error_label)?;
 
-    write!(writer, " | ")?;
+    // Warnings line
     spec.set_fg(Some(Color::Yellow));
     writer.set_color(&spec)?;
-    write!(writer, "{} {}", summary.warnings, warning_label)?;
+    write!(writer, "  ⚠  ")?;
+    writer.reset()?;
+    let warning_label = if summary.warnings == 1 {
+        "Warning"
+    } else {
+        "Warnings"
+    };
+    writeln!(
+        writer,
+        "{} {}",
+        format_number(summary.warnings),
+        warning_label
+    )?;
+
+    // Passed line
+    spec.set_fg(Some(Color::Green));
+    writer.set_color(&spec)?;
+    write!(writer, "  ✔  ")?;
+    writer.reset()?;
+    writeln!(writer, "{} Passed", format_number(summary.passed))?;
+
+    writeln!(writer)?;
+
+    // Footer (dimmed)
+    spec.set_dimmed(true);
+    spec.set_fg(None);
+    writer.set_color(&spec)?;
+    writeln!(writer, "  Time: {}ms", summary.duration_ms)?;
     writer.reset()?;
 
-    writeln!(writer, " [{}ms]", summary.duration_ms)?;
     Ok(())
 }
 

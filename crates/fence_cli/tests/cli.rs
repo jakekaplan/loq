@@ -27,7 +27,7 @@ fn default_check_success() {
         .current_dir(temp.path())
         .assert()
         .success()
-        .stdout(predicate::str::contains("All checks passed!"));
+        .stdout(predicate::str::contains("files passed"));
 }
 
 #[test]
@@ -40,7 +40,7 @@ fn check_explicit_files() {
         .args(["check", "a.txt"])
         .assert()
         .success()
-        .stdout(predicate::str::contains("All checks passed!"));
+        .stdout(predicate::str::contains("files passed"));
 }
 
 #[test]
@@ -67,7 +67,8 @@ fn exit_code_error_on_violation() {
         .args(["check", "big.txt"])
         .assert()
         .failure()
-        .stdout(predicate::str::contains("error[max-lines]"));
+        .stdout(predicate::str::contains("✖"))
+        .stdout(predicate::str::contains("over limit"));
 }
 
 #[test]
@@ -111,12 +112,14 @@ fn silent_prints_nothing() {
 fn missing_file_warns() {
     let temp = TempDir::new().unwrap();
 
+    // Missing files are only shown in verbose mode
     cargo_bin_cmd!("fence")
         .current_dir(temp.path())
-        .args(["check", "missing.txt"])
+        .args(["--verbose", "check", "missing.txt"])
         .assert()
         .success()
-        .stdout(predicate::str::contains("skipped"));
+        .stdout(predicate::str::contains("⚠"))
+        .stdout(predicate::str::contains("file not found"));
 }
 
 #[test]
@@ -144,7 +147,8 @@ fn verbose_includes_skip_warnings() {
         .args(["--verbose", "check", "missing.txt"])
         .assert()
         .success()
-        .stdout(predicate::str::contains("warning[skip-missing]"));
+        .stdout(predicate::str::contains("⚠"))
+        .stdout(predicate::str::contains("file not found"));
 }
 
 #[test]
@@ -238,9 +242,9 @@ severity = "warning"
         .output()
         .unwrap();
     let stdout = String::from_utf8_lossy(&output.stdout);
-    assert!(stdout.contains("error[max-lines]"));
-    assert!(!stdout.contains("warning"));
-    assert!(!stdout.contains("Found"));
+    assert!(stdout.contains("✖"));
+    assert!(stdout.contains("over limit"));
+    assert!(!stdout.contains("⚠"));
 }
 
 #[test]
@@ -259,7 +263,7 @@ max_lines = 1
         .args(["--verbose", "check", "main.rs"])
         .assert()
         .failure()
-        .stdout(predicate::str::contains("matched: **/*.rs"));
+        .stdout(predicate::str::contains("match: **/*.rs"));
 }
 
 #[test]
@@ -279,7 +283,8 @@ severity = "warning"
         .args(["check", "warn.txt"])
         .assert()
         .success()
-        .stdout(predicate::str::contains("warning[max-lines]"));
+        .stdout(predicate::str::contains("⚠"))
+        .stdout(predicate::str::contains("over limit"));
 }
 
 #[test]
@@ -313,5 +318,5 @@ fn verbose_shows_builtin_config_source() {
         .args(["--verbose", "check", "a.txt"])
         .assert()
         .failure()
-        .stdout(predicate::str::contains("<built-in defaults>"));
+        .stdout(predicate::str::contains("<built-in>"));
 }

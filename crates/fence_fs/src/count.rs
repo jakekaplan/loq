@@ -2,6 +2,8 @@ use std::fs::File;
 use std::io::{Read, Result as IoResult};
 use std::path::Path;
 
+use memchr::{memchr, memchr_iter};
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum FileInspection {
     Binary,
@@ -26,11 +28,11 @@ pub fn inspect_file(path: &Path) -> Result<FileInspection, CountError> {
         return Ok(FileInspection::Text { lines: 0 });
     }
 
-    if buf[..read].contains(&0) {
+    if memchr(0, &buf[..read]).is_some() {
         return Ok(FileInspection::Binary);
     }
 
-    let mut newlines = buf[..read].iter().filter(|&&b| b == b'\n').count();
+    let mut newlines = memchr_iter(b'\n', &buf[..read]).count();
     let mut last_byte = buf[read - 1];
 
     loop {
@@ -38,7 +40,7 @@ pub fn inspect_file(path: &Path) -> Result<FileInspection, CountError> {
         if read == 0 {
             break;
         }
-        newlines += buf[..read].iter().filter(|&&b| b == b'\n').count();
+        newlines += memchr_iter(b'\n', &buf[..read]).count();
         last_byte = buf[read - 1];
     }
 

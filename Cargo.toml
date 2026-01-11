@@ -24,3 +24,10 @@ pathdiff = "0.2"
 ignore = "0.4"
 clap = { version = "4", features = ["derive"] }
 termcolor = "1"
+memchr = "2"
+rustc-hash = "2"
+
+[profile.release]
+lto = "thin"
+codegen-units = 1
+strip = true
