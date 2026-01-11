@@ -7,6 +7,9 @@ lcov.info
 *.profraw
 *.profdata
 
+# Benchmark output
+bench.json
+
 # Editors/IDEs
 .idea/
 .vscode/

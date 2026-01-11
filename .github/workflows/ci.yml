@@ -16,11 +16,33 @@ jobs:
         with:
           components: rustfmt, clippy
       - uses: taiki-e/install-action@cargo-llvm-cov
+
       - name: Format
-        run: cargo fmt --check
+        run: cargo fmt --all -- --check
+
       - name: Clippy
         run: cargo clippy --all-targets --all-features -- -D warnings
+
       - name: Test
         run: cargo test --all
+
+      - name: Doc tests
+        run: cargo test --doc
+
       - name: Coverage
         run: cargo llvm-cov --workspace --lcov --output-path lcov.info --fail-under-lines 95
+
+  security:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Install cargo-audit and cargo-deny
+        run: cargo install cargo-audit cargo-deny
+
+      - name: Audit
+        run: cargo audit
+
+      - name: Deny
+        run: cargo deny check

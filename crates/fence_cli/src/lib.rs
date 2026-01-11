@@ -69,7 +69,7 @@ fn run_check<R: Read, W1: WriteColor, W2: WriteColor>(
     };
     let duration_ms = start.elapsed().as_millis();
 
-    handle_check_output(output, duration_ms, stdout, stderr, mode)
+    handle_check_output(output, duration_ms, stdout, mode)
 }
 
 fn handle_fs_error<W: WriteColor>(err: FsError, stderr: &mut W) -> i32 {
@@ -78,11 +78,10 @@ fn handle_fs_error<W: WriteColor>(err: FsError, stderr: &mut W) -> i32 {
     2
 }
 
-fn handle_check_output<W1: WriteColor, W2: WriteColor>(
+fn handle_check_output<W: WriteColor>(
     mut output: CheckOutput,
     duration_ms: u128,
-    stdout: &mut W1,
-    _stderr: &mut W2,
+    stdout: &mut W,
     mode: OutputMode,
 ) -> i32 {
     output
@@ -118,6 +117,11 @@ fn handle_check_output<W1: WriteColor, W2: WriteColor>(
                 let _ = write_line(stdout, Some(Color::Green), &line);
             } else {
                 for finding in &report.findings {
+                    if mode != OutputMode::Verbose
+                        && matches!(finding.kind, FindingKind::SkipWarning { .. })
+                    {
+                        continue;
+                    }
                     let (color, line) = match &finding.kind {
                         FindingKind::Violation { severity, .. } => match severity {
                             fence_core::Severity::Error => {

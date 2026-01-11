@@ -1,0 +1,42 @@
+name: Benchmark
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  bench:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: taiki-e/install-action@hyperfine
+
+      - name: Build release binary
+        run: cargo build --release -p fence
+
+      - name: Benchmark
+        run: |
+          hyperfine --warmup 3 --runs 10 --ignore-failure \
+            --export-json bench.json \
+            "./target/release/fence check . --silent"
+
+      - name: Summary
+        run: |
+          echo "## Benchmark Results" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Metric | Value |" >> "$GITHUB_STEP_SUMMARY"
+          echo "|--------|-------|" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Mean | $(jq -r '.results[0].mean | . * 1000 | floor' bench.json) ms |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Stddev | $(jq -r '.results[0].stddev | . * 1000 | floor' bench.json) ms |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Min | $(jq -r '.results[0].min | . * 1000 | floor' bench.json) ms |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Max | $(jq -r '.results[0].max | . * 1000 | floor' bench.json) ms |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Runs | $(jq -r '.results[0].times | length' bench.json) |" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload benchmark results
+        uses: actions/upload-artifact@v4
+        with:
+          name: benchmark-self
+          path: bench.json

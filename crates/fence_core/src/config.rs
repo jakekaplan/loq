@@ -1,8 +1,8 @@
-use std::fmt;
 use std::path::{Path, PathBuf};
 
 use globset::{GlobBuilder, GlobMatcher};
 use serde::Deserialize;
+use thiserror::Error;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Deserialize)]
 #[serde(rename_all = "lowercase")]
@@ -137,19 +137,22 @@ pub struct PatternMatcher {
     matcher: GlobMatcher,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Error)]
 pub enum ConfigError {
+    #[error("{}", format_toml_error(path, line_col, message))]
     Toml {
         path: PathBuf,
         message: String,
         line_col: Option<(usize, usize)>,
     },
+    #[error("{}", format_unknown_key_error(path, key, line_col, suggestion))]
     UnknownKey {
         path: PathBuf,
         key: String,
         line_col: Option<(usize, usize)>,
         suggestion: Option<String>,
     },
+    #[error("{} - invalid glob '{}': {}", path.display(), pattern, message)]
     Glob {
         path: PathBuf,
         pattern: String,
@@ -157,56 +160,26 @@ pub enum ConfigError {
     },
 }
 
-impl ConfigError {
-    pub fn render(&self) -> String {
-        match self {
-            ConfigError::Toml {
-                path,
-                message,
-                line_col,
-            } => format_error(path, line_col, message),
-            ConfigError::UnknownKey {
-                path,
-                key,
-                line_col,
-                suggestion,
-            } => {
-                let base = format_error(path, line_col, &format!("unknown key '{key}'"));
-                if let Some(suggestion) = suggestion {
-                    format!("{base}\n       did you mean '{suggestion}'?")
-                } else {
-                    base
-                }
-            }
-            ConfigError::Glob {
-                path,
-                pattern,
-                message,
-            } => format!(
-                "{} - invalid glob '{}': {}",
-                path.display(),
-                pattern,
-                message
-            ),
-        }
-    }
-}
-
-impl fmt::Display for ConfigError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str(&self.render())
-    }
-}
-
-impl std::error::Error for ConfigError {}
-
-fn format_error(path: &Path, line_col: &Option<(usize, usize)>, message: &str) -> String {
-    let line = if let Some((line, col)) = line_col {
+fn format_toml_error(path: &Path, line_col: &Option<(usize, usize)>, message: &str) -> String {
+    if let Some((line, col)) = line_col {
         format!("{}:{}:{} - {}", path.display(), line, col, message)
     } else {
         format!("{} - {}", path.display(), message)
-    };
-    line
+    }
+}
+
+fn format_unknown_key_error(
+    path: &Path,
+    key: &str,
+    line_col: &Option<(usize, usize)>,
+    suggestion: &Option<String>,
+) -> String {
+    let base = format_toml_error(path, line_col, &format!("unknown key '{key}'"));
+    if let Some(suggestion) = suggestion {
+        format!("{base}\n       did you mean '{suggestion}'?")
+    } else {
+        base
+    }
 }
 
 pub fn parse_config(path: &Path, text: &str) -> Result<FenceConfig, ConfigError> {
@@ -470,10 +443,10 @@ mod tests {
     }
 
     #[test]
-    fn render_errors_are_stable() {
+    fn display_errors_are_stable() {
         let text = "default_max_lines =\n";
         let err = parse_config(Path::new(".fence.toml"), text).unwrap_err();
-        assert!(err.render().contains(".fence.toml"));
+        assert!(err.to_string().contains(".fence.toml"));
 
         let config = FenceConfig {
             default_max_lines: Some(1),
@@ -484,6 +457,6 @@ mod tests {
         };
         let err =
             compile_config(ConfigOrigin::BuiltIn, PathBuf::from("."), config, None).unwrap_err();
-        assert!(err.render().contains("invalid glob"));
+        assert!(err.to_string().contains("invalid glob"));
     }
 }

@@ -7,36 +7,21 @@ pub mod walk;
 
 use std::path::{Path, PathBuf};
 
-use fence_core::config::{compile_config, ConfigOrigin, FenceConfig};
+use fence_core::config::{compile_config, CompiledConfig, ConfigOrigin, FenceConfig};
 use fence_core::decide::{decide, Decision};
 use fence_core::report::{FileOutcome, OutcomeKind};
 use ignore::gitignore::{Gitignore, GitignoreBuilder};
-
 use rayon::prelude::*;
+use thiserror::Error;
 
-#[derive(Debug)]
+#[derive(Debug, Error)]
 pub enum FsError {
-    Config(fence_core::config::ConfigError),
+    #[error("{0}")]
+    Config(#[from] fence_core::config::ConfigError),
+    #[error("{0}")]
     Io(std::io::Error),
+    #[error("{0}")]
     Gitignore(String),
-}
-
-impl std::fmt::Display for FsError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            FsError::Config(err) => write!(f, "{err}"),
-            FsError::Io(err) => write!(f, "{err}"),
-            FsError::Gitignore(err) => write!(f, "{err}"),
-        }
-    }
-}
-
-impl std::error::Error for FsError {}
-
-impl From<fence_core::config::ConfigError> for FsError {
-    fn from(err: fence_core::config::ConfigError) -> Self {
-        FsError::Config(err)
-    }
 }
 
 pub struct CheckOptions {
@@ -56,6 +41,23 @@ pub struct CheckOutput {
     pub verbose: Vec<VerboseInfo>,
 }
 
+fn load_config_from_path(path: PathBuf, fallback_cwd: &Path) -> Result<CompiledConfig, FsError> {
+    let config_path = path.canonicalize().unwrap_or(path);
+    let root_dir = config_path
+        .parent()
+        .map(Path::to_path_buf)
+        .unwrap_or_else(|| fallback_cwd.to_path_buf());
+    let text = std::fs::read_to_string(&config_path).map_err(FsError::Io)?;
+    let config = fence_core::config::parse_config(&config_path, &text)?;
+    let compiled = compile_config(
+        ConfigOrigin::File(config_path.clone()),
+        root_dir,
+        config,
+        Some(&config_path),
+    )?;
+    Ok(compiled)
+}
+
 pub fn run_check(paths: Vec<PathBuf>, options: CheckOptions) -> Result<CheckOutput, FsError> {
     let mut file_list = walk::expand_paths(&paths)?;
     file_list.sort();
@@ -66,20 +68,7 @@ pub fn run_check(paths: Vec<PathBuf>, options: CheckOptions) -> Result<CheckOutp
     let mut outcomes = Vec::new();
 
     if let Some(config_path) = options.config_path {
-        let config_path = config_path.canonicalize().unwrap_or(config_path);
-        let root_dir = config_path
-            .parent()
-            .map(Path::to_path_buf)
-            .unwrap_or_else(|| options.cwd.clone());
-        let text = std::fs::read_to_string(&config_path).map_err(FsError::Io)?;
-        let config = fence_core::config::parse_config(&config_path, &text)?;
-        let compiled = compile_config(
-            ConfigOrigin::File(config_path.clone()),
-            root_dir,
-            config,
-            Some(&config_path),
-        )?;
-
+        let compiled = load_config_from_path(config_path, &options.cwd)?;
         let (group_outcomes, group_verbose) =
             check_group(&file_list, &compiled, &options.cwd, root_gitignore.as_ref());
         outcomes.extend(group_outcomes);
@@ -97,37 +86,20 @@ pub fn run_check(paths: Vec<PathBuf>, options: CheckOptions) -> Result<CheckOutp
     }
 
     for (config_path, group_paths) in groups {
-        let (compiled, origin) = if let Some(path) = config_path {
-            let config_path = path.canonicalize().unwrap_or(path);
-            let root_dir = config_path
-                .parent()
-                .map(Path::to_path_buf)
-                .unwrap_or_else(|| options.cwd.clone());
-            let text = std::fs::read_to_string(&config_path).map_err(FsError::Io)?;
-            let config = fence_core::config::parse_config(&config_path, &text)?;
-            let compiled = compile_config(
-                ConfigOrigin::File(config_path.clone()),
-                root_dir,
-                config,
-                Some(&config_path),
-            )?;
-            (compiled, ConfigOrigin::File(config_path))
-        } else {
-            let config = FenceConfig::built_in_defaults();
-            let compiled =
-                compile_config(ConfigOrigin::BuiltIn, options.cwd.clone(), config, None)?;
-            (compiled, ConfigOrigin::BuiltIn)
+        let compiled = match config_path {
+            Some(path) => load_config_from_path(path, &options.cwd)?,
+            None => {
+                let config = FenceConfig::built_in_defaults();
+                compile_config(ConfigOrigin::BuiltIn, options.cwd.clone(), config, None)?
+            }
         };
 
-        let (group_outcomes, mut group_verbose) = check_group(
+        let (group_outcomes, group_verbose) = check_group(
             &group_paths,
             &compiled,
             &options.cwd,
             root_gitignore.as_ref(),
         );
-        for entry in &mut group_verbose {
-            entry.config_source = origin.clone();
-        }
         outcomes.extend(group_outcomes);
         verbose.extend(group_verbose);
     }

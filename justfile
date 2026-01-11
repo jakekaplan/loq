@@ -26,3 +26,9 @@ coverage:
 
 # CI-equivalent checks
 ci: fmt-check clippy test coverage
+
+# Benchmark runtime (requires hyperfine)
+bench target=".":
+    cargo build --release -p fence
+    hyperfine --warmup 3 --runs 10 --ignore-failure \
+        "./target/release/fence check {{ target }} --silent"

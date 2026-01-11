@@ -116,7 +116,7 @@ fn missing_file_warns() {
         .args(["check", "missing.txt"])
         .assert()
         .success()
-        .stdout(predicate::str::contains("warning[skip-missing]"));
+        .stdout(predicate::str::contains("skipped"));
 }
 
 #[test]
@@ -133,6 +133,18 @@ fn verbose_includes_config_and_rule() {
         .failure()
         .stdout(predicate::str::contains("verbose: config"))
         .stdout(predicate::str::contains("verbose: rule"));
+}
+
+#[test]
+fn verbose_includes_skip_warnings() {
+    let temp = TempDir::new().unwrap();
+
+    cargo_bin_cmd!("fence")
+        .current_dir(temp.path())
+        .args(["--verbose", "check", "missing.txt"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("warning[skip-missing]"));
 }
 
 #[test]

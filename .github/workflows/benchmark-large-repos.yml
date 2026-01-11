@@ -1,0 +1,93 @@
+name: Benchmark Large Repos
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  bench:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        repo:
+          - name: uv
+            url: https://github.com/astral-sh/uv
+          - name: prefect
+            url: https://github.com/PrefectHQ/prefect
+          - name: ruff
+            url: https://github.com/astral-sh/ruff
+    steps:
+      - name: Checkout fence
+        uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: taiki-e/install-action@hyperfine
+
+      - name: Build release binary
+        run: cargo build --release -p fence
+
+      - name: Clone ${{ matrix.repo.name }}
+        run: git clone --depth 1 ${{ matrix.repo.url }} target-repo
+
+      - name: Get repo stats
+        id: stats
+        run: |
+          FILE_COUNT=$(find target-repo -type f | wc -l | tr -d ' ')
+          echo "file_count=$FILE_COUNT" >> "$GITHUB_OUTPUT"
+
+      - name: Benchmark ${{ matrix.repo.name }}
+        run: |
+          hyperfine --warmup 2 --runs 5 --ignore-failure \
+            --export-json bench.json \
+            "./target/release/fence check target-repo --silent"
+
+      - name: Summary
+        run: |
+          echo "## ${{ matrix.repo.name }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "**Repository:** ${{ matrix.repo.url }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "**Files:** ${{ steps.stats.outputs.file_count }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Metric | Value |" >> "$GITHUB_STEP_SUMMARY"
+          echo "|--------|-------|" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Mean | $(jq -r '.results[0].mean | . * 1000 | floor' bench.json) ms |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Stddev | $(jq -r '.results[0].stddev | . * 1000 | floor' bench.json) ms |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Min | $(jq -r '.results[0].min | . * 1000 | floor' bench.json) ms |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Max | $(jq -r '.results[0].max | . * 1000 | floor' bench.json) ms |" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload benchmark results
+        run: mv bench.json bench-${{ matrix.repo.name }}.json
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: benchmark-${{ matrix.repo.name }}
+          path: bench-${{ matrix.repo.name }}.json
+
+  summary:
+    needs: bench
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: benchmark-*
+          merge-multiple: true
+
+      - name: Combined summary
+        run: |
+          echo "## Benchmark Summary - Large Repos" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Repository | Mean (ms) | Stddev (ms) | Min (ms) | Max (ms) |" >> "$GITHUB_STEP_SUMMARY"
+          echo "|------------|-----------|-------------|----------|----------|" >> "$GITHUB_STEP_SUMMARY"
+          for f in bench-*.json; do
+            NAME=$(basename "$f" .json | sed 's/bench-//')
+            MEAN=$(jq -r '.results[0].mean | . * 1000 | floor' "$f")
+            STDDEV=$(jq -r '.results[0].stddev | . * 1000 | floor' "$f")
+            MIN=$(jq -r '.results[0].min | . * 1000 | floor' "$f")
+            MAX=$(jq -r '.results[0].max | . * 1000 | floor' "$f")
+            echo "| $NAME | $MEAN | $STDDEV | $MIN | $MAX |" >> "$GITHUB_STEP_SUMMARY"
+          done

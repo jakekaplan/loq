@@ -24,4 +24,3 @@ pathdiff = "0.2"
 ignore = "0.4"
 clap = { version = "4", features = ["derive"] }
 termcolor = "1"
-anyhow = "1"
