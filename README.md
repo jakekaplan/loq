@@ -93,9 +93,6 @@ git config core.hooksPath .githooks
 ## Default `loq.toml`
 
 ```toml
-# loq: enforce file size constraints
-# Counted lines are wc -l style (includes blanks/comments).
-
 default_max_lines = 500
 
 respect_gitignore = true
