@@ -22,11 +22,6 @@ pub struct FileOutcome {
 /// What happened when checking a file.
 #[derive(Debug, Clone)]
 pub enum OutcomeKind {
-    /// File was excluded by pattern.
-    Excluded {
-        /// The pattern that matched.
-        pattern: String,
-    },
     /// No limit configured for this file.
     NoLimit,
     /// File does not exist.
@@ -148,7 +143,7 @@ pub fn build_report(outcomes: &[FileOutcome], duration_ms: u128) -> Report {
 
     for outcome in outcomes {
         match &outcome.kind {
-            OutcomeKind::Excluded { .. } | OutcomeKind::NoLimit => {
+            OutcomeKind::NoLimit => {
                 summary.skipped += 1;
             }
             OutcomeKind::Missing => {
@@ -360,30 +355,20 @@ mod tests {
     }
 
     #[test]
-    fn excluded_nolimit_are_skipped() {
-        let outcomes = vec![
-            FileOutcome {
-                path: "excluded.txt".into(),
-                display_path: "excluded.txt".into(),
-                config_source: ConfigOrigin::BuiltIn,
-                kind: OutcomeKind::Excluded {
-                    pattern: "*.txt".to_string(),
-                },
-            },
-            FileOutcome {
-                path: "nolimit.js".into(),
-                display_path: "nolimit.js".into(),
-                config_source: ConfigOrigin::BuiltIn,
-                kind: OutcomeKind::NoLimit,
-            },
-        ];
+    fn nolimit_is_skipped() {
+        let outcomes = vec![FileOutcome {
+            path: "nolimit.js".into(),
+            display_path: "nolimit.js".into(),
+            config_source: ConfigOrigin::BuiltIn,
+            kind: OutcomeKind::NoLimit,
+        }];
         let report = build_report(&outcomes, 0);
-        assert_eq!(report.summary.total, 2);
-        assert_eq!(report.summary.skipped, 2);
+        assert_eq!(report.summary.total, 1);
+        assert_eq!(report.summary.skipped, 1);
         assert_eq!(report.summary.passed, 0);
         assert_eq!(report.summary.errors, 0);
         assert_eq!(report.summary.warnings, 0);
-        // No findings for excluded/nolimit
+        // No findings for nolimit
         assert!(report.findings.is_empty());
     }
 }

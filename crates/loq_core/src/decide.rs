@@ -1,7 +1,10 @@
 //! Rule matching and decision logic.
 //!
-//! Determines what action to take for each file based on configuration.
-//! Priority: exclude → rules (last match wins) → default.
+//! Determines what limit applies to a file based on configuration.
+//! Priority: rules (last match wins) → default.
+//!
+//! Note: Exclusion filtering (gitignore, exclude patterns) is handled
+//! at the walk layer, not here.
 
 use crate::config::{CompiledConfig, Severity};
 
@@ -20,11 +23,6 @@ pub enum MatchBy {
 /// The decision for how to handle a file.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Decision {
-    /// File matches an exclude pattern; skip entirely.
-    Excluded {
-        /// The pattern that matched.
-        pattern: String,
-    },
     /// File should be checked against a limit.
     Check {
         /// Maximum allowed lines.
@@ -38,17 +36,11 @@ pub enum Decision {
     SkipNoLimit,
 }
 
-/// Decides what action to take for a file path.
+/// Decides what limit applies to a file path.
 ///
-/// Checks patterns in order: exclude, rules (last match wins), default.
+/// Checks rules (last match wins), then falls back to default.
 #[must_use]
 pub fn decide(config: &CompiledConfig, path: &str) -> Decision {
-    if let Some(pattern) = config.exclude_patterns().matches(path) {
-        return Decision::Excluded {
-            pattern: pattern.to_string(),
-        };
-    }
-
     let mut matched_rule = None;
     let mut matched_pattern = None;
     for rule in config.rules() {
@@ -116,7 +108,7 @@ mod tests {
                 assert_eq!(limit, 200);
                 assert_eq!(severity, Severity::Warning);
             }
-            _ => panic!("expected check"),
+            Decision::SkipNoLimit => panic!("expected check"),
         }
     }
 
@@ -136,7 +128,7 @@ mod tests {
                 assert_eq!(limit, 123);
                 assert_eq!(matched_by, MatchBy::Default);
             }
-            _ => panic!("expected default"),
+            Decision::SkipNoLimit => panic!("expected default"),
         }
     }
 
@@ -150,25 +142,6 @@ mod tests {
         };
         let decision = decide(&compiled(config), "src/file.txt");
         assert_eq!(decision, Decision::SkipNoLimit);
-    }
-
-    #[test]
-    fn exclude_beats_rules() {
-        let config = LoqConfig {
-            default_max_lines: Some(10),
-            respect_gitignore: true,
-            exclude: vec!["**/*.txt".to_string()],
-            rules: vec![Rule {
-                path: vec!["**/*.txt".to_string()],
-                max_lines: 1,
-                severity: Severity::Error,
-            }],
-        };
-        let decision = decide(&compiled(config), "notes.txt");
-        match decision {
-            Decision::Excluded { pattern } => assert_eq!(pattern, "**/*.txt"),
-            _ => panic!("expected excluded"),
-        }
     }
 
     #[test]
@@ -202,7 +175,7 @@ mod tests {
                     }
                 );
             }
-            _ => panic!("expected check for a.rs"),
+            Decision::SkipNoLimit => panic!("expected check for a.rs"),
         }
 
         // Second pattern matches
@@ -216,7 +189,7 @@ mod tests {
                     }
                 );
             }
-            _ => panic!("expected check for b.rs"),
+            Decision::SkipNoLimit => panic!("expected check for b.rs"),
         }
 
         // Neither pattern matches - falls back to default
@@ -228,7 +201,7 @@ mod tests {
                 assert_eq!(limit, 500);
                 assert_eq!(matched_by, MatchBy::Default);
             }
-            _ => panic!("expected default for c.rs"),
+            Decision::SkipNoLimit => panic!("expected default for c.rs"),
         }
     }
 }

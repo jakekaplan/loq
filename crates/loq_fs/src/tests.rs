@@ -11,7 +11,7 @@ fn write_file(dir: &TempDir, path: &str, contents: &str) -> PathBuf {
 }
 
 #[test]
-fn excluded_files_are_skipped() {
+fn excluded_files_are_filtered_out() {
     let temp = TempDir::new().unwrap();
     write_file(
         &temp,
@@ -29,10 +29,8 @@ fn excluded_files_are_skipped() {
     )
     .unwrap();
 
-    assert!(matches!(
-        output.outcomes[0].kind,
-        OutcomeKind::Excluded { .. }
-    ));
+    // Excluded files are silently filtered out - no outcome at all
+    assert!(output.outcomes.is_empty());
 }
 
 #[test]
@@ -90,10 +88,10 @@ fn binary_and_unreadable_are_reported() {
 
     let binary = temp.path().join("binary.txt");
     std::fs::write(&binary, b"\0binary").unwrap();
-    let binary_outcome = check_file(&binary, &compiled, temp.path(), None);
+    let binary_outcome = check_file(&binary, &compiled, temp.path());
     assert!(matches!(binary_outcome.kind, OutcomeKind::Binary));
 
-    let dir_outcome = check_file(temp.path(), &compiled, temp.path(), None);
+    let dir_outcome = check_file(temp.path(), &compiled, temp.path());
     assert!(matches!(dir_outcome.kind, OutcomeKind::Unreadable { .. }));
 }
 
@@ -112,10 +110,8 @@ fn gitignore_is_respected_by_default() {
     )
     .unwrap();
 
-    assert!(matches!(
-        output.outcomes[0].kind,
-        OutcomeKind::Excluded { .. }
-    ));
+    // Gitignored files are silently filtered out - no outcome at all
+    assert!(output.outcomes.is_empty());
 }
 
 #[test]
@@ -209,21 +205,19 @@ fn gitignore_negation_pattern_whitelists_file() {
     )
     .unwrap();
 
-    let outcome_ignored = output.outcomes.iter().find(|o| o.path == ignored).unwrap();
+    // debug.log should be filtered out (not in outcomes)
+    let outcome_ignored = output.outcomes.iter().find(|o| o.path == ignored);
+    assert!(
+        outcome_ignored.is_none(),
+        "debug.log should be filtered out, but found {outcome_ignored:?}"
+    );
+
+    // important.log should NOT be excluded (whitelisted by negation pattern)
     let outcome_whitelisted = output
         .outcomes
         .iter()
         .find(|o| o.path == whitelisted)
         .unwrap();
-
-    // debug.log should be excluded by gitignore
-    assert!(
-        matches!(outcome_ignored.kind, OutcomeKind::Excluded { .. }),
-        "debug.log should be excluded, got {:?}",
-        outcome_ignored.kind
-    );
-
-    // important.log should NOT be excluded (whitelisted by negation pattern)
     assert!(
         matches!(outcome_whitelisted.kind, OutcomeKind::Pass { .. }),
         "important.log should pass (whitelisted), got {:?}",

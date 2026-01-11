@@ -43,7 +43,7 @@ pub fn inspect_file(path: &Path) -> Result<FileInspection, CountError> {
         _ => CountError::Unreadable(err),
     })?;
 
-    let mut buf = [0u8; 4096];
+    let mut buf = [0u8; 8192];
     let mut read = read_chunk(&mut file, &mut buf).map_err(CountError::Unreadable)?;
     if read == 0 {
         return Ok(FileInspection::Text { lines: 0 });

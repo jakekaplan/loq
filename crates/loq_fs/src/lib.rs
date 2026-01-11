@@ -80,6 +80,8 @@ fn load_config_from_path(path: &Path, fallback_cwd: &Path) -> Result<CompiledCon
 ///
 /// Loads a single config (from --config, cwd discovery, or built-in defaults),
 /// then checks all files against that config in parallel.
+///
+/// Exclusion filtering (gitignore + exclude patterns) happens at the walk layer.
 pub fn run_check(paths: Vec<PathBuf>, options: CheckOptions) -> Result<CheckOutput, FsError> {
     // Step 1: Load config (explicit path, discovered, or built-in defaults)
     let compiled = if let Some(ref config_path) = options.config_path {
@@ -91,9 +93,19 @@ pub fn run_check(paths: Vec<PathBuf>, options: CheckOptions) -> Result<CheckOutp
         compile_config(ConfigOrigin::BuiltIn, options.cwd.clone(), config, None)?
     };
 
-    // Step 2: Walk paths, respecting gitignore if configured
+    // Step 2: Load gitignore once (if enabled)
+    let gitignore = if compiled.respect_gitignore {
+        load_gitignore(&options.cwd)?
+    } else {
+        None
+    };
+
+    // Step 3: Walk paths, filtering through gitignore + exclude patterns
     let walk_options = walk::WalkOptions {
         respect_gitignore: compiled.respect_gitignore,
+        gitignore: gitignore.as_ref(),
+        exclude: compiled.exclude_patterns(),
+        root_dir: &compiled.root_dir,
     };
     let walk_result = walk::expand_paths(&paths, &walk_options);
     let mut file_list = walk_result.paths;
@@ -101,15 +113,8 @@ pub fn run_check(paths: Vec<PathBuf>, options: CheckOptions) -> Result<CheckOutp
     file_list.sort();
     file_list.dedup();
 
-    // Step 3: Load root gitignore for additional filtering
-    let root_gitignore = if compiled.respect_gitignore {
-        load_gitignore(&options.cwd)?
-    } else {
-        None
-    };
-
-    // Step 4: Check all files in parallel
-    let outcomes = check_group(&file_list, &compiled, &options.cwd, root_gitignore.as_ref());
+    // Step 4: Check all files in parallel (no more exclusion checks here)
+    let outcomes = check_group(&file_list, &compiled, &options.cwd);
 
     Ok(CheckOutput {
         outcomes,
@@ -117,24 +122,14 @@ pub fn run_check(paths: Vec<PathBuf>, options: CheckOptions) -> Result<CheckOutp
     })
 }
 
-fn check_group(
-    paths: &[PathBuf],
-    compiled: &loq_core::config::CompiledConfig,
-    cwd: &Path,
-    gitignore: Option<&Gitignore>,
-) -> Vec<FileOutcome> {
+fn check_group(paths: &[PathBuf], compiled: &CompiledConfig, cwd: &Path) -> Vec<FileOutcome> {
     paths
         .par_iter()
-        .map(|path| check_file(path, compiled, cwd, gitignore))
+        .map(|path| check_file(path, compiled, cwd))
         .collect()
 }
 
-fn check_file(
-    path: &Path,
-    compiled: &loq_core::config::CompiledConfig,
-    cwd: &Path,
-    gitignore: Option<&Gitignore>,
-) -> FileOutcome {
+fn check_file(path: &Path, compiled: &CompiledConfig, cwd: &Path) -> FileOutcome {
     let display_path = pathdiff::diff_paths(path, cwd)
         .unwrap_or_else(|| path.to_path_buf())
         .to_string_lossy()
@@ -148,19 +143,11 @@ fn check_file(
         kind,
     };
 
-    // Check gitignore first
-    if compiled.respect_gitignore && gitignore.is_some_and(|gi| is_gitignored(gi, path, cwd)) {
-        return make_outcome(OutcomeKind::Excluded {
-            pattern: ".gitignore".to_string(),
-        });
-    }
-
     let relative =
         pathdiff::diff_paths(path, &compiled.root_dir).unwrap_or_else(|| path.to_path_buf());
     let relative_str = normalize_path(&relative);
 
     let kind = match decide(compiled, &relative_str) {
-        Decision::Excluded { pattern } => OutcomeKind::Excluded { pattern },
         Decision::SkipNoLimit => OutcomeKind::NoLimit,
         Decision::Check {
             limit,
@@ -220,13 +207,6 @@ fn load_gitignore(root: &Path) -> Result<Option<Gitignore>, FsError> {
         .build()
         .map_err(|err| FsError::Gitignore(err.to_string()))?;
     Ok(Some(gitignore))
-}
-
-fn is_gitignored(gitignore: &Gitignore, path: &Path, root: &Path) -> bool {
-    let relative = pathdiff::diff_paths(path, root).unwrap_or_else(|| path.to_path_buf());
-    // We know path is a file (from walker), so pass false instead of calling is_dir()
-    let matched = gitignore.matched_path_or_any_parents(&relative, false);
-    matched.is_ignore() && !matched.is_whitelist()
 }
 
 #[cfg(test)]
