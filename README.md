@@ -81,14 +81,14 @@ loq works zero-config. Run `loq init` to customize:
 ```toml
 default_max_lines = 500       # files not matching any rule
 respect_gitignore = true      # skip .gitignore'd files
-exclude = ["**/generated/**"] # additional patterns to skip
+exclude = [".git/**", "**/generated/**", "*.lock"]
 
-[[rules]]                     # last match wins
+[[rules]]                     # last match wins, ** matches any path
 path = "**/*.tsx"
 max_lines = 300
 
 [[rules]]
-path = "tests/**/*"
+path = "tests/**"
 max_lines = 600
 ```
 
