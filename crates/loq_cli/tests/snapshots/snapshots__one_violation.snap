@@ -1,0 +1,7 @@
+---
+source: crates/loq_cli/tests/snapshots.rs
+assertion_line: 85
+expression: stdout
+---
+✖     20 > 10     toolong.rs
+1 violation (TIME)

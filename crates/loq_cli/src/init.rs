@@ -102,10 +102,11 @@ fn baseline_config(cwd: &Path) -> Result<String> {
             ..
         } = outcome.kind
         {
-            let mut path = outcome.display_path.replace('\\', "/");
-            if path.starts_with("./") {
-                path = path.trim_start_matches("./").to_string();
-            }
+            let path = outcome
+                .display_path
+                .strip_prefix("./")
+                .unwrap_or(&outcome.display_path)
+                .to_string();
             entries.push(BaselineEntry {
                 path,
                 lines: actual,

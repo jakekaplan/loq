@@ -1,0 +1,9 @@
+default_max_lines = 100
+
+[[rules]]
+path = "*.rs"
+max_lines = 10
+
+[[rules]]
+path = "*.md"
+max_lines = 5

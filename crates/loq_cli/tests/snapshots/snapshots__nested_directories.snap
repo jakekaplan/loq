@@ -1,0 +1,7 @@
+---
+source: crates/loq_cli/tests/snapshots.rs
+assertion_line: 130
+expression: stdout
+---
+✖     15 > 10     src/deep/mod.rs
+1 violation (TIME)

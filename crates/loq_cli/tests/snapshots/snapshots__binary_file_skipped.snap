@@ -1,0 +1,6 @@
+---
+source: crates/loq_cli/tests/snapshots.rs
+assertion_line: 148
+expression: stdout
+---
+✔ 1 files ok (TIME)

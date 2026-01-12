@@ -62,12 +62,12 @@ fn format_number_hundreds() {
 
 #[test]
 fn format_number_thousands() {
-    assert_eq!(format_number(1234), "1,234");
+    assert_eq!(format_number(1234), "1_234");
 }
 
 #[test]
 fn format_number_millions() {
-    assert_eq!(format_number(1_234_567), "1,234,567");
+    assert_eq!(format_number(1_234_567), "1_234_567");
 }
 
 #[test]

@@ -167,7 +167,7 @@ pub fn format_number(n: usize) -> String {
     let mut result = String::new();
     for (i, c) in s.chars().rev().enumerate() {
         if i > 0 && i % 3 == 0 {
-            result.insert(0, ',');
+            result.insert(0, '_');
         }
         result.insert(0, c);
     }

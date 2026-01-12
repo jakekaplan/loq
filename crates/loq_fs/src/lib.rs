@@ -163,11 +163,13 @@ fn check_file(
     // Canonicalize to get absolute path for consistent matching.
     // Falls back to joining with cwd for non-existent files.
     let abs_path = path.canonicalize().unwrap_or_else(|_| cwd.join(path));
+    // Also canonicalize cwd so pathdiff::diff_paths works correctly on Windows
+    // (where canonicalize returns extended-length paths like \\?\C:\...).
+    let cwd_abs = cwd.canonicalize().unwrap_or_else(|_| cwd.to_path_buf());
 
-    let display_path = pathdiff::diff_paths(&abs_path, cwd)
-        .unwrap_or_else(|| abs_path.clone())
-        .to_string_lossy()
-        .to_string();
+    let display_path = normalize_path(
+        &pathdiff::diff_paths(&abs_path, &cwd_abs).unwrap_or_else(|| abs_path.clone()),
+    );
     let config_source = compiled.origin.clone();
 
     let make_outcome = |kind| FileOutcome {
