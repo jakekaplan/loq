@@ -128,8 +128,23 @@ fn default_config_text(baseline: &[BaselineEntry]) -> String {
     writeln!(out, "# Paths, files, or glob patterns to exclude").unwrap();
     writeln!(out, "exclude = []").unwrap();
 
-    // Baseline rules: one per file, locked at current line count
-    if !baseline.is_empty() {
+    if baseline.is_empty() {
+        // Show commented-out example rules
+        writeln!(out).unwrap();
+        writeln!(
+            out,
+            "# Rules override defaults for specific paths. Last match wins."
+        )
+        .unwrap();
+        writeln!(out, "# [[rules]]").unwrap();
+        writeln!(out, "# path = \"**/*.ext\"").unwrap();
+        writeln!(out, "# severity = \"warning\"").unwrap();
+        writeln!(out, "#").unwrap();
+        writeln!(out, "# [[rules]]").unwrap();
+        writeln!(out, "# path = \"some/path/**/*\"").unwrap();
+        write!(out, "# max_lines = 1000").unwrap();
+    } else {
+        // Baseline rules: one per file, locked at current line count
         writeln!(out).unwrap();
         writeln!(
             out,
@@ -142,20 +157,6 @@ fn default_config_text(baseline: &[BaselineEntry]) -> String {
             writeln!(out, "path = \"{}\"", entry.path).unwrap();
             write!(out, "max_lines = {}", entry.lines).unwrap();
         }
-    } else {
-        writeln!(out).unwrap();
-        writeln!(
-            out,
-            "# Rules override defaults for specific paths. Last match wins."
-        )
-        .unwrap();
-        writeln!(out, "# [[rules]]").unwrap();
-        writeln!(out, "# path = \"src/legacy/**/*\"").unwrap();
-        writeln!(out, "# severity = \"warning\"").unwrap();
-        writeln!(out, "#").unwrap();
-        writeln!(out, "# [[rules]]").unwrap();
-        writeln!(out, "# path = \"**/*.generated.rs\"").unwrap();
-        write!(out, "# max_lines = 1000").unwrap();
     }
 
     out
