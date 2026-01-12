@@ -10,17 +10,15 @@ Big files mean more tokens. More tokens mean:
 
 - **Slower responses** - LLMs take longer to process what they don't need
 - **Higher costs** - you pay per token
-- **Worse output** - context windows fill up, important details get lost
-- **Code rot** - large files become dumping grounds that humans avoid refactoring
+- **Context rot** - large files become dumping grounds that overwhelm both LLMs and humans
 
 loq stops the sprawl before it starts.
 
-## Table of contents
+## Why loq?
 
-1. [Getting started](#getting-started)
-2. [Configuration](#configuration)
-3. [Contributing](#contributing)
-4. [License](#license)
+Linters like Ruff and ESLint check correctness. loq checks size.
+
+It does one thing: enforce line counts (`wc -l` style). No parsers, no plugins, language agnostic. One tool for your entire polyglot monorepo.
 
 ## Getting started
 
@@ -74,8 +72,7 @@ Use `loq -v` for additional context when debugging:
 
 ```
 ✖  1,427 > 500   src/components/Dashboard.tsx
-                  ├─ rule:   max-lines=500 severity=error (match: **/*.tsx)
-                  └─ config: loq.toml
+                  └─ rule: max-lines=500 severity=error (match: **/*.tsx)
 ```
 
 ## Configuration
@@ -131,28 +128,10 @@ loq init --baseline
 
 This generates rules that allow existing files to stay at their current line count, but any growth triggers an error. Ratchet down over time.
 
-### CLI reference
-
-```
-loq [OPTIONS] [COMMAND]
-
-Commands:
-  check   Check files (default)
-  init    Create loq.toml
-
-Options:
-  -q, --quiet       Suppress summary
-      --silent      Suppress all output
-  -v, --verbose     Show rule/config details
-      --config      Path to loq.toml
-  -h, --help        Print help
-  -V, --version     Print version
-```
-
 ## Contributing
 
 Contributions are welcome! See [CONTRIBUTING.md](CONTRIBUTING.md) for development setup and guidelines.
 
 ## License
 
-MIT
+This project is licensed under the [MIT License](LICENSE).

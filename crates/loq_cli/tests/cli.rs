@@ -88,7 +88,7 @@ fn missing_file_warns() {
 }
 
 #[test]
-fn verbose_includes_config_and_rule() {
+fn verbose_includes_rule() {
     let temp = TempDir::new().unwrap();
     let config = "default_max_lines = 1\n";
     write_file(&temp, "loq.toml", config);
@@ -99,7 +99,6 @@ fn verbose_includes_config_and_rule() {
         .args(["--verbose", "check", "a.txt"])
         .assert()
         .failure()
-        .stdout(predicate::str::contains("config:"))
         .stdout(predicate::str::contains("rule:"));
 }
 
@@ -329,18 +328,4 @@ severity = "warning"
         .assert()
         .success()
         .stdout(predicate::str::contains("severity=warning"));
-}
-
-#[test]
-fn verbose_shows_builtin_config_source() {
-    let temp = TempDir::new().unwrap();
-    let contents = repeat_lines(501);
-    write_file(&temp, "a.txt", &contents);
-
-    cargo_bin_cmd!("loq")
-        .current_dir(temp.path())
-        .args(["--verbose", "check", "a.txt"])
-        .assert()
-        .failure()
-        .stdout(predicate::str::contains("<built-in>"));
 }

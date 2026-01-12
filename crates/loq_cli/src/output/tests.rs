@@ -139,8 +139,6 @@ fn write_finding_violation_verbose_default_match() {
     let out = output_string(|w| write_finding(w, &finding, true));
     assert!(out.contains("rule:"));
     assert!(out.contains("(default)"));
-    assert!(out.contains("config:"));
-    assert!(out.contains("<built-in>"));
 }
 
 #[test]
@@ -162,8 +160,6 @@ fn write_finding_violation_verbose_rule_match() {
     assert!(out.contains("rule:"));
     assert!(out.contains("match: **/*.rs"));
     assert!(out.contains("severity=warning"));
-    assert!(out.contains("config:"));
-    assert!(out.contains("loq.toml"));
 }
 
 #[test]
@@ -303,16 +299,4 @@ fn write_walk_errors_non_verbose() {
     let out = output_string(|w| write_walk_errors(w, &errors, false));
     assert!(out.contains("1 path(s) skipped"));
     assert!(out.contains("--verbose"));
-}
-
-#[test]
-fn relative_config_path_builtin() {
-    let result = relative_config_path(&ConfigOrigin::BuiltIn);
-    assert_eq!(result, "<built-in>");
-}
-
-#[test]
-fn relative_config_path_file() {
-    let result = relative_config_path(&ConfigOrigin::File("/some/path/loq.toml".into()));
-    assert_eq!(result, "loq.toml");
 }

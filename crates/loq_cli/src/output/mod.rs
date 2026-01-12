@@ -1,7 +1,7 @@
 use std::io;
 
 use loq_core::report::{Finding, FindingKind, SkipReason, Summary};
-use loq_core::{ConfigOrigin, Severity};
+use loq_core::Severity;
 use loq_fs::walk::WalkError;
 use termcolor::{Color, ColorSpec, WriteColor};
 
@@ -108,12 +108,7 @@ pub fn write_finding<W: WriteColor>(
                         )
                     }
                 };
-                writeln!(writer, "                  ├─ rule:   {rule_str}")?;
-                writeln!(
-                    writer,
-                    "                  └─ config: {}",
-                    relative_config_path(&finding.config_source)
-                )?;
+                writeln!(writer, "                  └─ rule: {rule_str}")?;
                 writer.reset()?;
             }
         }
@@ -147,19 +142,6 @@ fn write_path<W: WriteColor>(writer: &mut W, path: &str) -> io::Result<()> {
         write!(writer, "{path}")?;
     }
     writer.reset()
-}
-
-fn relative_config_path(origin: &ConfigOrigin) -> String {
-    match origin {
-        ConfigOrigin::BuiltIn => "<built-in>".to_string(),
-        ConfigOrigin::File(path) => {
-            // Just show the filename
-            path.file_name().map_or_else(
-                || path.display().to_string(),
-                |n| n.to_string_lossy().into_owned(),
-            )
-        }
-    }
 }
 
 pub fn format_number(n: usize) -> String {
