@@ -29,26 +29,6 @@ fn colorspec_helpers_build_correctly() {
 }
 
 #[test]
-fn write_count_line_singular() {
-    let out = output_string(|w| write_count_line(w, "✔", Color::Green, 1, "Error", "Errors"));
-    assert!(out.contains("1 Error"));
-    assert!(!out.contains("Errors"));
-}
-
-#[test]
-fn write_count_line_plural() {
-    let out = output_string(|w| write_count_line(w, "✔", Color::Green, 5, "Error", "Errors"));
-    assert!(out.contains("5 Errors"));
-}
-
-#[test]
-fn write_count_line_passed_no_plural() {
-    let out = output_string(|w| write_count_line(w, "✔", Color::Green, 5, "Passed", "Passed"));
-    assert!(out.contains("5 Passed"));
-    assert!(!out.contains("Passeds"));
-}
-
-#[test]
 fn severity_label_error() {
     assert_eq!(severity_label(Severity::Error), "error");
 }
@@ -118,8 +98,9 @@ fn write_finding_violation_error() {
     let out = output_string(|w| write_finding(w, &finding, false));
     assert!(out.contains("✖"));
     assert!(out.contains("main.rs"));
-    assert!(out.contains("150 lines"));
-    assert!(out.contains("+50 over limit"));
+    // Compact format: 150 > 100
+    assert!(out.contains("150"));
+    assert!(out.contains("> 100"));
 }
 
 #[test]
@@ -137,8 +118,9 @@ fn write_finding_violation_warning() {
     };
     let out = output_string(|w| write_finding(w, &finding, false));
     assert!(out.contains("⚠"));
-    assert!(out.contains("15 lines"));
-    assert!(out.contains("+5 over limit"));
+    // Compact format: 15 > 10
+    assert!(out.contains("15"));
+    assert!(out.contains("> 10"));
 }
 
 #[test]
@@ -253,15 +235,9 @@ fn write_summary_with_violations() {
         duration_ms: 42,
     };
     let out = output_string(|w| write_summary(w, &summary));
-    assert!(out.contains("Found 3 violations"));
-    assert!(out.contains("8 checked files"));
-    assert!(out.contains("✖"));
-    assert!(out.contains("2 Errors"));
-    assert!(out.contains("⚠"));
-    assert!(out.contains("1 Warning"));
-    assert!(out.contains("✔"));
-    assert!(out.contains("5 Passed"));
-    assert!(out.contains("Time: 42ms"));
+    // Compact format: "3 violations (42ms)"
+    assert!(out.contains("3 violations"));
+    assert!(out.contains("42ms"));
 }
 
 #[test]
@@ -275,13 +251,14 @@ fn write_summary_all_passed() {
         duration_ms: 10,
     };
     let out = output_string(|w| write_summary(w, &summary));
-    assert!(out.contains("All 5 files passed"));
-    assert!(out.contains("0 Errors"));
-    assert!(out.contains("0 Warnings"));
+    // Compact format: "✔ 5 files ok (10ms)"
+    assert!(out.contains("✔"));
+    assert!(out.contains("5 files ok"));
+    assert!(out.contains("10ms"));
 }
 
 #[test]
-fn write_summary_single_file() {
+fn write_summary_single_violation() {
     let summary = Summary {
         total: 1,
         skipped: 0,
@@ -291,8 +268,10 @@ fn write_summary_single_file() {
         duration_ms: 5,
     };
     let out = output_string(|w| write_summary(w, &summary));
-    assert!(out.contains("1 checked file."));
-    assert!(out.contains("1 Error"));
+    // Singular: "1 violation (5ms)"
+    assert!(out.contains("1 violation"));
+    assert!(!out.contains("violations"));
+    assert!(out.contains("5ms"));
 }
 
 #[test]

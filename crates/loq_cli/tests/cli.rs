@@ -27,7 +27,7 @@ fn default_check_success() {
         .current_dir(temp.path())
         .assert()
         .success()
-        .stdout(predicate::str::contains("files passed"));
+        .stdout(predicate::str::contains("files ok"));
 }
 
 #[test]
@@ -40,7 +40,7 @@ fn check_explicit_files() {
         .args(["check", "a.txt"])
         .assert()
         .success()
-        .stdout(predicate::str::contains("files passed"));
+        .stdout(predicate::str::contains("files ok"));
 }
 
 #[test]
@@ -68,7 +68,9 @@ fn exit_code_error_on_violation() {
         .assert()
         .failure()
         .stdout(predicate::str::contains("✖"))
-        .stdout(predicate::str::contains("over limit"));
+        .stdout(predicate::str::contains("501"))
+        .stdout(predicate::str::contains(">"))
+        .stdout(predicate::str::contains("500"));
 }
 
 #[test]
@@ -326,7 +328,7 @@ severity = "warning"
         .unwrap();
     let stdout = String::from_utf8_lossy(&output.stdout);
     assert!(stdout.contains("✖"));
-    assert!(stdout.contains("over limit"));
+    assert!(stdout.contains('>')); // error.txt shows violation
     assert!(!stdout.contains("⚠"));
 }
 
@@ -367,7 +369,8 @@ severity = "warning"
         .assert()
         .success()
         .stdout(predicate::str::contains("⚠"))
-        .stdout(predicate::str::contains("over limit"));
+        .stdout(predicate::str::contains("3"))
+        .stdout(predicate::str::contains(">"));
 }
 
 #[test]

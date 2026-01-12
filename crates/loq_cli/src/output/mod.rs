@@ -48,36 +48,20 @@ pub fn write_finding<W: WriteColor>(
     finding: &Finding,
     verbose: bool,
 ) -> io::Result<()> {
-    let (symbol, color, over_by) = match &finding.kind {
-        FindingKind::Violation {
-            severity, over_by, ..
-        } => match severity {
-            Severity::Error => ("✖", Color::Red, Some(*over_by)),
-            Severity::Warning => ("⚠", Color::Yellow, Some(*over_by)),
+    let (symbol, color) = match &finding.kind {
+        FindingKind::Violation { severity, .. } => match severity {
+            Severity::Error => ("✖", Color::Red),
+            Severity::Warning => ("⚠", Color::Yellow),
         },
-        FindingKind::SkipWarning { .. } => ("⚠", Color::Yellow, None),
+        FindingKind::SkipWarning { .. } => ("⚠", Color::Yellow),
     };
 
-    // Line 1: symbol + path (directory dimmed, filename bold)
+    // Symbol
     writer.set_color(&fg(color))?;
-    write!(writer, "{symbol}  ")?;
+    write!(writer, "{symbol} ")?;
     writer.reset()?;
 
-    let path = &finding.path;
-    if let Some(pos) = path.rfind('/') {
-        let (dir, file) = path.split_at(pos + 1);
-        writer.set_color(&dimmed())?;
-        write!(writer, "{dir}")?;
-        writer.reset()?;
-        writer.set_color(&bold())?;
-        writeln!(writer, "{file}")?;
-    } else {
-        writer.set_color(&bold())?;
-        writeln!(writer, "{path}")?;
-    }
-    writer.reset()?;
-
-    // Line 2: indented details
+    // Details first (fixed-width), then path (variable-width)
     match &finding.kind {
         FindingKind::Violation {
             actual,
@@ -86,11 +70,24 @@ pub fn write_finding<W: WriteColor>(
             matched_by,
             ..
         } => {
-            let over = over_by.unwrap_or(0);
-            write!(writer, "   {} lines   ", format_number(*actual))?;
-            writer.set_color(&fg(color))?;
-            writeln!(writer, "(+{} over limit)", format_number(over))?;
+            // Format: ✖ 1,427 > 500  path/to/file.rs
+            // Right-align actual within 6 chars (handles up to 99,999)
+            let actual_str = format_number(*actual);
+            let limit_str = format_number(*limit);
+            writer.set_color(&fg(color).set_bold(true).clone())?;
+            write!(writer, "{actual_str:>6}")?;
             writer.reset()?;
+            writer.set_color(&dimmed())?;
+            write!(writer, " > ")?;
+            writer.reset()?;
+            writer.set_color(&fg(Color::Green))?;
+            write!(writer, "{limit_str:<6}")?;
+            writer.reset()?;
+
+            // Path (directory dimmed, filename bold)
+            write!(writer, " ")?;
+            write_path(writer, &finding.path)?;
+            writeln!(writer)?;
 
             if verbose {
                 writer.set_color(&dimmed())?;
@@ -111,10 +108,10 @@ pub fn write_finding<W: WriteColor>(
                         )
                     }
                 };
-                writeln!(writer, "   ├─ rule:   {rule_str}")?;
+                writeln!(writer, "                  ├─ rule:   {rule_str}")?;
                 writeln!(
                     writer,
-                    "   └─ config: {}",
+                    "                  └─ config: {}",
                     relative_config_path(&finding.config_source)
                 )?;
                 writer.reset()?;
@@ -123,14 +120,33 @@ pub fn write_finding<W: WriteColor>(
         FindingKind::SkipWarning { reason } => {
             let msg = match reason {
                 SkipReason::Binary => "binary file skipped",
-                SkipReason::Unreadable(e) => return writeln!(writer, "   unreadable: {e}\n"),
+                SkipReason::Unreadable(e) => {
+                    write_path(writer, &finding.path)?;
+                    return writeln!(writer, "  unreadable: {e}");
+                }
                 SkipReason::Missing => "file not found",
             };
-            writeln!(writer, "   {msg}")?;
+            write_path(writer, &finding.path)?;
+            writeln!(writer, "  {msg}")?;
         }
     }
 
-    writeln!(writer)
+    Ok(())
+}
+
+fn write_path<W: WriteColor>(writer: &mut W, path: &str) -> io::Result<()> {
+    if let Some(pos) = path.rfind('/') {
+        let (dir, file) = path.split_at(pos + 1);
+        writer.set_color(&dimmed())?;
+        write!(writer, "{dir}")?;
+        writer.reset()?;
+        writer.set_color(&bold())?;
+        write!(writer, "{file}")?;
+    } else {
+        writer.set_color(&bold())?;
+        write!(writer, "{path}")?;
+    }
+    writer.reset()
 }
 
 fn relative_config_path(origin: &ConfigOrigin) -> String {
@@ -175,66 +191,27 @@ pub fn write_block<W: WriteColor>(
 
 pub fn write_summary<W: WriteColor>(writer: &mut W, summary: &Summary) -> io::Result<()> {
     let violations = summary.errors + summary.warnings;
-    let total = summary.passed + violations;
 
     if violations > 0 {
-        let violation_word = if violations == 1 {
+        let word = if violations == 1 {
             "violation"
         } else {
             "violations"
         };
-        let files_word = if total == 1 { "file" } else { "files" };
-        writeln!(
-            writer,
-            "Found {violations} {violation_word} in {} checked {files_word}.",
-            format_number(total)
-        )?;
+        writer.set_color(&fg(Color::Red))?;
+        write!(writer, "{violations} {word}")?;
+        writer.reset()?;
+        writer.set_color(&dimmed())?;
+        writeln!(writer, " ({}ms)", summary.duration_ms)?;
     } else {
-        writeln!(
-            writer,
-            "All {} files passed.",
-            format_number(summary.passed)
-        )?;
+        writer.set_color(&fg(Color::Green))?;
+        write!(writer, "✔")?;
+        writer.reset()?;
+        write!(writer, " {} files ok", format_number(summary.passed))?;
+        writer.set_color(&dimmed())?;
+        writeln!(writer, " ({}ms)", summary.duration_ms)?;
     }
-    writeln!(writer)?;
-
-    write_count_line(writer, "✖", Color::Red, summary.errors, "Error", "Errors")?;
-    write_count_line(
-        writer,
-        "⚠",
-        Color::Yellow,
-        summary.warnings,
-        "Warning",
-        "Warnings",
-    )?;
-    write_count_line(
-        writer,
-        "✔",
-        Color::Green,
-        summary.passed,
-        "Passed",
-        "Passed",
-    )?;
-    writeln!(writer)?;
-
-    writer.set_color(&dimmed())?;
-    writeln!(writer, "  Time: {}ms", summary.duration_ms)?;
     writer.reset()
-}
-
-fn write_count_line<W: WriteColor>(
-    writer: &mut W,
-    symbol: &str,
-    color: Color,
-    count: usize,
-    singular: &str,
-    plural: &str,
-) -> io::Result<()> {
-    writer.set_color(&fg(color))?;
-    write!(writer, "  {symbol}  ")?;
-    writer.reset()?;
-    let label = if count == 1 { singular } else { plural };
-    writeln!(writer, "{} {label}", format_number(count))
 }
 
 pub fn print_error<W: WriteColor>(stderr: &mut W, message: &str) -> crate::ExitStatus {
