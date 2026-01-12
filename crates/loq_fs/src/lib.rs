@@ -275,8 +275,36 @@ fn cached_result_to_outcome(
 ///
 /// Falls back to the original path if it cannot be made relative.
 pub(crate) fn relative_path_str(path: &Path, root: &Path) -> String {
-    let relative = pathdiff::diff_paths(path, root).unwrap_or_else(|| path.to_path_buf());
+    let relative = if let Some(relative) = pathdiff::diff_paths(path, root) {
+        relative
+    } else {
+        #[cfg(windows)]
+        {
+            let path = strip_verbatim_prefix(path);
+            let root = strip_verbatim_prefix(root);
+            pathdiff::diff_paths(&path, &root).unwrap_or(path)
+        }
+        #[cfg(not(windows))]
+        {
+            path.to_path_buf()
+        }
+    };
     normalize_path(&relative)
+}
+
+/// Strip Windows verbatim prefixes (\\?\ / \\?\UNC\) for consistent diffing.
+#[cfg(windows)]
+fn strip_verbatim_prefix(path: &Path) -> PathBuf {
+    let s = path.to_string_lossy();
+    if let Some(rest) = s.strip_prefix(r"\\?\UNC\") {
+        let mut out = String::from(r"\\");
+        out.push_str(rest);
+        PathBuf::from(out)
+    } else if let Some(rest) = s.strip_prefix(r"\\?\") {
+        PathBuf::from(rest)
+    } else {
+        path.to_path_buf()
+    }
 }
 
 /// Normalizes a path for pattern matching.
