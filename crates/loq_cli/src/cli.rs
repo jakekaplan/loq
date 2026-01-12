@@ -15,10 +15,6 @@ pub struct Cli {
     /// Show extra information.
     #[arg(short = 'v', long = "verbose", global = true)]
     pub verbose: bool,
-
-    /// Path to loq.toml config file.
-    #[arg(long = "config", value_name = "PATH", global = true)]
-    pub config: Option<PathBuf>,
 }
 
 /// Available commands.

@@ -182,12 +182,12 @@ fn init_does_not_duplicate_cache_in_gitignore() {
 #[test]
 fn config_error_is_reported() {
     let temp = TempDir::new().unwrap();
-    write_file(&temp, "bad.toml", "max_line = 10\n");
+    write_file(&temp, "loq.toml", "max_line = 10\n");
     write_file(&temp, "a.txt", "a\n");
 
     cargo_bin_cmd!("loq")
         .current_dir(temp.path())
-        .args(["--config", "bad.toml", "check", "a.txt"])
+        .args(["check", "a.txt"])
         .assert()
         .failure()
         .stderr(predicate::str::contains("unknown key"));

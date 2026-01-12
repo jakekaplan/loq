@@ -9,8 +9,9 @@ use loq_core::report::{build_report, FindingKind};
 use loq_fs::{CheckOptions, CheckOutput, FsError};
 use termcolor::{Color, WriteColor};
 
-use crate::cli::{CheckArgs, Cli};
+use crate::cli::CheckArgs;
 use crate::output::{print_error, write_block, write_finding, write_summary, write_walk_errors};
+use crate::Cli;
 use crate::ExitStatus;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -29,7 +30,6 @@ pub const fn output_mode(cli: &Cli) -> OutputMode {
 
 pub fn run_check<R: Read, W1: WriteColor, W2: WriteColor>(
     args: &CheckArgs,
-    cli: &Cli,
     stdin: &mut R,
     stdout: &mut W1,
     stderr: &mut W2,
@@ -42,7 +42,7 @@ pub fn run_check<R: Read, W1: WriteColor, W2: WriteColor>(
     };
 
     let options = CheckOptions {
-        config_path: cli.config.clone(),
+        config_path: None,
         cwd: cwd.clone(),
         use_cache: !args.no_cache,
     };

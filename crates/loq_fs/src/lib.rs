@@ -81,7 +81,7 @@ fn load_config_from_path(path: &Path, fallback_cwd: &Path) -> Result<CompiledCon
 
 /// Runs a check on the given paths.
 ///
-/// Loads a single config (from --config, cwd discovery, or built-in defaults),
+/// Loads a single config (explicit path, cwd discovery, or built-in defaults),
 /// then checks all files against that config in parallel.
 ///
 /// Exclusion filtering (gitignore + exclude patterns) happens at the walk layer.

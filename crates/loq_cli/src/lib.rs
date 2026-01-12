@@ -71,7 +71,7 @@ where
         no_cache: false,
     });
     match cli.command.as_ref().unwrap_or(&default_check) {
-        Command::Check(args) => run_check(args, &cli, &mut stdin, stdout, stderr, mode),
+        Command::Check(args) => run_check(args, &mut stdin, stdout, stderr, mode),
         Command::Init(args) => run_init(args, stdout, stderr),
         Command::Baseline(args) => run_baseline(args, stdout, stderr),
     }
