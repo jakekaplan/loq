@@ -161,3 +161,98 @@ fn default_config_text(baseline: &[BaselineEntry]) -> String {
 
     out
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tempfile::TempDir;
+
+    #[test]
+    fn default_config_without_baseline() {
+        let text = default_config_text(&[]);
+        assert!(text.contains("default_max_lines = 500"));
+        assert!(text.contains("respect_gitignore = true"));
+        assert!(text.contains("exclude = []"));
+        assert!(text.contains("# [[rules]]"));
+        assert!(text.contains("# max_lines = 1000"));
+    }
+
+    #[test]
+    fn default_config_with_baseline() {
+        let entries = vec![
+            BaselineEntry {
+                path: "src/large.rs".to_string(),
+                lines: 1200,
+            },
+            BaselineEntry {
+                path: "lib/util.rs".to_string(),
+                lines: 800,
+            },
+        ];
+        let text = default_config_text(&entries);
+        assert!(text.contains("default_max_lines = 500"));
+        assert!(text.contains("# Baseline: files locked at current size"));
+        assert!(text.contains("path = \"src/large.rs\""));
+        assert!(text.contains("max_lines = 1200"));
+        assert!(text.contains("path = \"lib/util.rs\""));
+        assert!(text.contains("max_lines = 800"));
+        // Should not contain commented example rules
+        assert!(!text.contains("# [[rules]]"));
+    }
+
+    #[test]
+    fn add_to_gitignore_creates_entry() {
+        let temp = TempDir::new().unwrap();
+        std::fs::write(temp.path().join(".gitignore"), "node_modules\n").unwrap();
+
+        add_to_gitignore(temp.path());
+
+        let contents = std::fs::read_to_string(temp.path().join(".gitignore")).unwrap();
+        assert!(contents.contains(".loq_cache"));
+        assert!(contents.ends_with(".loq_cache\n"));
+    }
+
+    #[test]
+    fn add_to_gitignore_skips_if_already_present() {
+        let temp = TempDir::new().unwrap();
+        let original = "node_modules\n.loq_cache\ntarget\n";
+        std::fs::write(temp.path().join(".gitignore"), original).unwrap();
+
+        add_to_gitignore(temp.path());
+
+        let contents = std::fs::read_to_string(temp.path().join(".gitignore")).unwrap();
+        assert_eq!(contents, original);
+    }
+
+    #[test]
+    fn add_to_gitignore_handles_no_trailing_newline() {
+        let temp = TempDir::new().unwrap();
+        std::fs::write(temp.path().join(".gitignore"), "node_modules").unwrap();
+
+        add_to_gitignore(temp.path());
+
+        let contents = std::fs::read_to_string(temp.path().join(".gitignore")).unwrap();
+        assert_eq!(contents, "node_modules\n.loq_cache\n");
+    }
+
+    #[test]
+    fn add_to_gitignore_skips_if_no_gitignore() {
+        let temp = TempDir::new().unwrap();
+        // No .gitignore file
+
+        add_to_gitignore(temp.path());
+
+        assert!(!temp.path().join(".gitignore").exists());
+    }
+
+    #[test]
+    fn add_to_gitignore_handles_empty_file() {
+        let temp = TempDir::new().unwrap();
+        std::fs::write(temp.path().join(".gitignore"), "").unwrap();
+
+        add_to_gitignore(temp.path());
+
+        let contents = std::fs::read_to_string(temp.path().join(".gitignore")).unwrap();
+        assert_eq!(contents, ".loq_cache\n");
+    }
+}
