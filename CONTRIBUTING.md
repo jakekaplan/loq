@@ -1,63 +1,68 @@
 # Contributing to loq
 
-Thanks for your interest in contributing to loq!
+Thanks for your interest in contributing!
 
-## Development Setup
+## Development setup
 
 1. Install Rust via [rustup](https://rustup.rs/)
 2. Clone the repository
 3. Run `cargo build` to compile
 
-## Before Submitting a PR
+## Before submitting a PR
 
 Run these checks locally (they mirror CI):
 
 ```bash
-# Format
 cargo fmt --all -- --check
-
-# Lint
 cargo clippy --all-targets --all-features -- -D warnings
-
-# Test
 cargo test --all
-
-# Self-check (loq checks loq)
-cargo run -p loq -- check .
+cargo run -p loq -- check .   # loq checks loq
 ```
 
-If you have [just](https://github.com/casey/just) installed:
+Or with [just](https://github.com/casey/just):
 
 ```bash
 just ci
 ```
 
-## Code Guidelines
+## Testing
 
-- **No unsafe code**: All crates use `#![forbid(unsafe_code)]`
-- **Test coverage**: Maintain 95%+ coverage
-- **Error handling**: Use `thiserror` in libraries, `anyhow` in the CLI
-- **Documentation**: Add rustdoc comments to public items
+**Unit tests** live in `mod tests` blocks within each module.
 
-## Project Structure
+**Integration tests** use [insta](https://insta.rs/) for snapshot testing. Snapshots live in `crates/loq_cli/tests/snapshots/`.
+
+To update snapshots after intentional output changes:
+
+```bash
+cargo insta review
+```
+
+**Coverage** is enforced at 95%+ line coverage. Check locally with:
+
+```bash
+cargo llvm-cov --workspace --fail-under-lines 95
+```
+
+## Code guidelines
+
+- **No unsafe code** - all crates use `#![forbid(unsafe_code)]`
+- **Strict linting** - pedantic clippy + restriction lints (no prints, no dbg!, etc.)
+- **Error handling** - `thiserror` in libraries, `anyhow` in CLI
+- **Documentation** - rustdoc comments on public items
+
+## Project structure
 
 ```
 crates/
   loq_core/   # Domain logic (config, rules, reporting)
-  loq_fs/     # Filesystem operations (walking, counting)
-  loq_cli/    # CLI interface
+  loq_fs/     # Filesystem operations (walking, counting, caching)
+  loq_cli/    # CLI binary
+python/       # Python package wrapper (PyPI distribution)
 ```
 
-## Running Benchmarks
+## Benchmarks
 
 ```bash
-# Criterion benchmarks
-cargo bench -p loq_fs
-
-# Real-world benchmark (requires hyperfine)
-just bench https://github.com/astral-sh/ruff
+cargo bench -p loq_fs                        # Criterion microbenchmarks
+just bench https://github.com/astral-sh/ruff # Real-world benchmark (requires hyperfine)
 ```
-
-## Commit Messages
-
-Write clear, concise commit messages. No specific format is required, but focus on the "why" rather than the "what".

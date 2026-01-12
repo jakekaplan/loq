@@ -16,17 +16,11 @@ use crate::ExitStatus;
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum OutputMode {
     Default,
-    Quiet,
-    Silent,
     Verbose,
 }
 
 pub const fn output_mode(cli: &Cli) -> OutputMode {
-    if cli.silent {
-        OutputMode::Silent
-    } else if cli.quiet {
-        OutputMode::Quiet
-    } else if cli.verbose {
+    if cli.verbose {
         OutputMode::Verbose
     } else {
         OutputMode::Default
@@ -81,33 +75,17 @@ fn handle_check_output<W: WriteColor>(
 
     let report = build_report(&output.outcomes, duration_ms);
 
-    match mode {
-        OutputMode::Silent => {}
-        OutputMode::Quiet => {
-            for finding in &report.findings {
-                if matches!(
-                    &finding.kind,
-                    FindingKind::Violation { severity, .. }
-                        if *severity == loq_core::Severity::Error
-                ) {
-                    let _ = write_finding(stdout, finding, false);
-                }
-            }
+    let verbose = mode == OutputMode::Verbose;
+    for finding in &report.findings {
+        if !verbose && matches!(finding.kind, FindingKind::SkipWarning { .. }) {
+            continue;
         }
-        OutputMode::Default | OutputMode::Verbose => {
-            let verbose = mode == OutputMode::Verbose;
-            for finding in &report.findings {
-                if !verbose && matches!(finding.kind, FindingKind::SkipWarning { .. }) {
-                    continue;
-                }
-                let _ = write_finding(stdout, finding, verbose);
-            }
-            let _ = write_summary(stdout, &report.summary);
+        let _ = write_finding(stdout, finding, verbose);
+    }
+    let _ = write_summary(stdout, &report.summary);
 
-            if !output.walk_errors.is_empty() {
-                let _ = write_walk_errors(stdout, &output.walk_errors, verbose);
-            }
-        }
+    if !output.walk_errors.is_empty() {
+        let _ = write_walk_errors(stdout, &output.walk_errors, verbose);
     }
 
     if report.summary.errors > 0 {
@@ -166,18 +144,6 @@ mod tests {
     }
 
     #[test]
-    fn output_mode_precedence() {
-        let cli = Cli {
-            command: None,
-            quiet: true,
-            silent: true,
-            verbose: true,
-            config: None,
-        };
-        assert_eq!(output_mode(&cli), OutputMode::Silent);
-    }
-
-    #[test]
     fn collect_inputs_empty_defaults_to_cwd() {
         let mut empty_stdin: &[u8] = b"";
         let result = collect_inputs(vec![], &mut empty_stdin, Path::new("/repo")).unwrap();
@@ -229,60 +195,6 @@ mod tests {
         assert_eq!(status, ExitStatus::Error);
         let output = String::from_utf8(stderr.into_inner()).unwrap();
         assert!(output.contains("error:"));
-    }
-
-    #[test]
-    fn handle_check_output_silent_mode() {
-        use termcolor::NoColor;
-        let mut stdout = NoColor::new(Vec::new());
-        let output = loq_fs::CheckOutput {
-            outcomes: vec![],
-            walk_errors: vec![],
-        };
-        let status = handle_check_output(output, 0, &mut stdout, OutputMode::Silent);
-        assert_eq!(status, ExitStatus::Success);
-        assert!(stdout.into_inner().is_empty());
-    }
-
-    #[test]
-    fn handle_check_output_quiet_mode_shows_errors_only() {
-        use loq_core::report::{FileOutcome, OutcomeKind};
-        use loq_core::{ConfigOrigin, MatchBy, Severity};
-        use termcolor::NoColor;
-
-        let mut stdout = NoColor::new(Vec::new());
-        let output = loq_fs::CheckOutput {
-            outcomes: vec![
-                FileOutcome {
-                    path: "error.txt".into(),
-                    display_path: "error.txt".into(),
-                    config_source: ConfigOrigin::BuiltIn,
-                    kind: OutcomeKind::Violation {
-                        limit: 10,
-                        actual: 20,
-                        severity: Severity::Error,
-                        matched_by: MatchBy::Default,
-                    },
-                },
-                FileOutcome {
-                    path: "warning.txt".into(),
-                    display_path: "warning.txt".into(),
-                    config_source: ConfigOrigin::BuiltIn,
-                    kind: OutcomeKind::Violation {
-                        limit: 10,
-                        actual: 15,
-                        severity: Severity::Warning,
-                        matched_by: MatchBy::Default,
-                    },
-                },
-            ],
-            walk_errors: vec![],
-        };
-        let status = handle_check_output(output, 0, &mut stdout, OutputMode::Quiet);
-        assert_eq!(status, ExitStatus::Failure);
-        let output_str = String::from_utf8(stdout.into_inner()).unwrap();
-        assert!(output_str.contains("error.txt"));
-        assert!(!output_str.contains("warning.txt"));
     }
 
     #[test]

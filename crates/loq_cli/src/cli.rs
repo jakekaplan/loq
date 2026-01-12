@@ -12,14 +12,6 @@ pub struct Cli {
     #[command(subcommand)]
     pub command: Option<Command>,
 
-    /// Suppress summary output.
-    #[arg(short = 'q', long = "quiet", global = true)]
-    pub quiet: bool,
-
-    /// Suppress all output.
-    #[arg(long = "silent", global = true)]
-    pub silent: bool,
-
     /// Show extra information.
     #[arg(short = 'v', long = "verbose", global = true)]
     pub verbose: bool,

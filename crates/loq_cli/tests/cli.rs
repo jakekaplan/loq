@@ -74,43 +74,6 @@ fn exit_code_error_on_violation() {
 }
 
 #[test]
-fn quiet_suppresses_warnings_and_summary() {
-    let temp = TempDir::new().unwrap();
-    let config = r#"default_max_lines = 500
-[[rules]]
-path = "**/*.txt"
-max_lines = 1
-severity = "warning"
-"#;
-    write_file(&temp, "loq.toml", config);
-    write_file(&temp, "warn.txt", "a\nb\n");
-
-    let output = cargo_bin_cmd!("loq")
-        .current_dir(temp.path())
-        .args(["--quiet", "check", "warn.txt"])
-        .output()
-        .unwrap();
-    assert!(output.status.success());
-    assert!(output.stdout.is_empty());
-}
-
-#[test]
-fn silent_prints_nothing() {
-    let temp = TempDir::new().unwrap();
-    let contents = repeat_lines(501);
-    write_file(&temp, "big.txt", &contents);
-
-    let output = cargo_bin_cmd!("loq")
-        .current_dir(temp.path())
-        .args(["--silent", "check", "big.txt"])
-        .output()
-        .unwrap();
-    assert!(!output.status.success());
-    assert!(output.stdout.is_empty());
-    assert!(output.stderr.is_empty());
-}
-
-#[test]
 fn missing_file_warns() {
     let temp = TempDir::new().unwrap();
 
@@ -186,7 +149,7 @@ fn init_accepts_verbosity_flags() {
 
     cargo_bin_cmd!("loq")
         .current_dir(temp.path())
-        .args(["--quiet", "init"])
+        .args(["--verbose", "init"])
         .assert()
         .success();
 
@@ -305,31 +268,6 @@ fn config_error_is_reported() {
         .assert()
         .failure()
         .stderr(predicate::str::contains("unknown key"));
-}
-
-#[test]
-fn quiet_mode_shows_errors_only() {
-    let temp = TempDir::new().unwrap();
-    let config = r#"default_max_lines = 1
-[[rules]]
-path = "warn.txt"
-max_lines = 1
-severity = "warning"
-"#;
-    write_file(&temp, "loq.toml", config);
-    write_file(&temp, "warn.txt", "a\nb\n");
-    let big = repeat_lines(501);
-    write_file(&temp, "error.txt", &big);
-
-    let output = cargo_bin_cmd!("loq")
-        .current_dir(temp.path())
-        .args(["--quiet"])
-        .output()
-        .unwrap();
-    let stdout = String::from_utf8_lossy(&output.stdout);
-    assert!(stdout.contains("✖"));
-    assert!(stdout.contains('>')); // error.txt shows violation
-    assert!(!stdout.contains("⚠"));
 }
 
 #[test]
