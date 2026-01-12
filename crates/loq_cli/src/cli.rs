@@ -24,10 +24,12 @@ pub struct Cli {
 /// Available commands.
 #[derive(Subcommand, Debug, Clone)]
 pub enum Command {
-    /// Validate files against configured constraints.
+    /// Check file line counts.
     Check(CheckArgs),
     /// Create a loq.toml config file.
     Init(InitArgs),
+    /// Update baseline rules for files exceeding the limit.
+    Baseline(BaselineArgs),
 }
 
 /// Arguments for the check command.
@@ -44,8 +46,12 @@ pub struct CheckArgs {
 
 /// Arguments for the init command.
 #[derive(Args, Debug, Clone)]
-pub struct InitArgs {
-    /// Lock current violations at their line count (any growth is an error).
-    #[arg(long = "baseline")]
-    pub baseline: bool,
+pub struct InitArgs {}
+
+/// Arguments for the baseline command.
+#[derive(Args, Debug, Clone)]
+pub struct BaselineArgs {
+    /// Line threshold for baseline (defaults to `default_max_lines` from config).
+    #[arg(long = "threshold")]
+    pub threshold: Option<usize>,
 }

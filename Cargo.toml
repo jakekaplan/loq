@@ -28,6 +28,7 @@ clap = { version = "4", features = ["derive"] }
 termcolor = "1"
 memchr = "2"
 rustc-hash = "2"
+toml_edit = "0.22"
 
 [workspace.lints.clippy]
 pedantic = { level = "warn", priority = -1 }

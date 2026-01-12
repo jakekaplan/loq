@@ -496,6 +496,7 @@ dependencies = [
  "regex",
  "tempfile",
  "termcolor",
+ "toml_edit",
 ]
 
 [[package]]

@@ -6,7 +6,7 @@
 [![Crates.io](https://img.shields.io/crates/v/loq)](https://crates.io/crates/loq)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
-An electric fence for LLMs (and humans too)
+An electric fence for LLMs (and humans too).
 
 ## Why file size matters
 
@@ -42,10 +42,9 @@ cargo install loq
 ### Usage
 
 ```bash
-loq                   # Check current directory (zero-config, 500 line default)
-loq check src/ lib/   # Check specific paths
-loq init              # Create loq.toml with defaults
-loq init --baseline   # Lock existing files at current size
+loq                                        # Check current directory (zero-config, 500 line default)
+loq check src/ lib/                        # Check specific paths
+git diff --name-only | loq check -         # Check files from stdin
 ```
 
 ### Pre-commit
@@ -67,25 +66,21 @@ repos:
 Output is designed to be token-efficient:
 
 ```
-✖  1,427 > 500   src/components/Dashboard.tsx
+✖  1_427 > 500   src/components/Dashboard.tsx
 ✖    892 > 500   src/utils/helpers.py
 2 violations (14ms)
 ```
 
-Use `loq -v` for additional context when debugging:
+Use `loq -v` for additional context:
 
 ```
-✖  1,427 > 500   src/components/Dashboard.tsx
+✖  1_427 > 500   src/components/Dashboard.tsx
                   └─ rule: max-lines=500 (match: **/*.tsx)
 ```
 
 ## Configuration
 
-loq works out of the box with sensible defaults. Create a config file to customize:
-
-```bash
-loq init
-```
+loq works zero-config. Run `loq init` to customize:
 
 ```toml
 default_max_lines = 500       # files not matching any rule
@@ -103,13 +98,23 @@ max_lines = 600
 
 ### Baseline
 
-Have a codebase with existing large files? Lock them at their current size:
+Have a codebase with existing large files? Baseline them:
 
 ```bash
-loq init --baseline
+loq init       # Create loq.toml first
+loq baseline   # Add rules for files over the limit
 ```
 
-This generates rules that allow existing files to stay at their current line count, but any growth triggers an error. Ratchet down over time.
+Run `loq baseline` periodically to ratchet down. It automatically:
+- **Adds** rules for new violations
+- **Updates** rules when files shrink (tightens the limit)
+- **Removes** rules when files drop below the threshold
+
+Use `--threshold` to override the default limit:
+
+```bash
+loq baseline --threshold 300
+```
 
 ## Contributing
 

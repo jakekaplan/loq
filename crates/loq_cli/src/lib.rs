@@ -5,6 +5,7 @@
 #![forbid(unsafe_code)]
 #![warn(missing_docs)]
 
+mod baseline;
 mod check;
 mod cli;
 mod init;
@@ -17,6 +18,7 @@ use std::process::ExitCode;
 use clap::Parser;
 use termcolor::{ColorChoice, StandardStream, WriteColor};
 
+use baseline::run_baseline;
 use check::{output_mode, run_check};
 use init::run_init;
 
@@ -71,6 +73,7 @@ where
     match cli.command.as_ref().unwrap_or(&default_check) {
         Command::Check(args) => run_check(args, &cli, &mut stdin, stdout, stderr, mode),
         Command::Init(args) => run_init(args, stdout, stderr),
+        Command::Baseline(args) => run_baseline(args, stdout, stderr),
     }
 }
 

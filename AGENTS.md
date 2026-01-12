@@ -1,103 +1,111 @@
 # AGENTS.md
 
-Agent guidance for this Rust repository.
+Guidance for AI agents working on this codebase.
 
-## Project Overview
+## What is loq?
 
-`loq` is a Rust CLI tool organized as a workspace:
-- `loq_core` - Core logic (library)
-- `loq_fs` - Filesystem operations (library)
-- `loq_cli` - Command-line interface (binary)
+loq enforces file line limits. That's it. It's an "electric fence" that keeps files from growing too large - critical for LLM-assisted development where big files burn context and degrade output quality.
 
-## Dev Environment
+**Philosophy**: Dead simple, fast, language agnostic. No parsing, no plugins. Just line counts.
 
-Rust toolchain should be pinned via `rust-toolchain.toml`. If missing, use stable with rustfmt and clippy components.
+**North star**: [Ruff](https://github.com/astral-sh/ruff) - a Rust-powered Python tool with excellent DX. We aim for that same quality: fast, helpful errors, zero-config defaults, thoughtful CLI design.
 
-### Primary Commands
+## Project structure
 
-```bash
-# Format
-cargo fmt --all
-
-# Lint
-cargo clippy --all-targets --all-features -- -D warnings
-
-# Test
-cargo test --all
-
-# Coverage (95% minimum)
-cargo llvm-cov --workspace --lcov --output-path lcov.info --fail-under-lines 95
-
-# Benchmark against a public repo (requires hyperfine)
-just bench https://github.com/astral-sh/ruff
+```
+crates/
+  loq_core/     # Pure logic: config parsing, rule matching, reporting
+  loq_fs/       # Filesystem: directory walking, line counting, caching
+  loq_cli/      # CLI: argument parsing, output formatting, commands
+python/         # Python package wrapper for PyPI
 ```
 
-## CI Parity
+**Where things go**:
+- Business logic with no I/O → `loq_core`
+- Anything touching the filesystem → `loq_fs`
+- User-facing CLI concerns → `loq_cli`
+- Keep crates focused. If something doesn't fit cleanly, that's a smell.
 
-Before committing, ensure these pass locally:
+## Writing code
+
+### File size
+
+loq enforces its own limits. **Keep files under 500 lines.** Run `cargo run -p loq -- check .` to verify.
+
+When splitting files:
+- **Name files by what they do**, not generic names like `utils.rs` or `helpers.rs`
+- **Tests can split first** - move `mod tests` to a separate `tests.rs` file if the module is getting long
+- **One concept per file** - if a file does two things, it's two files
+
+### Rust style
+
+- **Simple over clever** - readable code beats clever code
+- **Small functions** - if it needs a comment explaining what it does, extract it
+- **No unsafe** - all crates use `#![forbid(unsafe_code)]`
+- **Minimize allocations** - avoid unnecessary `.clone()`, prefer borrowing
+- **Use iterators** - prefer `.iter().map().filter()` over manual loops when clearer
+
+### Error handling
+
+- **Libraries** (`loq_core`, `loq_fs`): typed errors with `thiserror`
+- **CLI** (`loq_cli`): `anyhow` with `.context()` for user-facing errors
+- **Never panic** in production paths - no `unwrap()` or `expect()` unless the invariant is documented
+
+### Testing
+
+We maintain **>95% line coverage**. This is enforced in CI. Every PR must include tests.
+
+**Unit tests**: In `mod tests { }` blocks within the module. Test the logic, not the implementation.
+
+**Integration tests**: In `crates/*/tests/`. Test real CLI behavior.
+
+**Snapshot testing**: We use [insta](https://insta.rs/) for CLI output. Snapshots live in `crates/loq_cli/tests/snapshots/`. When output changes intentionally:
+
+```bash
+cargo insta review
+```
+
+**Test philosophy**:
+- If you add a feature, add a test
+- If you fix a bug, add a regression test
+- If you change output, update the snapshot
+- Tests should be fast and deterministic
+
+## Development commands
+
+```bash
+cargo fmt --all                                              # Format
+cargo clippy --all-targets --all-features -- -D warnings     # Lint (strict)
+cargo test --all                                             # Test
+cargo llvm-cov --workspace --fail-under-lines 95             # Coverage check
+cargo run -p loq -- check .                                  # Self-check (loq checks loq)
+```
+
+Or with `just`:
+
+```bash
+just ci    # Run all CI checks locally
+```
+
+## CI
+
+CI runs on ubuntu, macos, and windows. Before pushing:
 
 1. `cargo fmt --all -- --check`
 2. `cargo clippy --all-targets --all-features -- -D warnings`
 3. `cargo test --all`
-4. `cargo test --doc`
+4. Coverage ≥95%
 
-CI runs on ubuntu, macos, and windows.
+## Adding features
 
-## Dependency & Security Policy
+1. Start in the right crate (see "Where things go")
+2. Write the test first or alongside the code
+3. Keep the PR focused - one feature/fix per PR
+4. Update snapshots if CLI output changes
+5. Run `cargo run -p loq -- check .` - loq enforces its own limits
 
-- Prefer widely used, actively maintained crates
-- Run supply chain checks when dependencies change:
-  - `cargo audit`
-  - `cargo deny check`
-- Workspace dependencies are declared in root `Cargo.toml`
+## Dependencies
 
-## Code Conventions
-
-### Error Handling
-
-- **Libraries** (`loq_core`, `loq_fs`): Use typed errors with `thiserror`
-- **Binary** (`loq_cli`): Use `anyhow` at the boundary with `.context()`
-- Never `unwrap()` or `expect()` in production paths unless there is a clear invariant (comment why)
-
-### Logging
-
-- Use `tracing` for structured logs/spans
-- Never log secrets
-
-### Testing
-
-- Unit tests in `mod tests { ... }` blocks
-- Integration tests in `crates/*/tests/`
-- Maintain 95%+ line coverage
-
-### Style
-
-- Run `cargo fmt` before committing
-- Keep functions focused and readable
-- Avoid unnecessary allocations/clones in hot paths
-
-## PR Expectations
-
-- Add or update tests for behavior changes
-- Keep public API changes intentional and documented
-- Keep diffs focused; avoid drive-by refactors
-- All CI checks must pass
-
-## Workspace Structure
-
-```
-.
-├── Cargo.toml              # workspace manifest
-├── crates/
-│   ├── loq_core/         # core library
-│   ├── loq_fs/           # filesystem operations
-│   └── loq_cli/          # CLI binary
-└── .github/workflows/ci.yml
-```
-
-## Adding a New Crate
-
-1. Create `crates/new_crate/` with `src/lib.rs` or `src/main.rs`
-2. Add `Cargo.toml` using `package.workspace = true` for shared fields
-3. Add crate name to `members` in root `Cargo.toml`
-4. Reference workspace deps: `dep_name.workspace = true`
+- Prefer widely-used, maintained crates
+- Workspace deps go in root `Cargo.toml`
+- Run `cargo audit` and `cargo deny check` when adding deps

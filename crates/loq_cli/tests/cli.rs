@@ -11,11 +11,7 @@ fn write_file(dir: &TempDir, path: &str, contents: &str) {
 }
 
 fn repeat_lines(count: usize) -> String {
-    let mut out = String::new();
-    for _ in 0..count {
-        out.push_str("line\n");
-    }
-    out
+    "line\n".repeat(count)
 }
 
 #[test]
@@ -59,8 +55,7 @@ fn check_reads_stdin_list() {
 #[test]
 fn exit_code_error_on_violation() {
     let temp = TempDir::new().unwrap();
-    let contents = repeat_lines(501);
-    write_file(&temp, "big.txt", &contents);
+    write_file(&temp, "big.txt", &repeat_lines(501));
 
     cargo_bin_cmd!("loq")
         .current_dir(temp.path())
@@ -77,7 +72,6 @@ fn exit_code_error_on_violation() {
 fn missing_file_warns() {
     let temp = TempDir::new().unwrap();
 
-    // Missing files are only shown in verbose mode
     cargo_bin_cmd!("loq")
         .current_dir(temp.path())
         .args(["--verbose", "check", "missing.txt"])
@@ -90,8 +84,7 @@ fn missing_file_warns() {
 #[test]
 fn verbose_includes_rule() {
     let temp = TempDir::new().unwrap();
-    let config = "default_max_lines = 1\n";
-    write_file(&temp, "loq.toml", config);
+    write_file(&temp, "loq.toml", "default_max_lines = 1\n");
     write_file(&temp, "a.txt", "a\nb\n");
 
     cargo_bin_cmd!("loq")
@@ -167,14 +160,8 @@ fn init_adds_cache_to_gitignore() {
         .success();
 
     let gitignore = std::fs::read_to_string(temp.path().join(".gitignore")).unwrap();
-    assert!(
-        gitignore.contains(".loq_cache"),
-        "should add .loq_cache to .gitignore"
-    );
-    assert!(
-        gitignore.contains("node_modules/"),
-        "should preserve existing entries"
-    );
+    assert!(gitignore.contains(".loq_cache"));
+    assert!(gitignore.contains("node_modules/"));
 }
 
 #[test]
@@ -189,70 +176,7 @@ fn init_does_not_duplicate_cache_in_gitignore() {
         .success();
 
     let gitignore = std::fs::read_to_string(temp.path().join(".gitignore")).unwrap();
-    assert_eq!(
-        gitignore.matches(".loq_cache").count(),
-        1,
-        "should not duplicate .loq_cache"
-    );
-}
-
-#[test]
-fn init_baseline_locks_at_current_size() {
-    let temp = TempDir::new().unwrap();
-    let contents = repeat_lines(501);
-    write_file(&temp, "src/legacy.txt", &contents);
-
-    cargo_bin_cmd!("loq")
-        .current_dir(temp.path())
-        .args(["init", "--baseline"])
-        .assert()
-        .success();
-
-    let content = std::fs::read_to_string(temp.path().join("loq.toml")).unwrap();
-    // Should have the file in a baseline rule
-    assert!(content.contains("\"src/legacy.txt\""));
-    // Should be locked at exact line count (501 lines)
-    assert!(content.contains("max_lines = 501"));
-    assert!(content.contains("# Baseline:"));
-    // Should NOT have severity field (it was removed)
-    assert!(!content.contains("severity"));
-}
-
-#[test]
-fn baseline_rules_are_respected_after_init() {
-    let temp = TempDir::new().unwrap();
-    // Create file with 501 lines (over default 500 limit)
-    let contents = repeat_lines(501);
-    write_file(&temp, "legacy.txt", &contents);
-
-    // Step 1: Run init --baseline to create config with baseline rule
-    cargo_bin_cmd!("loq")
-        .current_dir(temp.path())
-        .args(["init", "--baseline"])
-        .assert()
-        .success();
-
-    // Verify baseline rule was created
-    let config = std::fs::read_to_string(temp.path().join("loq.toml")).unwrap();
-    assert!(
-        config.contains("max_lines = 501"),
-        "baseline should lock at 501"
-    );
-
-    // Step 2: Run loq - should PASS because baseline rule matches exactly
-    cargo_bin_cmd!("loq")
-        .current_dir(temp.path())
-        .assert()
-        .success();
-
-    // Step 3: Add one more line - now it should FAIL (502 > 501)
-    let over_baseline = repeat_lines(502);
-    write_file(&temp, "legacy.txt", &over_baseline);
-
-    cargo_bin_cmd!("loq")
-        .current_dir(temp.path())
-        .assert()
-        .failure();
+    assert_eq!(gitignore.matches(".loq_cache").count(), 1);
 }
 
 #[test]
