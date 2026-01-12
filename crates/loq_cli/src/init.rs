@@ -43,8 +43,39 @@ pub fn run_init<W1: WriteColor, W2: WriteColor>(
         return print_error(stderr, &format!("failed to write loq.toml: {err}"));
     }
 
+    // Add .loq_cache to .gitignore if not already present
+    add_to_gitignore(&cwd);
+
     let _ = std::io::Write::flush(stdout);
     ExitStatus::Success
+}
+
+/// Adds `.loq_cache` to `.gitignore` if the file exists and doesn't already contain it.
+fn add_to_gitignore(cwd: &Path) {
+    let gitignore_path = cwd.join(".gitignore");
+
+    // Only modify existing .gitignore files
+    if !gitignore_path.is_file() {
+        return;
+    }
+
+    let Ok(contents) = std::fs::read_to_string(&gitignore_path) else {
+        return;
+    };
+
+    // Check if already ignored
+    if contents.lines().any(|line| line.trim() == ".loq_cache") {
+        return;
+    }
+
+    // Append .loq_cache
+    let new_contents = if contents.ends_with('\n') || contents.is_empty() {
+        format!("{contents}.loq_cache\n")
+    } else {
+        format!("{contents}\n.loq_cache\n")
+    };
+
+    let _ = std::fs::write(&gitignore_path, new_contents);
 }
 
 fn baseline_config(cwd: &Path) -> Result<String> {
@@ -57,6 +88,7 @@ fn baseline_config(cwd: &Path) -> Result<String> {
     let options = CheckOptions {
         config_path: Some(temp_file.path().to_path_buf()),
         cwd: cwd.to_path_buf(),
+        use_cache: false,
     };
 
     let output =

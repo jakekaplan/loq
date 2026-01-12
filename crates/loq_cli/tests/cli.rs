@@ -192,6 +192,47 @@ fn init_accepts_verbosity_flags() {
 }
 
 #[test]
+fn init_adds_cache_to_gitignore() {
+    let temp = TempDir::new().unwrap();
+    write_file(&temp, ".gitignore", "node_modules/\n");
+
+    cargo_bin_cmd!("loq")
+        .current_dir(temp.path())
+        .args(["init"])
+        .assert()
+        .success();
+
+    let gitignore = std::fs::read_to_string(temp.path().join(".gitignore")).unwrap();
+    assert!(
+        gitignore.contains(".loq_cache"),
+        "should add .loq_cache to .gitignore"
+    );
+    assert!(
+        gitignore.contains("node_modules/"),
+        "should preserve existing entries"
+    );
+}
+
+#[test]
+fn init_does_not_duplicate_cache_in_gitignore() {
+    let temp = TempDir::new().unwrap();
+    write_file(&temp, ".gitignore", ".loq_cache\n");
+
+    cargo_bin_cmd!("loq")
+        .current_dir(temp.path())
+        .args(["init"])
+        .assert()
+        .success();
+
+    let gitignore = std::fs::read_to_string(temp.path().join(".gitignore")).unwrap();
+    assert_eq!(
+        gitignore.matches(".loq_cache").count(),
+        1,
+        "should not duplicate .loq_cache"
+    );
+}
+
+#[test]
 fn init_baseline_locks_at_current_size() {
     let temp = TempDir::new().unwrap();
     let contents = repeat_lines(501);
@@ -211,6 +252,43 @@ fn init_baseline_locks_at_current_size() {
     assert!(content.contains("# Baseline:"));
     // Should NOT have warning severity (error is default)
     assert!(!content.contains("severity = \"warning\"\nmax_lines = 501"));
+}
+
+#[test]
+fn baseline_rules_are_respected_after_init() {
+    let temp = TempDir::new().unwrap();
+    // Create file with 501 lines (over default 500 limit)
+    let contents = repeat_lines(501);
+    write_file(&temp, "legacy.txt", &contents);
+
+    // Step 1: Run init --baseline to create config with baseline rule
+    cargo_bin_cmd!("loq")
+        .current_dir(temp.path())
+        .args(["init", "--baseline"])
+        .assert()
+        .success();
+
+    // Verify baseline rule was created
+    let config = std::fs::read_to_string(temp.path().join("loq.toml")).unwrap();
+    assert!(
+        config.contains("max_lines = 501"),
+        "baseline should lock at 501"
+    );
+
+    // Step 2: Run loq - should PASS because baseline rule matches exactly
+    cargo_bin_cmd!("loq")
+        .current_dir(temp.path())
+        .assert()
+        .success();
+
+    // Step 3: Add one more line - now it should FAIL (502 > 501)
+    let over_baseline = repeat_lines(502);
+    write_file(&temp, "legacy.txt", &over_baseline);
+
+    cargo_bin_cmd!("loq")
+        .current_dir(temp.path())
+        .assert()
+        .failure();
 }
 
 #[test]

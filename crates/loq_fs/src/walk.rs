@@ -3,6 +3,7 @@
 //! Expands paths (files and directories) into a list of files to check,
 //! filtering out excluded files (gitignore, exclude patterns) at this layer.
 
+use std::ffi::OsStr;
 use std::path::{Path, PathBuf};
 use std::sync::mpsc;
 
@@ -10,6 +11,18 @@ use ignore::gitignore::Gitignore;
 use ignore::WalkBuilder;
 use loq_core::PatternList;
 use thiserror::Error;
+
+use crate::normalize_path;
+
+/// Files/directories that are always excluded regardless of configuration.
+const HARDCODED_EXCLUDES: &[&str] = &[".loq_cache", "loq.toml"];
+
+/// Check if a path matches any hardcoded exclude pattern.
+fn is_hardcoded_exclude(path: &Path) -> bool {
+    path.file_name()
+        .and_then(OsStr::to_str)
+        .is_some_and(|name| HARDCODED_EXCLUDES.contains(&name))
+}
 
 /// Error encountered while walking a directory.
 #[derive(Debug, Error)]
@@ -71,8 +84,13 @@ pub fn expand_paths(paths: &[PathBuf], options: &WalkOptions) -> WalkResult {
     }
 }
 
-/// Checks if a path should be excluded (gitignore or exclude pattern).
+/// Checks if a path should be excluded (hardcoded, gitignore, or exclude pattern).
 fn is_excluded(path: &Path, options: &WalkOptions) -> bool {
+    // Check hardcoded excludes first
+    if is_hardcoded_exclude(path) {
+        return true;
+    }
+
     // Check gitignore
     if let Some(gitignore) = options.gitignore {
         let relative =
@@ -88,16 +106,6 @@ fn is_excluded(path: &Path, options: &WalkOptions) -> bool {
         pathdiff::diff_paths(path, options.root_dir).unwrap_or_else(|| path.to_path_buf());
     let relative_str = normalize_path(&relative);
     options.exclude.matches(&relative_str).is_some()
-}
-
-#[cfg(windows)]
-fn normalize_path(path: &Path) -> String {
-    path.to_string_lossy().replace('\\', "/")
-}
-
-#[cfg(not(windows))]
-fn normalize_path(path: &Path) -> String {
-    path.to_string_lossy().into_owned()
 }
 
 fn walk_directory(path: &PathBuf, options: &WalkOptions) -> WalkResult {
@@ -123,6 +131,15 @@ fn walk_directory(path: &PathBuf, options: &WalkOptions) -> WalkResult {
         Box::new(move |entry| {
             match entry {
                 Ok(e) => {
+                    let entry_path = e.path();
+                    // Skip hardcoded excludes (directories and files)
+                    if is_hardcoded_exclude(entry_path) {
+                        return if e.file_type().is_some_and(|t| t.is_dir()) {
+                            ignore::WalkState::Skip
+                        } else {
+                            ignore::WalkState::Continue
+                        };
+                    }
                     if e.file_type().is_some_and(|t| t.is_file()) {
                         let _ = path_tx.send(e.into_path());
                     }
@@ -369,5 +386,71 @@ mod tests {
         // Should find the file but not loop infinitely
         assert!(result.paths.iter().any(|p| p.ends_with("file.txt")));
         // The symlink itself is not a file, so it won't appear in paths
+    }
+
+    #[test]
+    fn hardcoded_excludes_filter_loq_cache_dir() {
+        let temp = TempDir::new().unwrap();
+        let root = temp.path();
+        std::fs::write(root.join("keep.rs"), "keep").unwrap();
+        std::fs::create_dir(root.join(".loq_cache")).unwrap();
+        std::fs::write(root.join(".loq_cache/cached.txt"), "cached").unwrap();
+
+        let exclude = empty_exclude();
+        let options = WalkOptions {
+            respect_gitignore: false,
+            gitignore: None,
+            exclude: &exclude,
+            root_dir: root,
+        };
+        let result = expand_paths(&[root.to_path_buf()], &options);
+        assert_eq!(result.paths.len(), 1);
+        assert!(result.paths.iter().any(|p| p.ends_with("keep.rs")));
+        assert!(!result
+            .paths
+            .iter()
+            .any(|p| p.to_string_lossy().contains(".loq_cache")));
+    }
+
+    #[test]
+    fn hardcoded_excludes_filter_loq_toml() {
+        let temp = TempDir::new().unwrap();
+        let root = temp.path();
+        std::fs::write(root.join("keep.rs"), "keep").unwrap();
+        std::fs::write(root.join("loq.toml"), "[config]").unwrap();
+
+        let exclude = empty_exclude();
+        let options = WalkOptions {
+            respect_gitignore: false,
+            gitignore: None,
+            exclude: &exclude,
+            root_dir: root,
+        };
+        let result = expand_paths(&[root.to_path_buf()], &options);
+        assert_eq!(result.paths.len(), 1);
+        assert!(result.paths.iter().any(|p| p.ends_with("keep.rs")));
+        assert!(!result.paths.iter().any(|p| p.ends_with("loq.toml")));
+    }
+
+    #[test]
+    fn hardcoded_excludes_filter_explicit_loq_toml() {
+        let temp = TempDir::new().unwrap();
+        let root = temp.path();
+        let keep = root.join("keep.rs");
+        let loq_toml = root.join("loq.toml");
+        std::fs::write(&keep, "keep").unwrap();
+        std::fs::write(&loq_toml, "[config]").unwrap();
+
+        let exclude = empty_exclude();
+        let options = WalkOptions {
+            respect_gitignore: false,
+            gitignore: None,
+            exclude: &exclude,
+            root_dir: root,
+        };
+        // Pass loq.toml explicitly - should still be filtered
+        let result = expand_paths(&[keep, loq_toml], &options);
+        assert_eq!(result.paths.len(), 1);
+        assert!(result.paths.iter().any(|p| p.ends_with("keep.rs")));
     }
 }

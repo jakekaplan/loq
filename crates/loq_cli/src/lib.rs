@@ -64,7 +64,10 @@ where
     let cli = Cli::parse_from(args);
     let mode = output_mode(&cli);
 
-    let default_check = Command::Check(cli::CheckArgs { paths: vec![] });
+    let default_check = Command::Check(cli::CheckArgs {
+        paths: vec![],
+        no_cache: false,
+    });
     match cli.command.as_ref().unwrap_or(&default_check) {
         Command::Check(args) => run_check(args, &cli, &mut stdin, stdout, stderr, mode),
         Command::Init(args) => run_init(args, stdout, stderr),

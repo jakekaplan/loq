@@ -191,6 +191,11 @@ impl PatternList {
         }
         None
     }
+
+    /// Returns an iterator over the pattern strings.
+    pub fn patterns(&self) -> impl Iterator<Item = &str> {
+        self.patterns.iter().map(|p| p.pattern.as_str())
+    }
 }
 
 /// A single compiled glob pattern.

@@ -25,6 +25,7 @@ fn excluded_files_are_filtered_out() {
         CheckOptions {
             config_path: Some(temp.path().join("loq.toml")),
             cwd: temp.path().to_path_buf(),
+            use_cache: false,
         },
     )
     .unwrap();
@@ -44,6 +45,7 @@ fn no_default_skips_files() {
         CheckOptions {
             config_path: Some(temp.path().join("loq.toml")),
             cwd: temp.path().to_path_buf(),
+            use_cache: false,
         },
     )
     .unwrap();
@@ -62,6 +64,7 @@ fn missing_files_reported() {
         CheckOptions {
             config_path: Some(temp.path().join("loq.toml")),
             cwd: temp.path().to_path_buf(),
+            use_cache: false,
         },
     )
     .unwrap();
@@ -85,13 +88,14 @@ fn binary_and_unreadable_are_reported() {
         None,
     )
     .unwrap();
+    let file_cache = Mutex::new(cache::Cache::empty());
 
     let binary = temp.path().join("binary.txt");
     std::fs::write(&binary, b"\0binary").unwrap();
-    let binary_outcome = check_file(&binary, &compiled, temp.path());
+    let binary_outcome = check_file(&binary, &compiled, temp.path(), &file_cache);
     assert!(matches!(binary_outcome.kind, OutcomeKind::Binary));
 
-    let dir_outcome = check_file(temp.path(), &compiled, temp.path());
+    let dir_outcome = check_file(temp.path(), &compiled, temp.path(), &file_cache);
     assert!(matches!(dir_outcome.kind, OutcomeKind::Unreadable { .. }));
 }
 
@@ -106,6 +110,7 @@ fn gitignore_is_respected_by_default() {
         CheckOptions {
             config_path: None,
             cwd: temp.path().to_path_buf(),
+            use_cache: false,
         },
     )
     .unwrap();
@@ -130,6 +135,7 @@ fn gitignore_can_be_disabled() {
         CheckOptions {
             config_path: Some(temp.path().join("loq.toml")),
             cwd: temp.path().to_path_buf(),
+            use_cache: false,
         },
     )
     .unwrap();
@@ -149,6 +155,7 @@ fn exactly_at_limit_passes() {
         CheckOptions {
             config_path: Some(temp.path().join("loq.toml")),
             cwd: temp.path().to_path_buf(),
+            use_cache: false,
         },
     )
     .unwrap();
@@ -174,6 +181,7 @@ fn one_over_limit_violates() {
         CheckOptions {
             config_path: Some(temp.path().join("loq.toml")),
             cwd: temp.path().to_path_buf(),
+            use_cache: false,
         },
     )
     .unwrap();
@@ -201,12 +209,17 @@ fn gitignore_negation_pattern_whitelists_file() {
         CheckOptions {
             config_path: None,
             cwd: temp.path().to_path_buf(),
+            use_cache: false,
         },
     )
     .unwrap();
 
+    // Canonicalize for comparison (o.path is canonicalized, handles /var -> /private/var on macOS)
+    let ignored_canonical = ignored.canonicalize().unwrap_or(ignored);
+    let whitelisted_canonical = whitelisted.canonicalize().unwrap_or(whitelisted);
+
     // debug.log should be filtered out (not in outcomes)
-    let outcome_ignored = output.outcomes.iter().find(|o| o.path == ignored);
+    let outcome_ignored = output.outcomes.iter().find(|o| o.path == ignored_canonical);
     assert!(
         outcome_ignored.is_none(),
         "debug.log should be filtered out, but found {outcome_ignored:?}"
@@ -216,7 +229,7 @@ fn gitignore_negation_pattern_whitelists_file() {
     let outcome_whitelisted = output
         .outcomes
         .iter()
-        .find(|o| o.path == whitelisted)
+        .find(|o| o.path == whitelisted_canonical)
         .unwrap();
     assert!(
         matches!(outcome_whitelisted.kind, OutcomeKind::Pass { .. }),
@@ -235,6 +248,7 @@ fn missing_config_file_returns_error() {
         CheckOptions {
             config_path: Some(temp.path().join("nonexistent.toml")),
             cwd: temp.path().to_path_buf(),
+            use_cache: false,
         },
     );
 

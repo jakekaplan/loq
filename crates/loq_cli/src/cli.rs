@@ -44,6 +44,10 @@ pub struct CheckArgs {
     /// Paths to check (files, directories, or - for stdin).
     #[arg(value_name = "PATH", allow_hyphen_values = true)]
     pub paths: Vec<PathBuf>,
+
+    /// Disable file caching.
+    #[arg(long = "no-cache")]
+    pub no_cache: bool,
 }
 
 /// Arguments for the init command.

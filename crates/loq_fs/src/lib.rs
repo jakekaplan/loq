@@ -6,12 +6,14 @@
 #![forbid(unsafe_code)]
 #![warn(missing_docs)]
 
+mod cache;
 pub mod count;
 pub mod discover;
 pub mod stdin;
 pub mod walk;
 
 use std::path::{Path, PathBuf};
+use std::sync::Mutex;
 
 use ignore::gitignore::{Gitignore, GitignoreBuilder};
 use loq_core::config::{compile_config, CompiledConfig, ConfigOrigin, LoqConfig};
@@ -48,6 +50,8 @@ pub struct CheckOptions {
     pub config_path: Option<PathBuf>,
     /// Current working directory for relative paths.
     pub cwd: PathBuf,
+    /// Whether to use file caching (default: true).
+    pub use_cache: bool,
 }
 
 /// Output from a check run.
@@ -93,14 +97,23 @@ pub fn run_check(paths: Vec<PathBuf>, options: CheckOptions) -> Result<CheckOutp
         compile_config(ConfigOrigin::BuiltIn, options.cwd.clone(), config, None)?
     };
 
-    // Step 2: Load gitignore once (if enabled)
+    // Step 2: Load cache (if enabled) - cache lives at config root
+    let config_hash = cache::hash_config(&compiled);
+    let file_cache = if options.use_cache {
+        cache::Cache::load(&compiled.root_dir, config_hash)
+    } else {
+        cache::Cache::empty()
+    };
+    let file_cache = Mutex::new(file_cache);
+
+    // Step 3: Load gitignore once (if enabled)
     let gitignore = if compiled.respect_gitignore {
         load_gitignore(&options.cwd)?
     } else {
         None
     };
 
-    // Step 3: Walk paths, filtering through gitignore + exclude patterns
+    // Step 4: Walk paths, filtering through gitignore + exclude patterns
     let walk_options = walk::WalkOptions {
         respect_gitignore: compiled.respect_gitignore,
         gitignore: gitignore.as_ref(),
@@ -113,8 +126,15 @@ pub fn run_check(paths: Vec<PathBuf>, options: CheckOptions) -> Result<CheckOutp
     file_list.sort();
     file_list.dedup();
 
-    // Step 4: Check all files in parallel (no more exclusion checks here)
-    let outcomes = check_group(&file_list, &compiled, &options.cwd);
+    // Step 5: Check all files in parallel
+    let outcomes = check_group(&file_list, &compiled, &options.cwd, &file_cache);
+
+    // Step 6: Save cache (if enabled) - cache lives at config root
+    if options.use_cache {
+        if let Ok(cache) = file_cache.into_inner() {
+            cache.save(&compiled.root_dir);
+        }
+    }
 
     Ok(CheckOutput {
         outcomes,
@@ -122,29 +142,43 @@ pub fn run_check(paths: Vec<PathBuf>, options: CheckOptions) -> Result<CheckOutp
     })
 }
 
-fn check_group(paths: &[PathBuf], compiled: &CompiledConfig, cwd: &Path) -> Vec<FileOutcome> {
+fn check_group(
+    paths: &[PathBuf],
+    compiled: &CompiledConfig,
+    cwd: &Path,
+    file_cache: &Mutex<cache::Cache>,
+) -> Vec<FileOutcome> {
     paths
         .par_iter()
-        .map(|path| check_file(path, compiled, cwd))
+        .map(|path| check_file(path, compiled, cwd, file_cache))
         .collect()
 }
 
-fn check_file(path: &Path, compiled: &CompiledConfig, cwd: &Path) -> FileOutcome {
-    let display_path = pathdiff::diff_paths(path, cwd)
-        .unwrap_or_else(|| path.to_path_buf())
+fn check_file(
+    path: &Path,
+    compiled: &CompiledConfig,
+    cwd: &Path,
+    file_cache: &Mutex<cache::Cache>,
+) -> FileOutcome {
+    // Canonicalize to get absolute path for consistent matching.
+    // Falls back to joining with cwd for non-existent files.
+    let abs_path = path.canonicalize().unwrap_or_else(|_| cwd.join(path));
+
+    let display_path = pathdiff::diff_paths(&abs_path, cwd)
+        .unwrap_or_else(|| abs_path.clone())
         .to_string_lossy()
         .to_string();
     let config_source = compiled.origin.clone();
 
     let make_outcome = |kind| FileOutcome {
-        path: path.to_path_buf(),
+        path: abs_path.clone(),
         display_path: display_path.clone(),
         config_source: config_source.clone(),
         kind,
     };
 
     let relative =
-        pathdiff::diff_paths(path, &compiled.root_dir).unwrap_or_else(|| path.to_path_buf());
+        pathdiff::diff_paths(&abs_path, &compiled.root_dir).unwrap_or_else(|| abs_path.clone());
     let relative_str = normalize_path(&relative);
 
     let kind = match decide(compiled, &relative_str) {
@@ -153,7 +187,7 @@ fn check_file(path: &Path, compiled: &CompiledConfig, cwd: &Path) -> FileOutcome
             limit,
             severity,
             matched_by,
-        } => check_file_lines(path, limit, severity, matched_by),
+        } => check_file_lines(path, &relative_str, limit, severity, matched_by, file_cache),
     };
 
     make_outcome(kind)
@@ -161,24 +195,65 @@ fn check_file(path: &Path, compiled: &CompiledConfig, cwd: &Path) -> FileOutcome
 
 fn check_file_lines(
     path: &Path,
+    cache_key: &str,
     limit: usize,
     severity: loq_core::Severity,
     matched_by: loq_core::MatchBy,
+    file_cache: &Mutex<cache::Cache>,
 ) -> OutcomeKind {
+    // Get file mtime for cache lookup
+    let mtime = std::fs::metadata(path).and_then(|m| m.modified()).ok();
+
+    // Try cache first (using relative path as key for consistency across directories)
+    if let Some(mt) = mtime {
+        if let Ok(cache) = file_cache.lock() {
+            if let Some(lines) = cache.get(cache_key, mt) {
+                return if lines > limit {
+                    OutcomeKind::Violation {
+                        limit,
+                        actual: lines,
+                        severity,
+                        matched_by,
+                    }
+                } else {
+                    OutcomeKind::Pass {
+                        limit,
+                        actual: lines,
+                        severity,
+                        matched_by,
+                    }
+                };
+            }
+        }
+    }
+
+    // Cache miss - read file
     match count::inspect_file(path) {
         Ok(count::FileInspection::Binary) => OutcomeKind::Binary,
-        Ok(count::FileInspection::Text { lines }) if lines > limit => OutcomeKind::Violation {
-            limit,
-            actual: lines,
-            severity,
-            matched_by,
-        },
-        Ok(count::FileInspection::Text { lines }) => OutcomeKind::Pass {
-            limit,
-            actual: lines,
-            severity,
-            matched_by,
-        },
+        Ok(count::FileInspection::Text { lines }) => {
+            // Update cache on successful read
+            if let Some(mt) = mtime {
+                if let Ok(mut cache) = file_cache.lock() {
+                    cache.insert(cache_key.to_string(), mt, lines);
+                }
+            }
+
+            if lines > limit {
+                OutcomeKind::Violation {
+                    limit,
+                    actual: lines,
+                    severity,
+                    matched_by,
+                }
+            } else {
+                OutcomeKind::Pass {
+                    limit,
+                    actual: lines,
+                    severity,
+                    matched_by,
+                }
+            }
+        }
         Err(count::CountError::Missing) => OutcomeKind::Missing,
         Err(count::CountError::Unreadable(error)) => OutcomeKind::Unreadable {
             error: error.to_string(),
@@ -186,13 +261,15 @@ fn check_file_lines(
     }
 }
 
+/// Normalizes a path to use forward slashes on all platforms.
 #[cfg(windows)]
-fn normalize_path(path: &Path) -> String {
+pub(crate) fn normalize_path(path: &Path) -> String {
     path.to_string_lossy().replace('\\', "/")
 }
 
+/// Normalizes a path to use forward slashes on all platforms.
 #[cfg(not(windows))]
-fn normalize_path(path: &Path) -> String {
+pub(crate) fn normalize_path(path: &Path) -> String {
     path.to_string_lossy().into_owned()
 }
 

@@ -50,6 +50,7 @@ pub fn run_check<R: Read, W1: WriteColor, W2: WriteColor>(
     let options = CheckOptions {
         config_path: cli.config.clone(),
         cwd: cwd.clone(),
+        use_cache: !args.no_cache,
     };
 
     let start = Instant::now();
