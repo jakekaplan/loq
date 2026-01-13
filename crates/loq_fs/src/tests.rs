@@ -89,7 +89,7 @@ fn binary_and_unreadable_are_reported() {
         None,
     )
     .unwrap();
-    let file_cache = Mutex::new(cache::Cache::empty());
+    let file_cache = cache::Cache::empty();
 
     let binary = temp.path().join("binary.txt");
     std::fs::write(&binary, b"\0binary").unwrap();

@@ -13,7 +13,6 @@ pub mod stdin;
 pub mod walk;
 
 use std::path::{Path, PathBuf};
-use std::sync::Mutex;
 
 use loq_core::config::{compile_config, CompiledConfig, ConfigOrigin, LoqConfig};
 use loq_core::decide::{decide, Decision};
@@ -109,7 +108,6 @@ pub fn run_check(paths: Vec<PathBuf>, options: CheckOptions) -> Result<CheckOutp
     } else {
         cache::Cache::empty()
     };
-    let file_cache = Mutex::new(file_cache);
 
     // Step 3: Canonicalize cwd once (instead of per-file)
     let cwd_abs = options
@@ -134,9 +132,7 @@ pub fn run_check(paths: Vec<PathBuf>, options: CheckOptions) -> Result<CheckOutp
 
     // Step 6: Save cache (if enabled) - cache lives at config root
     if options.use_cache {
-        if let Ok(cache) = file_cache.into_inner() {
-            cache.save(&compiled.root_dir);
-        }
+        file_cache.save(&compiled.root_dir);
     }
 
     Ok(CheckOutput {
@@ -150,7 +146,7 @@ fn check_group(
     paths: &[PathBuf],
     compiled: &CompiledConfig,
     cwd_abs: &Path,
-    file_cache: &Mutex<cache::Cache>,
+    file_cache: &cache::Cache,
 ) -> Vec<FileOutcome> {
     paths
         .par_iter()
@@ -162,7 +158,7 @@ fn check_file(
     path: &Path,
     compiled: &CompiledConfig,
     cwd_abs: &Path,
-    file_cache: &Mutex<cache::Cache>,
+    file_cache: &cache::Cache,
 ) -> FileOutcome {
     // Canonicalize to get absolute path for consistent matching.
     // Falls back to joining with cwd for non-existent files.
@@ -197,17 +193,15 @@ fn check_file_lines(
     cache_key: &str,
     limit: usize,
     matched_by: loq_core::MatchBy,
-    file_cache: &Mutex<cache::Cache>,
+    file_cache: &cache::Cache,
 ) -> OutcomeKind {
     // Get file mtime for cache lookup
     let mtime = std::fs::metadata(path).and_then(|m| m.modified()).ok();
 
     // Try cache first (using relative path as key for consistency across directories)
     if let Some(mt) = mtime {
-        if let Ok(cache) = file_cache.lock() {
-            if let Some(result) = cache.get(cache_key, mt) {
-                return cached_result_to_outcome(result, limit, matched_by);
-            }
+        if let Some(result) = file_cache.get(cache_key, mt) {
+            return cached_result_to_outcome(result, limit, matched_by);
         }
     }
 
@@ -215,17 +209,13 @@ fn check_file_lines(
     match count::inspect_file(path) {
         Ok(count::FileInspection::Binary) => {
             if let Some(mt) = mtime {
-                if let Ok(mut cache) = file_cache.lock() {
-                    cache.insert(cache_key.to_string(), mt, cache::CachedResult::Binary);
-                }
+                file_cache.insert(cache_key.to_string(), mt, cache::CachedResult::Binary);
             }
             OutcomeKind::Binary
         }
         Ok(count::FileInspection::Text { lines }) => {
             if let Some(mt) = mtime {
-                if let Ok(mut cache) = file_cache.lock() {
-                    cache.insert(cache_key.to_string(), mt, cache::CachedResult::Text(lines));
-                }
+                file_cache.insert(cache_key.to_string(), mt, cache::CachedResult::Text(lines));
             }
             if lines > limit {
                 OutcomeKind::Violation {

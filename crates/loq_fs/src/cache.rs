@@ -7,8 +7,10 @@
 use std::fs;
 use std::hash::{Hash, Hasher};
 use std::path::Path;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::SystemTime;
 
+use dashmap::DashMap;
 use rustc_hash::FxHashMap;
 use serde::{Deserialize, Serialize};
 
@@ -54,10 +56,12 @@ struct CacheEntry {
 }
 
 /// In-memory cache for file line counts.
+///
+/// Thread-safe: uses `DashMap` for concurrent access during parallel file checking.
 pub struct Cache {
-    entries: FxHashMap<String, CacheEntry>,
+    entries: DashMap<String, CacheEntry>,
     config_hash: u64,
-    dirty: bool,
+    dirty: AtomicBool,
 }
 
 impl Cache {
@@ -65,9 +69,9 @@ impl Cache {
     #[must_use]
     pub fn empty() -> Self {
         Self {
-            entries: FxHashMap::default(),
+            entries: DashMap::new(),
             config_hash: 0,
-            dirty: false,
+            dirty: AtomicBool::new(false),
         }
     }
 
@@ -90,17 +94,17 @@ impl Cache {
         }
 
         Self {
-            entries: cache_file.entries,
+            entries: cache_file.entries.into_iter().collect(),
             config_hash,
-            dirty: false,
+            dirty: AtomicBool::new(false),
         }
     }
 
     fn with_hash(config_hash: u64) -> Self {
         Self {
-            entries: FxHashMap::default(),
+            entries: DashMap::new(),
             config_hash,
-            dirty: false,
+            dirty: AtomicBool::new(false),
         }
     }
 
@@ -118,7 +122,9 @@ impl Cache {
     }
 
     /// Stores inspection result in cache.
-    pub fn insert(&mut self, key: String, mtime: SystemTime, result: CachedResult) {
+    ///
+    /// Thread-safe: can be called concurrently from multiple threads.
+    pub fn insert(&self, key: String, mtime: SystemTime, result: CachedResult) {
         let (secs, nanos) = mtime_to_parts(mtime);
         self.entries.insert(
             key,
@@ -128,19 +134,26 @@ impl Cache {
                 result,
             },
         );
-        self.dirty = true;
+        self.dirty.store(true, Ordering::Relaxed);
     }
 
     /// Saves cache to disk. Silently ignores errors (caching is best-effort).
     pub fn save(&self, root: &Path) {
-        if !self.dirty {
+        if !self.dirty.load(Ordering::Relaxed) {
             return;
         }
+
+        // Convert DashMap to FxHashMap for serialization
+        let entries: FxHashMap<String, CacheEntry> = self
+            .entries
+            .iter()
+            .map(|entry| (entry.key().clone(), entry.value().clone()))
+            .collect();
 
         let cache_ref = CacheFileRef {
             version: CACHE_VERSION,
             config_hash: self.config_hash,
-            entries: &self.entries,
+            entries: &entries,
         };
 
         let Ok(contents) = serde_json::to_string(&cache_ref) else {
@@ -206,7 +219,7 @@ mod tests {
 
     #[test]
     fn insert_and_get_text() {
-        let mut cache = Cache::with_hash(123);
+        let cache = Cache::with_hash(123);
         let mtime = SystemTime::now();
 
         cache.insert("src/main.rs".to_string(), mtime, CachedResult::Text(42));
@@ -219,7 +232,7 @@ mod tests {
 
     #[test]
     fn insert_and_get_binary() {
-        let mut cache = Cache::with_hash(123);
+        let cache = Cache::with_hash(123);
         let mtime = SystemTime::now();
 
         cache.insert("image.png".to_string(), mtime, CachedResult::Binary);
@@ -229,7 +242,7 @@ mod tests {
 
     #[test]
     fn mtime_mismatch_returns_none() {
-        let mut cache = Cache::with_hash(123);
+        let cache = Cache::with_hash(123);
         let mtime1 = SystemTime::UNIX_EPOCH;
         let mtime2 = SystemTime::now();
 
@@ -244,7 +257,7 @@ mod tests {
         let config_hash = 12345;
 
         // Create and populate cache with different result types
-        let mut cache = Cache::with_hash(config_hash);
+        let cache = Cache::with_hash(config_hash);
         let mtime = SystemTime::UNIX_EPOCH;
         cache.insert("test.rs".to_string(), mtime, CachedResult::Text(100));
         cache.insert("binary.dat".to_string(), mtime, CachedResult::Binary);
@@ -261,7 +274,7 @@ mod tests {
         let temp = TempDir::new().unwrap();
 
         // Save with one config hash
-        let mut cache = Cache::with_hash(111);
+        let cache = Cache::with_hash(111);
         cache.insert(
             "test.rs".to_string(),
             SystemTime::UNIX_EPOCH,
@@ -294,7 +307,7 @@ mod tests {
         fs::write(temp.path().join(CACHE_FILE), old_cache.to_string()).unwrap();
 
         // Loading should discard the old cache and return empty
-        let mut loaded = Cache::load(temp.path(), config_hash);
+        let loaded = Cache::load(temp.path(), config_hash);
         assert!(
             loaded.get("test.rs", SystemTime::UNIX_EPOCH).is_none(),
             "old v1 cache should be discarded"
