@@ -6,7 +6,7 @@
 [![Crates.io](https://img.shields.io/crates/v/loq)](https://crates.io/crates/loq)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
-An electric fence for LLMs (and humans too).
+An electric fence for LLMs (and humans too). Written in Rust.
 
 ## Why loq?
 
