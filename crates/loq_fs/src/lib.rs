@@ -130,7 +130,15 @@ pub fn run_check(paths: Vec<PathBuf>, options: CheckOptions) -> Result<CheckOutp
     file_list.dedup();
 
     // Step 5: Check all files in parallel
-    let outcomes = check_group(&file_list, &compiled, &cwd_abs, &file_cache);
+    // Optimization: when cwd matches config root, we can compute relative paths once
+    let paths_same_root = cwd_abs == compiled.root_dir;
+    let outcomes = check_group(
+        &file_list,
+        &compiled,
+        &cwd_abs,
+        &file_cache,
+        paths_same_root,
+    );
 
     // Step 6: Save cache (if enabled) - cache lives at config root
     if options.use_cache {
@@ -151,10 +159,11 @@ fn check_group(
     compiled: &CompiledConfig,
     cwd_abs: &Path,
     file_cache: &Mutex<cache::Cache>,
+    paths_same_root: bool,
 ) -> Vec<FileOutcome> {
     paths
         .par_iter()
-        .map(|path| check_file(path, compiled, cwd_abs, file_cache))
+        .map(|path| check_file(path, compiled, cwd_abs, file_cache, paths_same_root))
         .collect()
 }
 
@@ -163,14 +172,23 @@ fn check_file(
     compiled: &CompiledConfig,
     cwd_abs: &Path,
     file_cache: &Mutex<cache::Cache>,
+    paths_same_root: bool,
 ) -> FileOutcome {
     // Canonicalize to get absolute path for consistent matching.
     // Falls back to joining with cwd for non-existent files.
     let abs_path = path.canonicalize().unwrap_or_else(|_| cwd_abs.join(path));
 
-    let display_path = normalize_path(
-        &pathdiff::diff_paths(&abs_path, cwd_abs).unwrap_or_else(|| abs_path.clone()),
-    );
+    // Optimization: when cwd == root_dir, compute relative path once for both uses
+    let (display_path, relative_str) = if paths_same_root {
+        let rel = relative_path_str(&abs_path, cwd_abs);
+        (rel.clone(), rel)
+    } else {
+        let display = normalize_path(
+            &pathdiff::diff_paths(&abs_path, cwd_abs).unwrap_or_else(|| abs_path.clone()),
+        );
+        let rel = relative_path_str(&abs_path, &compiled.root_dir);
+        (display, rel)
+    };
     let config_source = compiled.origin.clone();
 
     let make_outcome = |kind| FileOutcome {
@@ -179,8 +197,6 @@ fn check_file(
         config_source: config_source.clone(),
         kind,
     };
-
-    let relative_str = relative_path_str(&abs_path, &compiled.root_dir);
 
     let kind = match decide(compiled, &relative_str) {
         Decision::SkipNoLimit => OutcomeKind::NoLimit,

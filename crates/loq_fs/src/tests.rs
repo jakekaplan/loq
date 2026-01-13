@@ -93,10 +93,10 @@ fn binary_and_unreadable_are_reported() {
 
     let binary = temp.path().join("binary.txt");
     std::fs::write(&binary, b"\0binary").unwrap();
-    let binary_outcome = check_file(&binary, &compiled, temp.path(), &file_cache);
+    let binary_outcome = check_file(&binary, &compiled, temp.path(), &file_cache, true);
     assert!(matches!(binary_outcome.kind, OutcomeKind::Binary));
 
-    let dir_outcome = check_file(temp.path(), &compiled, temp.path(), &file_cache);
+    let dir_outcome = check_file(temp.path(), &compiled, temp.path(), &file_cache, true);
     assert!(matches!(dir_outcome.kind, OutcomeKind::Unreadable { .. }));
 }
 
