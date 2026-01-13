@@ -70,7 +70,7 @@ fn run_baseline_inner(args: &BaselineArgs) -> Result<BaselineStats> {
     let existing_rules = collect_exact_path_rules(&doc);
 
     // Step 5: Compute changes
-    let stats = apply_baseline_changes(&mut doc, &violations, &existing_rules, args.relax);
+    let stats = apply_baseline_changes(&mut doc, &violations, &existing_rules, args.allow_growth);
 
     // Step 6: Write config back
     std::fs::write(&config_path, doc.to_string())
@@ -209,7 +209,7 @@ fn apply_baseline_changes(
     doc: &mut DocumentMut,
     violations: &HashMap<String, usize>,
     existing_rules: &HashMap<String, (usize, usize)>,
-    relax: bool,
+    allow_growth: bool,
 ) -> BaselineStats {
     let mut stats = BaselineStats {
         added: 0,
@@ -228,12 +228,12 @@ fn apply_baseline_changes(
                 // File shrunk - always tighten the limit
                 update_rule_max_lines(doc, *idx, actual);
                 stats.updated += 1;
-            } else if actual > *current_limit && relax {
-                // File grew - only update if --relax is set
+            } else if actual > *current_limit && allow_growth {
+                // File grew - only update if --allow-growth is set
                 update_rule_max_lines(doc, *idx, actual);
                 stats.updated += 1;
             }
-            // If actual == current_limit, or grew without --relax, leave unchanged
+            // If actual == current_limit, or grew without --allow-growth, leave unchanged
         } else {
             // File is now compliant (under threshold) - remove the rule
             indices_to_remove.push(*idx);

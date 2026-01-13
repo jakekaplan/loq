@@ -52,6 +52,6 @@ pub struct BaselineArgs {
     pub threshold: Option<usize>,
 
     /// Allow increasing limits for files that grew beyond their baseline.
-    #[arg(long = "relax")]
-    pub relax: bool,
+    #[arg(long = "allow-growth")]
+    pub allow_growth: bool,
 }
