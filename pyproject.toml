@@ -1,6 +1,6 @@
 [project]
 name = "loq"
-version = "0.1.0a3"
+version = "0.1.0a4"
 description = "Enforce file size constraints"
 authors = [{ name = "Jake Kaplan", email = "jakegkaplan@gmail.com" }]
 readme = "README.md"

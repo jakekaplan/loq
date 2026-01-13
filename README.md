@@ -52,7 +52,7 @@ git diff --name-only | loq check -         # Check files from stdin
 ```yaml
 repos:
   - repo: https://github.com/jakekaplan/loq
-    rev: v0.1.0a3
+    rev: v0.1.0a4
     hooks:
       - id: loq
 ```
