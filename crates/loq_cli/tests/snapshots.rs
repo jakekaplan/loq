@@ -165,3 +165,12 @@ fn stdin_file_list() {
     assert!(stderr.is_empty(), "stderr should be empty");
     insta::assert_snapshot!(stdout);
 }
+
+#[test]
+fn fix_guidance_shown_on_violation() {
+    let (stdout, stderr, success) = run_loq("fix_guidance");
+
+    assert!(!success, "should fail with violation");
+    assert!(stderr.is_empty(), "stderr should be empty");
+    insta::assert_snapshot!(stdout);
+}

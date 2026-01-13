@@ -74,6 +74,7 @@ fn suggest_key(key: &str) -> Option<String> {
         "rules",
         "path",
         "max_lines",
+        "fix_guidance",
     ];
     let mut best = None;
     let mut best_score = usize::MAX;
@@ -270,5 +271,42 @@ max_lines = 100
 "#;
         let config = parse_config(Path::new("loq.toml"), text).unwrap();
         assert_eq!(config.rules[0].path, vec!["only_one.rs"]);
+    }
+
+    #[test]
+    fn fix_guidance_parsed_correctly() {
+        let text = r#"
+default_max_lines = 500
+fix_guidance = "Split large files into smaller modules."
+"#;
+        let config = parse_config(Path::new("loq.toml"), text).unwrap();
+        assert_eq!(
+            config.fix_guidance,
+            Some("Split large files into smaller modules.".to_string())
+        );
+    }
+
+    #[test]
+    fn fix_guidance_multiline_string() {
+        let text = r#"
+default_max_lines = 500
+fix_guidance = """
+Consider splitting large files:
+- Extract functions into modules
+- Move tests to test files
+"""
+"#;
+        let config = parse_config(Path::new("loq.toml"), text).unwrap();
+        assert!(config.fix_guidance.is_some());
+        let guidance = config.fix_guidance.unwrap();
+        assert!(guidance.contains("Consider splitting large files:"));
+        assert!(guidance.contains("Extract functions into modules"));
+    }
+
+    #[test]
+    fn fix_guidance_defaults_to_none() {
+        let text = "default_max_lines = 500\n";
+        let config = parse_config(Path::new("loq.toml"), text).unwrap();
+        assert!(config.fix_guidance.is_none());
     }
 }

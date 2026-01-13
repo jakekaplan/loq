@@ -50,6 +50,9 @@ pub struct LoqConfig {
     /// Path-specific rules (last match wins).
     #[serde(default)]
     pub rules: Vec<Rule>,
+    /// Guidance text shown when violations exist.
+    #[serde(default)]
+    pub fix_guidance: Option<String>,
 }
 
 impl Default for LoqConfig {
@@ -59,6 +62,7 @@ impl Default for LoqConfig {
             respect_gitignore: true,
             exclude: Vec::new(),
             rules: Vec::new(),
+            fix_guidance: None,
         }
     }
 }
@@ -109,6 +113,8 @@ pub struct CompiledConfig {
     pub default_max_lines: Option<usize>,
     /// Whether to respect `.gitignore` patterns.
     pub respect_gitignore: bool,
+    /// Guidance text shown when violations exist.
+    pub fix_guidance: Option<String>,
     exclude: PatternList,
     rules: Vec<CompiledRule>,
 }
@@ -280,6 +286,7 @@ pub fn compile_config(
         root_dir,
         default_max_lines: config.default_max_lines,
         respect_gitignore: config.respect_gitignore,
+        fix_guidance: config.fix_guidance,
         exclude,
         rules,
     })
@@ -359,6 +366,7 @@ mod tests {
                 path: vec!["[[".to_string()],
                 max_lines: 1,
             }],
+            fix_guidance: None,
         };
         let err =
             compile_config(ConfigOrigin::BuiltIn, PathBuf::from("."), config, None).unwrap_err();
@@ -375,6 +383,7 @@ mod tests {
             respect_gitignore: true,
             exclude: vec!["[[".to_string()],
             rules: vec![],
+            fix_guidance: None,
         };
         let err =
             compile_config(ConfigOrigin::BuiltIn, PathBuf::from("."), config, None).unwrap_err();

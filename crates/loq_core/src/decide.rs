@@ -89,6 +89,7 @@ mod tests {
                     max_lines: 200,
                 },
             ],
+            fix_guidance: None,
         };
         let decision = decide(&compiled(config), "src/main.rs");
         match decision {
@@ -106,6 +107,7 @@ mod tests {
             respect_gitignore: true,
             exclude: vec![],
             rules: vec![],
+            fix_guidance: None,
         };
         let decision = decide(&compiled(config), "src/file.txt");
         match decision {
@@ -124,6 +126,7 @@ mod tests {
             respect_gitignore: true,
             exclude: vec![],
             rules: vec![],
+            fix_guidance: None,
         };
         let decision = decide(&compiled(config), "src/file.txt");
         assert_eq!(decision, Decision::SkipNoLimit);
@@ -139,6 +142,7 @@ mod tests {
                 path: vec!["src/a.rs".to_string(), "src/b.rs".to_string()],
                 max_lines: 100,
             }],
+            fix_guidance: None,
         };
         let compiled = compiled(config);
 

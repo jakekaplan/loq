@@ -56,6 +56,8 @@ pub struct CheckOutput {
     pub outcomes: Vec<FileOutcome>,
     /// Errors encountered during directory walking.
     pub walk_errors: Vec<walk::WalkError>,
+    /// Guidance text to show when violations exist.
+    pub fix_guidance: Option<String>,
 }
 
 fn load_config_from_path(path: &Path, fallback_cwd: &Path) -> Result<CompiledConfig, FsError> {
@@ -140,6 +142,7 @@ pub fn run_check(paths: Vec<PathBuf>, options: CheckOptions) -> Result<CheckOutp
     Ok(CheckOutput {
         outcomes,
         walk_errors,
+        fix_guidance: compiled.fix_guidance,
     })
 }
 

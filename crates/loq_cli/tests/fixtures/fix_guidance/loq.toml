@@ -1,0 +1,2 @@
+default_max_lines = 5
+fix_guidance = "Try splitting into smaller files."

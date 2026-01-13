@@ -92,6 +92,34 @@ path = "tests/**"
 max_lines = 600
 ```
 
+### Custom guidance
+
+Add `fix_guidance` to display instructions when violations occur:
+
+```toml
+default_max_lines = 500
+fix_guidance = """
+Split this file following our conventions:
+- Extract helper functions to src/utils/
+- Move types to src/types/
+- Keep components under 300 lines
+"""
+```
+
+Output:
+
+```
+✖    892 > 500   src/utils/helpers.py
+1 violation (8ms)
+
+Split this file following our conventions:
+- Extract helper functions to src/utils/
+- Move types to src/types/
+- Keep components under 300 lines
+```
+
+This is especially useful when piping to LLMs—include project-specific refactoring patterns and the LLM gets actionable context alongside the violations.
+
 ### Baseline
 
 Have a codebase with existing large files? Baseline them:

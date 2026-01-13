@@ -117,14 +117,21 @@ pub struct Report {
     pub findings: Vec<Finding>,
     /// Summary statistics.
     pub summary: Summary,
+    /// Guidance text to show when violations exist.
+    pub fix_guidance: Option<String>,
 }
 
 /// Builds a report from file outcomes.
 ///
 /// Aggregates outcomes into findings and summary statistics.
 /// Findings are sorted with skip warnings first, then violations by overage.
+/// If `fix_guidance` is provided and there are violations, it will be included in the report.
 #[must_use]
-pub fn build_report(outcomes: &[FileOutcome], duration_ms: u128) -> Report {
+pub fn build_report(
+    outcomes: &[FileOutcome],
+    duration_ms: u128,
+    fix_guidance: Option<String>,
+) -> Report {
     let mut findings = Vec::new();
     let mut summary = Summary {
         total: outcomes.len(),
@@ -193,7 +200,18 @@ pub fn build_report(outcomes: &[FileOutcome], duration_ms: u128) -> Report {
 
     sort_findings(&mut findings);
 
-    Report { findings, summary }
+    // Only include guidance if there are violations
+    let fix_guidance = if summary.errors > 0 {
+        fix_guidance
+    } else {
+        None
+    };
+
+    Report {
+        findings,
+        summary,
+        fix_guidance,
+    }
 }
 
 /// Sorts findings with skip warnings first, then violations by overage.
@@ -284,7 +302,7 @@ mod tests {
                 },
             },
         ];
-        let report = build_report(&outcomes, 0);
+        let report = build_report(&outcomes, 0, None);
         assert_eq!(report.summary.total, 6);
         assert_eq!(report.summary.passed, 1);
         assert_eq!(report.summary.errors, 2);
@@ -337,12 +355,52 @@ mod tests {
             config_source: ConfigOrigin::BuiltIn,
             kind: OutcomeKind::NoLimit,
         }];
-        let report = build_report(&outcomes, 0);
+        let report = build_report(&outcomes, 0, None);
         assert_eq!(report.summary.total, 1);
         assert_eq!(report.summary.skipped, 1);
         assert_eq!(report.summary.passed, 0);
         assert_eq!(report.summary.errors, 0);
         // No findings for nolimit
         assert!(report.findings.is_empty());
+    }
+
+    #[test]
+    fn fix_guidance_included_when_violations_exist() {
+        let outcomes = vec![FileOutcome {
+            path: "big.rs".into(),
+            display_path: "big.rs".into(),
+            config_source: ConfigOrigin::BuiltIn,
+            kind: OutcomeKind::Violation {
+                limit: 100,
+                actual: 150,
+                matched_by: MatchBy::Default,
+            },
+        }];
+        let guidance = Some("Split large files into smaller modules.".to_string());
+        let report = build_report(&outcomes, 0, guidance);
+        assert_eq!(report.summary.errors, 1);
+        assert!(report.fix_guidance.is_some());
+        assert_eq!(
+            report.fix_guidance.unwrap(),
+            "Split large files into smaller modules."
+        );
+    }
+
+    #[test]
+    fn fix_guidance_excluded_when_no_violations() {
+        let outcomes = vec![FileOutcome {
+            path: "small.rs".into(),
+            display_path: "small.rs".into(),
+            config_source: ConfigOrigin::BuiltIn,
+            kind: OutcomeKind::Pass {
+                limit: 100,
+                actual: 50,
+                matched_by: MatchBy::Default,
+            },
+        }];
+        let guidance = Some("Split large files into smaller modules.".to_string());
+        let report = build_report(&outcomes, 0, guidance);
+        assert_eq!(report.summary.errors, 0);
+        assert!(report.fix_guidance.is_none());
     }
 }

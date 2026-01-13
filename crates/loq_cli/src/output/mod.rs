@@ -199,5 +199,17 @@ pub fn write_walk_errors<W: WriteColor>(
     writer.reset()
 }
 
+/// Writes fix guidance text when violations exist.
+///
+/// Outputs a blank line followed by the guidance text exactly as configured.
+pub fn write_guidance<W: WriteColor>(writer: &mut W, guidance: &str) -> io::Result<()> {
+    writeln!(writer)?;
+    write!(writer, "{guidance}")?;
+    if !guidance.ends_with('\n') {
+        writeln!(writer)?;
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests;

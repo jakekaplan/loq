@@ -73,6 +73,13 @@ fn default_config_text() -> String {
     writeln!(out).unwrap();
     writeln!(
         out,
+        "# Text to display when violations occur (useful when piping to LLMs)"
+    )
+    .unwrap();
+    writeln!(out, "# fix_guidance = \"\"").unwrap();
+    writeln!(out).unwrap();
+    writeln!(
+        out,
         "# Rules override defaults for specific paths. Last match wins."
     )
     .unwrap();

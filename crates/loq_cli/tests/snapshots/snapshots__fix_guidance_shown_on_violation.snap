@@ -1,0 +1,9 @@
+---
+source: crates/loq_cli/tests/snapshots.rs
+assertion_line: 175
+expression: stdout
+---
+✖      8 > 5      big.rs
+1 violation (TIME)
+
+Try splitting into smaller files.

@@ -10,7 +10,9 @@ use loq_fs::{CheckOptions, CheckOutput, FsError};
 use termcolor::{Color, WriteColor};
 
 use crate::cli::CheckArgs;
-use crate::output::{print_error, write_block, write_finding, write_summary, write_walk_errors};
+use crate::output::{
+    print_error, write_block, write_finding, write_guidance, write_summary, write_walk_errors,
+};
 use crate::Cli;
 use crate::ExitStatus;
 
@@ -73,7 +75,7 @@ fn handle_check_output<W: WriteColor>(
         .outcomes
         .sort_by(|a, b| a.display_path.cmp(&b.display_path));
 
-    let report = build_report(&output.outcomes, duration_ms);
+    let report = build_report(&output.outcomes, duration_ms, output.fix_guidance);
 
     let verbose = mode == OutputMode::Verbose;
     for finding in &report.findings {
@@ -83,6 +85,10 @@ fn handle_check_output<W: WriteColor>(
         let _ = write_finding(stdout, finding, verbose);
     }
     let _ = write_summary(stdout, &report.summary);
+
+    if let Some(guidance) = &report.fix_guidance {
+        let _ = write_guidance(stdout, guidance);
+    }
 
     if !output.walk_errors.is_empty() {
         let _ = write_walk_errors(stdout, &output.walk_errors, verbose);
@@ -212,6 +218,7 @@ mod tests {
                 kind: OutcomeKind::Missing,
             }],
             walk_errors: vec![],
+            fix_guidance: None,
         };
         let status = handle_check_output(output, 0, &mut stdout, OutputMode::Default);
         assert_eq!(status, ExitStatus::Success);
@@ -234,6 +241,7 @@ mod tests {
                 kind: OutcomeKind::Missing,
             }],
             walk_errors: vec![],
+            fix_guidance: None,
         };
         let status = handle_check_output(output, 0, &mut stdout, OutputMode::Verbose);
         assert_eq!(status, ExitStatus::Success);
@@ -250,6 +258,7 @@ mod tests {
         let output = loq_fs::CheckOutput {
             outcomes: vec![],
             walk_errors: vec![WalkError("permission denied".into())],
+            fix_guidance: None,
         };
         let _code = handle_check_output(output, 0, &mut stdout, OutputMode::Default);
         let output_str = String::from_utf8(stdout.into_inner()).unwrap();

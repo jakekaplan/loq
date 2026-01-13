@@ -262,3 +262,25 @@ fn write_walk_errors_non_verbose() {
     assert!(out.contains("1 path(s) skipped"));
     assert!(out.contains("--verbose"));
 }
+
+#[test]
+fn write_guidance_single_line() {
+    let out = output_string(|w| write_guidance(w, "Split large files into smaller modules."));
+    assert_eq!(out, "\nSplit large files into smaller modules.\n");
+}
+
+#[test]
+fn write_guidance_multiline() {
+    let guidance = "Consider splitting large files:\n- Extract functions into modules\n- Move tests to test files";
+    let out = output_string(|w| write_guidance(w, guidance));
+    assert!(out.starts_with('\n'));
+    assert!(out.contains("Consider splitting large files:"));
+    assert!(out.contains("- Extract functions into modules"));
+    assert!(out.contains("- Move tests to test files"));
+}
+
+#[test]
+fn write_guidance_preserves_trailing_newline() {
+    let out = output_string(|w| write_guidance(w, "Already has newline\n"));
+    assert_eq!(out, "\nAlready has newline\n");
+}
