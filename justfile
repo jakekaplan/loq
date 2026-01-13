@@ -39,4 +39,4 @@ bench repo:
     trap "rm -rf $TMPDIR" EXIT
     git clone --depth 1 "{{ repo }}" "$TMPDIR/repo"
     hyperfine --warmup 3 --runs 10 --ignore-failure \
-        "./target/release/loq check $TMPDIR/repo --silent"
+        "./target/release/loq check $TMPDIR/repo --silent --no-cache"

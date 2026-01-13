@@ -1,0 +1,84 @@
+name: Benchmark
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  benchmark:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Build release
+        run: cargo build --release -p loq
+
+      - name: Install hyperfine
+        run: |
+          wget https://github.com/sharkdp/hyperfine/releases/download/v1.18.0/hyperfine_1.18.0_amd64.deb
+          sudo dpkg -i hyperfine_1.18.0_amd64.deb
+
+      - name: Clone benchmark repos
+        run: |
+          mkdir -p bench-repos
+          git clone --depth 1 https://github.com/python/cpython.git bench-repos/cpython
+          git clone --depth 1 https://github.com/apache/airflow.git bench-repos/airflow
+          git clone --depth 1 https://github.com/PrefectHQ/prefect.git bench-repos/prefect
+          git clone --depth 1 https://github.com/astral-sh/ruff.git bench-repos/ruff
+
+      - name: Run benchmarks
+        run: |
+          hyperfine \
+            --warmup 3 \
+            --runs 10 \
+            --ignore-failure \
+            --export-json bench-results.json \
+            -n cpython './target/release/loq check bench-repos/cpython --silent --no-cache' \
+            -n airflow './target/release/loq check bench-repos/airflow --silent --no-cache' \
+            -n prefect './target/release/loq check bench-repos/prefect --silent --no-cache' \
+            -n ruff './target/release/loq check bench-repos/ruff --silent --no-cache'
+
+      - name: Convert results for benchmark action
+        run: |
+          python3 << 'EOF'
+          import json
+
+          with open("bench-results.json") as f:
+              data = json.load(f)
+
+          results = []
+          for r in data["results"]:
+              results.append({
+                  "name": r["command"],
+                  "unit": "seconds",
+                  "value": r["mean"],
+                  "range": f"± {r['stddev']:.4f}"
+              })
+
+          with open("benchmark-results.json", "w") as f:
+              json.dump(results, f, indent=2)
+          EOF
+
+      - name: Store benchmark result
+        uses: benchmark-action/github-action-benchmark@v1
+        with:
+          tool: customSmallerIsBetter
+          output-file-path: benchmark-results.json
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          auto-push: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+          comment-always: ${{ github.event_name == 'pull_request' }}
+          alert-threshold: '150%'
+          comment-on-alert: true
+          fail-on-alert: false
