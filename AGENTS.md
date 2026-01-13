@@ -44,16 +44,22 @@ When splitting files:
 - **No unsafe** - all crates use `#![forbid(unsafe_code)]`
 - **Minimize allocations** - avoid unnecessary `.clone()`, prefer borrowing
 - **Use iterators** - prefer `.iter().map().filter()` over manual loops when clearer
+- **Prefer let chains** - use `if let` combined with `&&` over nested `if let` statements to reduce indentation
+- **Follow existing patterns** - check neighboring files for style conventions before writing new code
+- **Reuse before writing** - avoid writing significant new code; look for existing utilities first
 
 ### Error handling
 
 - **Libraries** (`loq_core`, `loq_fs`): typed errors with `thiserror`
 - **CLI** (`loq_cli`): `anyhow` with `.context()` for user-facing errors
 - **Never panic** in production paths - no `unwrap()` or `expect()` unless the invariant is documented
+- **Encode constraints in types** - avoid `panic!`, `unreachable!`, or `.unwrap()` by designing types that make invalid states unrepresentable
 
 ### Testing
 
 We maintain **>95% line coverage**. This is enforced in CI. Every PR must include tests.
+
+**All changes must be tested.** If you're not testing your changes, you're not done. If you didn't run the tests, your code does not work.
 
 **Unit tests**: In `mod tests { }` blocks within the module. Test the logic, not the implementation.
 
@@ -86,6 +92,8 @@ Or with `just`:
 ```bash
 just ci    # Run all CI checks locally
 ```
+
+**Always run `uvx prek run -a` at the end of a task** to verify all checks pass.
 
 ## CI
 
