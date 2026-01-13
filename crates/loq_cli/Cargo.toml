@@ -15,8 +15,8 @@ name = "loq"
 path = "src/main.rs"
 
 [dependencies]
-loq_core = { path = "../loq_core", version = "0.1.0-alpha.3" }
-loq_fs = { path = "../loq_fs", version = "0.1.0-alpha.3" }
+loq_core = { path = "../loq_core", version = "0.1.0-alpha.4" }
+loq_fs = { path = "../loq_fs", version = "0.1.0-alpha.4" }
 anyhow.workspace = true
 clap.workspace = true
 tempfile = "3"
