@@ -165,3 +165,87 @@ fn write_report<W: WriteColor>(writer: &mut W, report: &DefeatReport) -> std::io
     }
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use loq_core::report::OutcomeKind;
+    use loq_core::{ConfigOrigin, MatchBy};
+    use std::collections::HashMap;
+    use std::path::PathBuf;
+    use termcolor::NoColor;
+    use toml_edit::Item;
+
+    #[test]
+    fn collect_violations_filters_and_normalizes() {
+        let outcomes = vec![
+            loq_core::FileOutcome {
+                path: PathBuf::from("/tmp/a"),
+                display_path: "./src/a.rs".into(),
+                config_source: ConfigOrigin::BuiltIn,
+                kind: OutcomeKind::Violation {
+                    limit: 10,
+                    actual: 12,
+                    matched_by: MatchBy::Default,
+                },
+            },
+            loq_core::FileOutcome {
+                path: PathBuf::from("/tmp/b"),
+                display_path: "src/b.rs".into(),
+                config_source: ConfigOrigin::BuiltIn,
+                kind: OutcomeKind::Pass {
+                    limit: 10,
+                    actual: 9,
+                    matched_by: MatchBy::Default,
+                },
+            },
+        ];
+
+        let violations = collect_violations(&outcomes);
+        assert_eq!(violations.len(), 1);
+        assert_eq!(violations.get("src/a.rs"), Some(&12));
+    }
+
+    #[test]
+    fn apply_defeat_changes_updates_and_adds_rules() {
+        let mut doc: DocumentMut = r#"
+[[rules]]
+path = "src/a.rs"
+max_lines = 10
+"#
+        .parse()
+        .unwrap();
+
+        let mut violations = HashMap::new();
+        violations.insert("src/a.rs".to_string(), 12);
+        violations.insert("src/b.rs".to_string(), 20);
+
+        let existing_rules = collect_exact_path_rules(&doc);
+        let changes = apply_defeat_changes(&mut doc, &violations, &existing_rules, 5);
+        assert_eq!(changes.len(), 2);
+
+        let rules = doc.get("rules").and_then(Item::as_array_of_tables).unwrap();
+        assert_eq!(rules.len(), 2);
+        let first = rules.get(0).unwrap();
+        let second = rules.get(1).unwrap();
+        assert_eq!(first.get("max_lines").and_then(Item::as_integer), Some(17));
+        assert_eq!(second.get("max_lines").and_then(Item::as_integer), Some(25));
+    }
+
+    #[test]
+    fn write_report_formats_output() {
+        let report = DefeatReport {
+            changes: vec![DefeatChange {
+                path: "src/file.rs".into(),
+                actual: 1_000,
+                new_limit: 1_050,
+            }],
+        };
+
+        let mut out = NoColor::new(Vec::new());
+        write_report(&mut out, &report).unwrap();
+        let output = String::from_utf8(out.into_inner()).unwrap();
+        assert!(output.contains("Accepted defeat on 1 file:"));
+        assert!(output.contains("src/file.rs: 1_000 lines -> limit 1_050"));
+    }
+}

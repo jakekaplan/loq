@@ -122,4 +122,58 @@ mod tests {
         let item = Item::Value(Value::Array(arr));
         assert_eq!(extract_paths(&item), vec!["a.rs", "b.rs"]);
     }
+
+    #[test]
+    fn normalize_display_path_strips_dot_slash() {
+        assert_eq!(normalize_display_path("./src/main.rs"), "src/main.rs");
+        assert_eq!(normalize_display_path("src/main.rs"), "src/main.rs");
+    }
+
+    #[test]
+    fn collect_exact_path_rules_filters_non_exact_rules() {
+        let doc: DocumentMut = r#"
+[[rules]]
+path = "src/a.rs"
+max_lines = 10
+
+[[rules]]
+path = ["src/b.rs", "src/c.rs"]
+max_lines = 20
+
+[[rules]]
+path = "**/*.rs"
+max_lines = 30
+"#
+        .parse()
+        .unwrap();
+
+        let rules = collect_exact_path_rules(&doc);
+        assert_eq!(rules.len(), 1);
+        assert_eq!(rules["src/a.rs"].0, 10);
+        assert_eq!(rules["src/a.rs"].1, 0);
+    }
+
+    #[test]
+    fn add_update_remove_rule_flow() {
+        let mut doc = DocumentMut::new();
+
+        add_rule(&mut doc, "src/a.rs", 10);
+        add_rule(&mut doc, "src/b.rs", 12);
+
+        let rules = doc.get("rules").and_then(Item::as_array_of_tables).unwrap();
+        assert_eq!(rules.len(), 2);
+        let first = rules.get(0).unwrap();
+        assert_eq!(first.get("max_lines").and_then(Item::as_integer), Some(10));
+
+        update_rule_max_lines(&mut doc, 0, 15);
+        let rules = doc.get("rules").and_then(Item::as_array_of_tables).unwrap();
+        let first = rules.get(0).unwrap();
+        assert_eq!(first.get("max_lines").and_then(Item::as_integer), Some(15));
+
+        remove_rule(&mut doc, 1);
+        let rules = doc.get("rules").and_then(Item::as_array_of_tables).unwrap();
+        assert_eq!(rules.len(), 1);
+        let first = rules.get(0).unwrap();
+        assert_eq!(first.get("path").and_then(Item::as_str), Some("src/a.rs"));
+    }
 }
