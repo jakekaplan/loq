@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1768448734883,
+  "lastUpdate": 1768449921567,
   "repoUrl": "https://github.com/jakekaplan/loq",
   "entries": {
     "Benchmark": [
@@ -143,6 +143,54 @@ window.BENCHMARK_DATA = {
             "name": "ruff",
             "value": 0.12527298624000002,
             "range": "± 0.001",
+            "unit": "seconds"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "40362401+jakekaplan@users.noreply.github.com",
+            "name": "Jake Kaplan",
+            "username": "jakekaplan"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "87637d3db68cd3b89708359656dd2ac42a7adce6",
+          "message": "Merge pull request #16 from jakekaplan/improve-readme\n\nImprove readme",
+          "timestamp": "2026-01-14T23:04:11-05:00",
+          "tree_id": "70cfd2af8bec4663bdbda749aa3e107ce1714281",
+          "url": "https://github.com/jakekaplan/loq/commit/87637d3db68cd3b89708359656dd2ac42a7adce6"
+        },
+        "date": 1768449920754,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "cpython",
+            "value": 0.05375251602000001,
+            "range": "± 0.005",
+            "unit": "seconds"
+          },
+          {
+            "name": "airflow",
+            "value": 0.14188289862,
+            "range": "± 0.0011",
+            "unit": "seconds"
+          },
+          {
+            "name": "prefect",
+            "value": 0.05864086502,
+            "range": "± 0.001",
+            "unit": "seconds"
+          },
+          {
+            "name": "ruff",
+            "value": 0.12570603172000003,
+            "range": "± 0.0015",
             "unit": "seconds"
           }
         ]
