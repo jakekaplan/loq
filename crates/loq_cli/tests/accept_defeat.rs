@@ -22,6 +22,20 @@ fn strip_ansi(s: &str) -> String {
     re.replace_all(s, "").to_string()
 }
 
+fn parse_defeat_line(line: &str) -> Option<(usize, usize, &str)> {
+    let mut parts = line.split_whitespace();
+    let actual = parts.next()?;
+    let arrow = parts.next()?;
+    let limit = parts.next()?;
+    let path = parts.next()?;
+    if arrow != "->" {
+        return None;
+    }
+    let actual = actual.replace('_', "").parse().ok()?;
+    let limit = limit.replace('_', "").parse().ok()?;
+    Some((actual, limit, path))
+}
+
 #[test]
 fn creates_config_and_rule_when_missing() {
     let temp = TempDir::new().unwrap();
@@ -36,7 +50,12 @@ fn creates_config_and_rule_when_missing() {
     assert!(output.status.success());
     let stdout = strip_ansi(&String::from_utf8_lossy(&output.stdout));
     assert!(stdout.contains("Accepted defeat on 1 file"));
-    assert!(stdout.contains("src/legacy.rs: 523 lines -> limit 623"));
+    assert!(stdout.lines().any(|line| {
+        line.contains("src/legacy.rs")
+            && line.contains("523")
+            && line.contains("->")
+            && line.contains("623")
+    }));
 
     let content = std::fs::read_to_string(temp.path().join("loq.toml")).unwrap();
     assert!(content.contains("default_max_lines = 500"));
@@ -64,7 +83,12 @@ max_lines = 600
 
     assert!(output.status.success());
     let stdout = strip_ansi(&String::from_utf8_lossy(&output.stdout));
-    assert!(stdout.contains("src/legacy.rs: 650 lines -> limit 700"));
+    assert!(stdout.lines().any(|line| {
+        line.contains("src/legacy.rs")
+            && line.contains("650")
+            && line.contains("->")
+            && line.contains("700")
+    }));
 
     let content = std::fs::read_to_string(temp.path().join("loq.toml")).unwrap();
     assert!(content.contains("max_lines = 700"));
@@ -117,8 +141,8 @@ fn orders_paths_and_applies_buffer_for_multiple_files() {
     let temp = TempDir::new().unwrap();
     let config = "default_max_lines = 10\nexclude = []\n";
     write_file(&temp, "loq.toml", config);
-    write_file(&temp, "src/b.rs", &repeat_lines(15));
-    write_file(&temp, "src/a.rs", &repeat_lines(12));
+    write_file(&temp, "src/b.rs", &repeat_lines(12));
+    write_file(&temp, "src/a.rs", &repeat_lines(15));
 
     let output = cargo_bin_cmd!("loq")
         .current_dir(temp.path())
@@ -128,14 +152,15 @@ fn orders_paths_and_applies_buffer_for_multiple_files() {
 
     assert!(output.status.success());
     let stdout = strip_ansi(&String::from_utf8_lossy(&output.stdout));
-    let mut lines = stdout.lines();
-    assert_eq!(lines.next(), Some("Accepted defeat on 2 files:"));
-    assert_eq!(lines.next(), Some("  src/a.rs: 12 lines -> limit 15"));
-    assert_eq!(lines.next(), Some("  src/b.rs: 15 lines -> limit 18"));
+    let mut lines = stdout.lines().filter(|line| line.contains("->"));
+    let first = lines.next().and_then(parse_defeat_line).unwrap();
+    let second = lines.next().and_then(parse_defeat_line).unwrap();
+    assert_eq!(first, (12, 15, "src/b.rs"));
+    assert_eq!(second, (15, 18, "src/a.rs"));
 
     let content = std::fs::read_to_string(temp.path().join("loq.toml")).unwrap();
     assert!(content.contains("path = \"src/a.rs\""));
-    assert!(content.contains("max_lines = 15"));
-    assert!(content.contains("path = \"src/b.rs\""));
     assert!(content.contains("max_lines = 18"));
+    assert!(content.contains("path = \"src/b.rs\""));
+    assert!(content.contains("max_lines = 15"));
 }

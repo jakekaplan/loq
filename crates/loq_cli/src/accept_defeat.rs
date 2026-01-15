@@ -140,29 +140,40 @@ fn apply_defeat_changes(
 
 fn write_report<W: WriteColor>(writer: &mut W, report: &DefeatReport) -> std::io::Result<()> {
     let count = report.changes.len();
-    writeln!(
-        writer,
-        "Accepted defeat on {count} file{}:",
-        if count == 1 { "" } else { "s" }
-    )?;
     let mut actual_spec = ColorSpec::new();
     actual_spec.set_fg(Some(Color::Red)).set_bold(true);
     let mut limit_spec = ColorSpec::new();
-    limit_spec.set_fg(Some(Color::Green)).set_bold(true);
+    limit_spec.set_fg(Some(Color::Green));
+    let mut dimmed_spec = ColorSpec::new();
+    dimmed_spec.set_dimmed(true);
 
-    for change in &report.changes {
-        write!(writer, "  ")?;
-        write_path(writer, &change.path)?;
-        write!(writer, ": ")?;
+    let mut changes: Vec<_> = report.changes.iter().collect();
+    changes.sort_by_key(|change| (change.actual, change.path.as_str()));
+
+    for change in changes {
+        let actual_str = format_number(change.actual);
+        let limit_str = format_number(change.new_limit);
         writer.set_color(&actual_spec)?;
-        write!(writer, "{}", format_number(change.actual))?;
+        write!(writer, "{actual_str:>6}")?;
         writer.reset()?;
-        write!(writer, " lines -> limit ")?;
+        writer.set_color(&dimmed_spec)?;
+        write!(writer, " -> ")?;
+        writer.reset()?;
         writer.set_color(&limit_spec)?;
-        write!(writer, "{}", format_number(change.new_limit))?;
+        write!(writer, "{limit_str:<6}")?;
         writer.reset()?;
+        write!(writer, " ")?;
+        write_path(writer, &change.path)?;
         writeln!(writer)?;
     }
+    writer.set_color(&dimmed_spec)?;
+    write!(
+        writer,
+        "Accepted defeat on {count} file{}",
+        if count == 1 { "" } else { "s" }
+    )?;
+    writer.reset()?;
+    writeln!(writer)?;
     Ok(())
 }
 
@@ -245,7 +256,36 @@ max_lines = 10
         let mut out = NoColor::new(Vec::new());
         write_report(&mut out, &report).unwrap();
         let output = String::from_utf8(out.into_inner()).unwrap();
-        assert!(output.contains("Accepted defeat on 1 file:"));
-        assert!(output.contains("src/file.rs: 1_000 lines -> limit 1_050"));
+        let mut lines = output.lines();
+        let change_line = lines.next().unwrap();
+        assert!(change_line.contains("1_000"));
+        assert!(change_line.contains("->"));
+        assert!(change_line.contains("1_050"));
+        assert!(change_line.contains("src/file.rs"));
+        assert_eq!(lines.next(), Some("Accepted defeat on 1 file"));
+        assert!(lines.next().is_none());
+    }
+
+    #[test]
+    fn write_report_formats_plural_summary() {
+        let report = DefeatReport {
+            changes: vec![
+                DefeatChange {
+                    path: "src/a.rs".into(),
+                    actual: 10,
+                    new_limit: 20,
+                },
+                DefeatChange {
+                    path: "src/b.rs".into(),
+                    actual: 30,
+                    new_limit: 40,
+                },
+            ],
+        };
+
+        let mut out = NoColor::new(Vec::new());
+        write_report(&mut out, &report).unwrap();
+        let output = String::from_utf8(out.into_inner()).unwrap();
+        assert_eq!(output.lines().last(), Some("Accepted defeat on 2 files"));
     }
 }
