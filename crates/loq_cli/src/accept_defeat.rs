@@ -265,4 +265,27 @@ max_lines = 10
         assert_eq!(lines.next(), Some("Accepted defeat on 1 file"));
         assert!(lines.next().is_none());
     }
+
+    #[test]
+    fn write_report_formats_plural_summary() {
+        let report = DefeatReport {
+            changes: vec![
+                DefeatChange {
+                    path: "src/a.rs".into(),
+                    actual: 10,
+                    new_limit: 20,
+                },
+                DefeatChange {
+                    path: "src/b.rs".into(),
+                    actual: 30,
+                    new_limit: 40,
+                },
+            ],
+        };
+
+        let mut out = NoColor::new(Vec::new());
+        write_report(&mut out, &report).unwrap();
+        let output = String::from_utf8(out.into_inner()).unwrap();
+        assert_eq!(output.lines().last(), Some("Accepted defeat on 2 files"));
+    }
 }
