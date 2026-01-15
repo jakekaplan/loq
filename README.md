@@ -37,6 +37,7 @@ cargo install loq
 loq                                # Check current directory (500 line default)
 loq check src/ lib/                # Check specific paths
 git diff --name-only | loq check - # Check files from stdin
+loq accept-defeat                  # Bump limits for current violations
 ```
 
 ### Pre-commit
@@ -107,6 +108,20 @@ Run periodically. It automatically:
 - **Ignores** files that grew (use `--allow-growth` to override)
 
 Use `--threshold 300` to set a custom limit.
+
+### Accept defeat
+
+Need to ship while files are still too big? Accept defeat creates or updates
+exact-path rules for the files currently failing checks:
+
+```bash
+loq accept-defeat                # Use default buffer of 100 lines
+loq accept-defeat src/legacy.rs  # Only update one file
+loq accept-defeat --buffer 50    # Add 50 lines above current size
+```
+
+It never edits glob rules; it only adds exact-path overrides at the end of the
+`[[rules]]` list.
 
 ## Contributing
 
