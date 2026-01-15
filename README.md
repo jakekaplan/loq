@@ -99,7 +99,7 @@ loq accept-defeat --buffer 50    # Add 50 lines above current size
 ```yaml
 repos:
   - repo: https://github.com/jakekaplan/loq
-    rev: v0.1.0a4
+    rev: v0.1.0-alpha.5
     hooks:
       - id: loq
 ```
