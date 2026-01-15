@@ -6,8 +6,8 @@
 [![Crates.io](https://img.shields.io/crates/v/loq)](https://crates.io/crates/loq)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
-An electric fence for LLMs (and humans too). Written in Rust.
-loq enforces file line limits: fast, zero-config, and language agnostic.
+An electric fence for LLMs (and humans too). Written in Rust,
+`loq` enforces file line limits: fast, zero-config, and language agnostic.
 
 ## Quickstart
 
@@ -26,7 +26,6 @@ cargo install loq
 loq                                # Check current directory (500 line default)
 loq check src/ lib/                # Check specific paths
 git diff --name-only | loq check - # Check files from stdin
-loq accept-defeat                  # Bump limits for current violations
 ```
 
 ## Why loq?
@@ -36,7 +35,7 @@ loq accept-defeat                  # Bump limits for current violations
 - No parsers, no plugins, no config required
 - LLM-friendly minimal output and fast Rust core
 
-LLM-friendly output is token-efficient by default:
+LLM-friendly, token-efficient output:
 
 ```
 ✖  1_427 > 500   src/components/Dashboard.tsx
@@ -49,13 +48,6 @@ Use `loq -v` for more context:
 ```
 ✖  1_427 > 500   src/components/Dashboard.tsx
                   └─ rule: max-lines=500 (match: **/*.tsx)
-```
-
-If you pipe results to an LLM, `fix_guidance` adds project-specific instructions
-to each violation:
-
-```toml
-fix_guidance = "Split large files: helpers → src/utils/, types → src/types/"
 ```
 
 ## Configuration
@@ -72,6 +64,13 @@ path = "**/*.tsx"
 max_lines = 300
 ```
 
+Add `fix_guidance` in `loq.toml` to include project-specific instructions with
+each violation when piping output to an LLM:
+
+```toml
+fix_guidance = "Split large files: helpers → src/utils/, types → src/types/"
+```
+
 ## Managing legacy files
 
 Existing large files? Baseline them and ratchet down over time:
@@ -82,22 +81,20 @@ loq baseline   # Add rules for files over the limit
 ```
 
 Run periodically. It tightens limits as files shrink, removes rules once files
-are under the threshold, and ignores files that grew (use `--allow-growth` to
-override). Use `--threshold 300` to set a custom limit.
+are under the threshold, and ignores files that grew. Files cannot be
+rebaselined to a higher limit unless you pass `--allow-growth`. Use
+`--threshold 300` to set a custom limit.
 
 Need to ship while files are still too big? Accept defeat creates or updates
 exact-path rules for the files currently failing checks:
 
 ```bash
 loq accept-defeat                # Use default buffer of 100 lines
-loq accept-defeat src/legacy.rs  # Only update one file
+loq accept-defeat src/legacy.rs  # Only update for one file
 loq accept-defeat --buffer 50    # Add 50 lines above current size
 ```
 
-It never edits glob rules; it only adds exact-path overrides at the end of the
-`[[rules]]` list.
-
-## Automation
+## Add as a Pre-commit Hook
 
 ```yaml
 repos:
