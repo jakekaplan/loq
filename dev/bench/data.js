@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1768280036009,
+  "lastUpdate": 1768448734883,
   "repoUrl": "https://github.com/jakekaplan/loq",
   "entries": {
     "Benchmark": [
@@ -95,6 +95,54 @@ window.BENCHMARK_DATA = {
             "name": "ruff",
             "value": 0.126465383,
             "range": "± 0.0016",
+            "unit": "seconds"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "40362401+jakekaplan@users.noreply.github.com",
+            "name": "Jake Kaplan",
+            "username": "jakekaplan"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "1ef4f216dc9d90b7f1a762ad90dfcbb1670b4947",
+          "message": "Merge pull request #15 from jakekaplan/accept-defeat\n\nAccept defeat :(",
+          "timestamp": "2026-01-14T22:44:36-05:00",
+          "tree_id": "b9f875ad26e8e0a6d8cbf9caf1c2bff24555c0eb",
+          "url": "https://github.com/jakekaplan/loq/commit/1ef4f216dc9d90b7f1a762ad90dfcbb1670b4947"
+        },
+        "date": 1768448734609,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "cpython",
+            "value": 0.051774532940000006,
+            "range": "± 0.0028",
+            "unit": "seconds"
+          },
+          {
+            "name": "airflow",
+            "value": 0.14205390594,
+            "range": "± 0.0009",
+            "unit": "seconds"
+          },
+          {
+            "name": "prefect",
+            "value": 0.058733934640000006,
+            "range": "± 0.0007",
+            "unit": "seconds"
+          },
+          {
+            "name": "ruff",
+            "value": 0.12527298624000002,
+            "range": "± 0.001",
             "unit": "seconds"
           }
         ]
