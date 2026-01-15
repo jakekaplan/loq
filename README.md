@@ -34,11 +34,9 @@ loq accept-defeat                  # Bump limits for current violations
 - Hard limits on file size to prevent context rot
 - One metric: line counts (`wc -l` style)
 - No parsers, no plugins, no config required
-- LLM-friendly output and fast Rust core
+- LLM-friendly minimal output and fast Rust core
 
-## Output
-
-Token-efficient by default:
+LLM-friendly output is token-efficient by default:
 
 ```
 ✖  1_427 > 500   src/components/Dashboard.tsx
@@ -53,6 +51,13 @@ Use `loq -v` for more context:
                   └─ rule: max-lines=500 (match: **/*.tsx)
 ```
 
+If you pipe results to an LLM, `fix_guidance` adds project-specific instructions
+to each violation:
+
+```toml
+fix_guidance = "Split large files: helpers → src/utils/, types → src/types/"
+```
+
 ## Configuration
 
 loq works zero-config. Run `loq init` to customize:
@@ -65,12 +70,6 @@ exclude = [".git/**", "**/generated/**", "*.lock"]
 [[rules]]                     # last match wins, ** matches any path
 path = "**/*.tsx"
 max_lines = 300
-```
-
-Add `fix_guidance` to include project-specific instructions with violations:
-
-```toml
-fix_guidance = "Split large files: helpers → src/utils/, types → src/types/"
 ```
 
 ## Managing legacy files
