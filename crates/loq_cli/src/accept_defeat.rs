@@ -5,14 +5,14 @@ use std::path::PathBuf;
 
 use anyhow::{Context, Result};
 use loq_fs::CheckOptions;
-use termcolor::WriteColor;
+use termcolor::{Color, ColorSpec, WriteColor};
 use toml_edit::DocumentMut;
 
 use crate::cli::AcceptDefeatArgs;
 use crate::config_edit::{
     add_rule, collect_exact_path_rules, normalize_display_path, update_rule_max_lines,
 };
-use crate::output::print_error;
+use crate::output::{format_number, print_error, write_path};
 use crate::ExitStatus;
 
 struct DefeatChange {
@@ -145,12 +145,23 @@ fn write_report<W: WriteColor>(writer: &mut W, report: &DefeatReport) -> std::io
         "Accepted defeat on {count} file{}:",
         if count == 1 { "" } else { "s" }
     )?;
+    let mut actual_spec = ColorSpec::new();
+    actual_spec.set_fg(Some(Color::Red)).set_bold(true);
+    let mut limit_spec = ColorSpec::new();
+    limit_spec.set_fg(Some(Color::Green)).set_bold(true);
+
     for change in &report.changes {
-        writeln!(
-            writer,
-            "  {}: {} lines -> limit {}",
-            change.path, change.actual, change.new_limit
-        )?;
+        write!(writer, "  ")?;
+        write_path(writer, &change.path)?;
+        write!(writer, ": ")?;
+        writer.set_color(&actual_spec)?;
+        write!(writer, "{}", format_number(change.actual))?;
+        writer.reset()?;
+        write!(writer, " lines -> limit ")?;
+        writer.set_color(&limit_spec)?;
+        write!(writer, "{}", format_number(change.new_limit))?;
+        writer.reset()?;
+        writeln!(writer)?;
     }
     Ok(())
 }
