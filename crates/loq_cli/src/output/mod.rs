@@ -108,7 +108,7 @@ pub fn write_finding<W: WriteColor>(
     Ok(())
 }
 
-fn write_path<W: WriteColor>(writer: &mut W, path: &str) -> io::Result<()> {
+pub(crate) fn write_path<W: WriteColor>(writer: &mut W, path: &str) -> io::Result<()> {
     if let Some(pos) = path.rfind('/') {
         let (dir, file) = path.split_at(pos + 1);
         writer.set_color(&dimmed())?;

@@ -26,6 +26,8 @@ pub enum Command {
     Init(InitArgs),
     /// Update baseline rules for files exceeding the limit.
     Baseline(BaselineArgs),
+    /// Accept defeat for currently failing files.
+    AcceptDefeat(AcceptDefeatArgs),
 }
 
 /// Arguments for the check command.
@@ -54,4 +56,16 @@ pub struct BaselineArgs {
     /// Allow increasing limits for files that grew beyond their baseline.
     #[arg(long = "allow-growth")]
     pub allow_growth: bool,
+}
+
+/// Arguments for the accept-defeat command.
+#[derive(Args, Debug, Clone)]
+pub struct AcceptDefeatArgs {
+    /// Specific files to accept defeat on.
+    #[arg(value_name = "FILE")]
+    pub files: Vec<PathBuf>,
+
+    /// Extra lines to add above the current line count.
+    #[arg(long = "buffer", default_value_t = 100)]
+    pub buffer: usize,
 }
