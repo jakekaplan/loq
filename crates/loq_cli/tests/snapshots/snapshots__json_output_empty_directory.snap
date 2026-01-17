@@ -3,15 +3,15 @@ source: crates/loq_cli/tests/snapshots.rs
 expression: json
 ---
 {
-  "version": "[version]",
-  "violations": [],
   "skip_warnings": [],
-  "walk_errors": [],
   "summary": {
     "files_checked": 0,
-    "skipped": 0,
     "passed": 0,
+    "skipped": 0,
     "violations": 0,
     "walk_errors": 0
-  }
+  },
+  "version": "[version]",
+  "violations": [],
+  "walk_errors": []
 }

@@ -3,6 +3,14 @@ source: crates/loq_cli/tests/snapshots.rs
 expression: json
 ---
 {
+  "skip_warnings": [],
+  "summary": {
+    "files_checked": 1,
+    "passed": 0,
+    "skipped": 0,
+    "violations": 1,
+    "walk_errors": 0
+  },
   "version": "[version]",
   "violations": [
     {
@@ -12,13 +20,5 @@ expression: json
       "rule": "default"
     }
   ],
-  "skip_warnings": [],
-  "walk_errors": [],
-  "summary": {
-    "files_checked": 1,
-    "skipped": 0,
-    "passed": 0,
-    "violations": 1,
-    "walk_errors": 0
-  }
+  "walk_errors": []
 }
