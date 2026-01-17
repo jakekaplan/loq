@@ -9,8 +9,15 @@
 An electric fence for LLMs (and humans too). Written in Rust,
 `loq` enforces file line limits: fast, zero-config, and language agnostic.
 
-## Quickstart
+## Why loq?
+- Hard limits on file size to prevent context rot (for LLMs and humans)
+- One metric: line counts (`wc -l` style)
+- Works everywhere - no language-specific setup
+- Designed specifically with coding agents in mind
 
+## Getting Started
+
+### Installation
 ```bash
 # With uv (recommended)
 uv tool install loq
@@ -22,20 +29,16 @@ pip install loq
 cargo install loq
 ```
 
+### Usage
 ```bash
 loq                                # Check current directory (500 line default)
 loq check src/ lib/                # Check specific paths
 git diff --name-only | loq check - # Check files from stdin
 ```
 
-## Why loq?
+## Output
 
-- Hard limits on file size to prevent context rot
-- One metric: line counts (`wc -l` style)
-- No parsers, no plugins, no config required
-- LLM-friendly minimal output and fast Rust core
-
-LLM-friendly, token-efficient output:
+Token-efficient default output:
 
 ```
 ✖  1_427 > 500   src/components/Dashboard.tsx
@@ -49,8 +52,6 @@ Use `loq -v` for more context:
 ✖  1_427 > 500   src/components/Dashboard.tsx
                   └─ rule: max-lines=500 (match: **/*.tsx)
 ```
-
-### JSON output
 
 Use `--output-format json` for machine-readable output:
 
@@ -80,8 +81,6 @@ loq check --output-format json
   }
 }
 ```
-
-JSON output enables editor/IDE integrations, CI tooling pipelines, and programmatic consumption.
 
 ## Configuration
 
