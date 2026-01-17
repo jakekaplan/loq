@@ -10,10 +10,11 @@ An electric fence for LLMs (and humans too). Written in Rust,
 `loq` enforces file line limits: fast, zero-config, and language agnostic.
 
 ## Why loq?
-- Hard limits on file size to prevent context rot (for LLMs and humans)
+- Hard limits to prevent oversized files and context rot
 - One metric: line counts (`wc -l` style)
 - Works everywhere - no language-specific setup
 - Designed specifically with coding agents in mind
+- Lightning fast Rust core
 
 ## Getting Started
 
@@ -31,7 +32,7 @@ cargo install loq
 
 ### Usage
 ```bash
-loq                                # Check current directory (500 line default)
+loq check                          # Check current directory (500 line default)
 loq check src/ lib/                # Check specific paths
 git diff --name-only | loq check - # Check files from stdin
 ```
@@ -84,23 +85,26 @@ loq check --output-format json
 
 ## Configuration
 
-loq works zero-config. Run `loq init` to customize:
+loq works zero-config. Run `loq init` to create a `loq.toml` file to customize:
 
 ```toml
-default_max_lines = 500       # files not matching any rule
-respect_gitignore = true      # skip .gitignore'd files
+# default, for files not matching any rule
+default_max_lines = 500       
+
+# skip .gitignore'd files
+respect_gitignore = true      
+
+# ignore files or paths
 exclude = [".git/**", "**/generated/**", "*.lock"]
 
-[[rules]]                     # last match wins, ** matches any path
+# Add fix_guidance to include project-specific instructions 
+# with each violation when piping output to an LLM:
+fix_guidance = "Split large files: helpers → src/utils/, types → src/types/"
+
+# last match wins, ** matches any path
+[[rules]]                   
 path = "**/*.tsx"
 max_lines = 300
-```
-
-Add `fix_guidance` in `loq.toml` to include project-specific instructions with
-each violation when piping output to an LLM:
-
-```toml
-fix_guidance = "Split large files: helpers → src/utils/, types → src/types/"
 ```
 
 ## Managing legacy files
