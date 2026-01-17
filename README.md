@@ -32,9 +32,14 @@ cargo install loq
 
 ### Usage
 ```bash
-loq check                          # Check current directory (500 line default)
-loq check src/ lib/                # Check specific paths
-git diff --name-only | loq check - # Check files from stdin
+# Check current directory (500 line default)
+loq check           
+
+# Check specific paths               
+loq check src/ lib/     
+     
+# Check files from stdin      
+git diff --name-only | loq check - 
 ```
 
 ## Output
@@ -42,9 +47,9 @@ git diff --name-only | loq check - # Check files from stdin
 Token-efficient default output:
 
 ```
-✖  1_427 > 500   src/components/Dashboard.tsx
 ✖    892 > 500   src/utils/helpers.py
-2 violations (14ms)
+✖  1_427 > 500   src/components/Dashboard.tsx
+2 violations
 ```
 
 Use `loq -v` for more context:
@@ -112,8 +117,10 @@ max_lines = 300
 Existing large files? Baseline them and ratchet down over time:
 
 ```bash
-loq init       # Create loq.toml first
-loq baseline   # Add rules for files over the limit
+# Create loq.toml first
+loq init      
+# Add rules for files over the limit 
+loq baseline 
 ```
 
 Run periodically. It tightens limits as files shrink, removes rules once files
@@ -125,9 +132,14 @@ Need to ship while files are still too big? Accept defeat creates or updates
 exact-path rules for the files currently failing checks:
 
 ```bash
-loq accept-defeat                # Use default buffer of 100 lines
-loq accept-defeat src/legacy.rs  # Only update for one file
-loq accept-defeat --buffer 50    # Add 50 lines above current size
+# Use default buffer of 100 lines
+loq accept-defeat         
+  
+# Only update for one file     
+loq accept-defeat src/legacy.rs  
+
+# Add 50 lines above current size
+loq accept-defeat --buffer 50    
 ```
 
 ## Add as a Pre-commit Hook
