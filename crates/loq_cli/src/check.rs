@@ -4,7 +4,7 @@ use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result};
-use loq_core::report::{build_report, FindingKind, Report};
+use loq_core::report::{build_report, FindingKind, OutcomeKind, Report};
 use loq_fs::{CheckOptions, CheckOutput, FsError};
 use termcolor::{Color, WriteColor};
 
@@ -64,25 +64,33 @@ fn handle_fs_error<W: WriteColor>(err: &FsError, stderr: &mut W) -> ExitStatus {
 }
 
 fn handle_check_output<W: WriteColor + Write>(
-    mut output: CheckOutput,
+    output: CheckOutput,
     stdout: &mut W,
     mode: OutputMode,
     format: OutputFormat,
 ) -> ExitStatus {
-    output
+    let violation_count = output
         .outcomes
-        .sort_by(|a, b| a.display_path.cmp(&b.display_path));
-
-    let report = build_report(&output.outcomes, output.fix_guidance);
+        .iter()
+        .filter(|outcome| matches!(&outcome.kind, OutcomeKind::Violation { .. }))
+        .count();
 
     match format {
         OutputFormat::Json => {
-            let _ = write_json(stdout, &report);
+            let _ = write_json(stdout, &output);
         }
-        OutputFormat::Text => write_text_output(stdout, &report, &output.walk_errors, mode),
+        OutputFormat::Text => {
+            let CheckOutput {
+                outcomes,
+                walk_errors,
+                fix_guidance,
+            } = output;
+            let report = build_report(&outcomes, fix_guidance);
+            write_text_output(stdout, &report, &walk_errors, mode);
+        }
     }
 
-    if report.summary.errors > 0 {
+    if violation_count > 0 {
         ExitStatus::Failure
     } else {
         ExitStatus::Success
@@ -285,22 +293,31 @@ mod tests {
         use loq_core::report::{FileOutcome, OutcomeKind};
         use loq_core::ConfigOrigin;
         use loq_core::MatchBy;
+        use loq_fs::walk::WalkError;
         use termcolor::NoColor;
 
         let mut stdout = NoColor::new(Vec::new());
         let output = loq_fs::CheckOutput {
-            outcomes: vec![FileOutcome {
-                path: "big.rs".into(),
-                display_path: "big.rs".into(),
-                config_source: ConfigOrigin::BuiltIn,
-                kind: OutcomeKind::Violation {
-                    limit: 100,
-                    actual: 150,
-                    matched_by: MatchBy::Default,
+            outcomes: vec![
+                FileOutcome {
+                    path: "big.rs".into(),
+                    display_path: "big.rs".into(),
+                    config_source: ConfigOrigin::BuiltIn,
+                    kind: OutcomeKind::Violation {
+                        limit: 100,
+                        actual: 150,
+                        matched_by: MatchBy::Default,
+                    },
                 },
-            }],
-            walk_errors: vec![],
-            fix_guidance: None,
+                FileOutcome {
+                    path: "skipped.bin".into(),
+                    display_path: "skipped.bin".into(),
+                    config_source: ConfigOrigin::BuiltIn,
+                    kind: OutcomeKind::Binary,
+                },
+            ],
+            walk_errors: vec![WalkError("permission denied".into())],
+            fix_guidance: Some("Split large files.".to_string()),
         };
         let status =
             handle_check_output(output, &mut stdout, OutputMode::Default, OutputFormat::Json);
@@ -311,5 +328,11 @@ mod tests {
         assert_eq!(parsed["violations"][0]["lines"], 150);
         assert_eq!(parsed["violations"][0]["max_lines"], 100);
         assert_eq!(parsed["summary"]["violations"], 1);
+        assert_eq!(parsed["summary"]["skipped"], 1);
+        assert_eq!(parsed["summary"]["walk_errors"], 1);
+        assert_eq!(parsed["skip_warnings"][0]["path"], "skipped.bin");
+        assert_eq!(parsed["skip_warnings"][0]["reason"], "binary");
+        assert_eq!(parsed["walk_errors"][0], "permission denied");
+        assert_eq!(parsed["fix_guidance"], "Split large files.");
     }
 }

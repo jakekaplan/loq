@@ -69,9 +69,14 @@ loq check --output-format json
       "rule": "default"
     }
   ],
+  "skip_warnings": [],
+  "walk_errors": [],
   "summary": {
     "files_checked": 42,
-    "violations": 1
+    "skipped": 0,
+    "passed": 41,
+    "violations": 1,
+    "walk_errors": 0
   }
 }
 ```
