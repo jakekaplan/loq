@@ -5,13 +5,13 @@
 #![forbid(unsafe_code)]
 #![warn(missing_docs)]
 
-mod accept_defeat;
 mod baseline;
 mod check;
 mod cli;
 mod config_edit;
 mod init;
 mod output;
+mod relax;
 
 use std::ffi::OsString;
 use std::io::{self, Read, Write};
@@ -20,10 +20,10 @@ use std::process::ExitCode;
 use clap::Parser;
 use termcolor::{ColorChoice, StandardStream, WriteColor};
 
-use accept_defeat::run_accept_defeat;
 use baseline::run_baseline;
 use check::{output_mode, run_check};
 use init::run_init;
+use relax::run_relax;
 
 pub use cli::{Cli, Command};
 
@@ -78,7 +78,7 @@ where
         Command::Check(args) => run_check(args, &mut stdin, stdout, stderr, mode),
         Command::Init(args) => run_init(args, stdout, stderr),
         Command::Baseline(args) => run_baseline(args, stdout, stderr),
-        Command::AcceptDefeat(args) => run_accept_defeat(args, stdout, stderr),
+        Command::Relax(args) => run_relax(args, stdout, stderr),
     }
 }
 

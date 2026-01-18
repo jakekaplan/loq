@@ -1,4 +1,4 @@
-//! Accept-defeat command implementation.
+//! Relax command implementation.
 
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -8,38 +8,38 @@ use loq_fs::CheckOptions;
 use termcolor::{Color, ColorSpec, WriteColor};
 use toml_edit::DocumentMut;
 
-use crate::cli::AcceptDefeatArgs;
+use crate::cli::RelaxArgs;
 use crate::config_edit::{
     add_rule, collect_exact_path_rules, normalize_display_path, update_rule_max_lines,
 };
 use crate::output::{format_number, print_error, write_path};
 use crate::ExitStatus;
 
-struct DefeatChange {
+struct RelaxChange {
     path: String,
     actual: usize,
     new_limit: usize,
 }
 
-struct DefeatReport {
-    changes: Vec<DefeatChange>,
+struct RelaxReport {
+    changes: Vec<RelaxChange>,
 }
 
-impl DefeatReport {
+impl RelaxReport {
     fn is_empty(&self) -> bool {
         self.changes.is_empty()
     }
 }
 
-pub fn run_accept_defeat<W1: WriteColor, W2: WriteColor>(
-    args: &AcceptDefeatArgs,
+pub fn run_relax<W1: WriteColor, W2: WriteColor>(
+    args: &RelaxArgs,
     stdout: &mut W1,
     stderr: &mut W2,
 ) -> ExitStatus {
-    match run_accept_defeat_inner(args) {
+    match run_relax_inner(args) {
         Ok(report) => {
             if report.is_empty() {
-                let _ = writeln!(stdout, "No violations to accept");
+                let _ = writeln!(stdout, "No violations to relax");
                 return ExitStatus::Failure;
             }
             let _ = write_report(stdout, &report);
@@ -49,7 +49,7 @@ pub fn run_accept_defeat<W1: WriteColor, W2: WriteColor>(
     }
 }
 
-fn run_accept_defeat_inner(args: &AcceptDefeatArgs) -> Result<DefeatReport> {
+fn run_relax_inner(args: &RelaxArgs) -> Result<RelaxReport> {
     let cwd = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
     let config_path = cwd.join("loq.toml");
     let config_exists = config_path.exists();
@@ -66,11 +66,11 @@ fn run_accept_defeat_inner(args: &AcceptDefeatArgs) -> Result<DefeatReport> {
         use_cache: false,
     };
 
-    let output = loq_fs::run_check(paths, options).context("accept-defeat check failed")?;
+    let output = loq_fs::run_check(paths, options).context("relax check failed")?;
     let violations = collect_violations(&output.outcomes);
 
     if violations.is_empty() {
-        return Ok(DefeatReport {
+        return Ok(RelaxReport {
             changes: Vec::new(),
         });
     }
@@ -86,12 +86,12 @@ fn run_accept_defeat_inner(args: &AcceptDefeatArgs) -> Result<DefeatReport> {
     };
 
     let existing_rules = collect_exact_path_rules(&doc);
-    let changes = apply_defeat_changes(&mut doc, &violations, &existing_rules, args.buffer);
+    let changes = apply_relax_changes(&mut doc, &violations, &existing_rules, args.buffer);
 
     std::fs::write(&config_path, doc.to_string())
         .with_context(|| format!("failed to write {}", config_path.display()))?;
 
-    Ok(DefeatReport { changes })
+    Ok(RelaxReport { changes })
 }
 
 fn collect_violations(outcomes: &[loq_core::FileOutcome]) -> HashMap<String, usize> {
@@ -111,12 +111,12 @@ fn default_document() -> DocumentMut {
     doc
 }
 
-fn apply_defeat_changes(
+fn apply_relax_changes(
     doc: &mut DocumentMut,
     violations: &HashMap<String, usize>,
     existing_rules: &HashMap<String, (usize, usize)>,
     buffer: usize,
-) -> Vec<DefeatChange> {
+) -> Vec<RelaxChange> {
     let mut paths: Vec<_> = violations.iter().collect();
     paths.sort_by(|(a, _), (b, _)| a.cmp(b));
 
@@ -128,7 +128,7 @@ fn apply_defeat_changes(
         } else {
             add_rule(doc, path, new_limit);
         }
-        changes.push(DefeatChange {
+        changes.push(RelaxChange {
             path: path.clone(),
             actual,
             new_limit,
@@ -138,7 +138,7 @@ fn apply_defeat_changes(
     changes
 }
 
-fn write_report<W: WriteColor>(writer: &mut W, report: &DefeatReport) -> std::io::Result<()> {
+fn write_report<W: WriteColor>(writer: &mut W, report: &RelaxReport) -> std::io::Result<()> {
     let count = report.changes.len();
     let mut actual_spec = ColorSpec::new();
     actual_spec.set_fg(Some(Color::Red)).set_bold(true);
@@ -169,7 +169,7 @@ fn write_report<W: WriteColor>(writer: &mut W, report: &DefeatReport) -> std::io
     writer.set_color(&dimmed_spec)?;
     write!(
         writer,
-        "Accepted defeat on {count} file{}",
+        "Relaxed limits for {count} file{}",
         if count == 1 { "" } else { "s" }
     )?;
     writer.reset()?;
@@ -218,7 +218,7 @@ mod tests {
     }
 
     #[test]
-    fn apply_defeat_changes_updates_and_adds_rules() {
+    fn apply_relax_changes_updates_and_adds_rules() {
         let mut doc: DocumentMut = r#"
 [[rules]]
 path = "src/a.rs"
@@ -232,7 +232,7 @@ max_lines = 10
         violations.insert("src/b.rs".to_string(), 20);
 
         let existing_rules = collect_exact_path_rules(&doc);
-        let changes = apply_defeat_changes(&mut doc, &violations, &existing_rules, 5);
+        let changes = apply_relax_changes(&mut doc, &violations, &existing_rules, 5);
         assert_eq!(changes.len(), 2);
 
         let rules = doc.get("rules").and_then(Item::as_array_of_tables).unwrap();
@@ -245,8 +245,8 @@ max_lines = 10
 
     #[test]
     fn write_report_formats_output() {
-        let report = DefeatReport {
-            changes: vec![DefeatChange {
+        let report = RelaxReport {
+            changes: vec![RelaxChange {
                 path: "src/file.rs".into(),
                 actual: 1_000,
                 new_limit: 1_050,
@@ -262,20 +262,20 @@ max_lines = 10
         assert!(change_line.contains("->"));
         assert!(change_line.contains("1_050"));
         assert!(change_line.contains("src/file.rs"));
-        assert_eq!(lines.next(), Some("Accepted defeat on 1 file"));
+        assert_eq!(lines.next(), Some("Relaxed limits for 1 file"));
         assert!(lines.next().is_none());
     }
 
     #[test]
     fn write_report_formats_plural_summary() {
-        let report = DefeatReport {
+        let report = RelaxReport {
             changes: vec![
-                DefeatChange {
+                RelaxChange {
                     path: "src/a.rs".into(),
                     actual: 10,
                     new_limit: 20,
                 },
-                DefeatChange {
+                RelaxChange {
                     path: "src/b.rs".into(),
                     actual: 30,
                     new_limit: 40,
@@ -286,6 +286,6 @@ max_lines = 10
         let mut out = NoColor::new(Vec::new());
         write_report(&mut out, &report).unwrap();
         let output = String::from_utf8(out.into_inner()).unwrap();
-        assert_eq!(output.lines().last(), Some("Accepted defeat on 2 files"));
+        assert_eq!(output.lines().last(), Some("Relaxed limits for 2 files"));
     }
 }

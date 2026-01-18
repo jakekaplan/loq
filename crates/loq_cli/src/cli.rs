@@ -26,8 +26,8 @@ pub enum Command {
     Init(InitArgs),
     /// Update baseline rules for files exceeding the limit.
     Baseline(BaselineArgs),
-    /// Accept defeat for currently failing files.
-    AcceptDefeat(AcceptDefeatArgs),
+    /// Relax limits for currently failing files.
+    Relax(RelaxArgs),
 }
 
 /// Output format for check results.
@@ -72,10 +72,10 @@ pub struct BaselineArgs {
     pub allow_growth: bool,
 }
 
-/// Arguments for the accept-defeat command.
+/// Arguments for the relax command.
 #[derive(Args, Debug, Clone)]
-pub struct AcceptDefeatArgs {
-    /// Specific files to accept defeat on.
+pub struct RelaxArgs {
+    /// Specific files to relax limits for.
     #[arg(value_name = "FILE")]
     pub files: Vec<PathBuf>,
 

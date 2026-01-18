@@ -128,18 +128,18 @@ are under the threshold, and ignores files that grew. Files cannot be
 rebaselined to a higher limit unless you pass `--allow-growth`. Use
 `--threshold 300` to set a custom limit.
 
-Need to ship while files are still too big? Accept defeat creates or updates
-exact-path rules for the files currently failing checks:
+Need to ship while files are still too big? Relax creates or updates exact-path
+rules for the files currently failing checks:
 
 ```bash
 # Use default buffer of 100 lines
-loq accept-defeat         
-  
-# Only update for one file     
-loq accept-defeat src/legacy.rs  
+loq relax
+
+# Only update for one file
+loq relax src/legacy.rs
 
 # Add 50 lines above current size
-loq accept-defeat --buffer 50    
+loq relax --buffer 50
 ```
 
 ## Add as a Pre-commit Hook

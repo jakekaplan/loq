@@ -1,4 +1,4 @@
-//! Integration tests for the accept-defeat command.
+//! Integration tests for the relax command.
 
 use assert_cmd::cargo::cargo_bin_cmd;
 use predicates::prelude::*;
@@ -22,7 +22,7 @@ fn strip_ansi(s: &str) -> String {
     re.replace_all(s, "").to_string()
 }
 
-fn parse_defeat_line(line: &str) -> Option<(usize, usize, &str)> {
+fn parse_relax_line(line: &str) -> Option<(usize, usize, &str)> {
     let mut parts = line.split_whitespace();
     let actual = parts.next()?;
     let arrow = parts.next()?;
@@ -43,13 +43,13 @@ fn creates_config_and_rule_when_missing() {
 
     let output = cargo_bin_cmd!("loq")
         .current_dir(temp.path())
-        .args(["accept-defeat"])
+        .args(["relax"])
         .output()
         .unwrap();
 
     assert!(output.status.success());
     let stdout = strip_ansi(&String::from_utf8_lossy(&output.stdout));
-    assert!(stdout.contains("Accepted defeat on 1 file"));
+    assert!(stdout.contains("Relaxed limits for 1 file"));
     assert!(stdout.lines().any(|line| {
         line.contains("src/legacy.rs")
             && line.contains("523")
@@ -77,7 +77,7 @@ max_lines = 600
 
     let output = cargo_bin_cmd!("loq")
         .current_dir(temp.path())
-        .args(["accept-defeat", "--buffer", "50", "src/legacy.rs"])
+        .args(["relax", "--buffer", "50", "src/legacy.rs"])
         .output()
         .unwrap();
 
@@ -108,10 +108,10 @@ max_lines = 700
 
     cargo_bin_cmd!("loq")
         .current_dir(temp.path())
-        .args(["accept-defeat"])
+        .args(["relax"])
         .assert()
         .success()
-        .stdout(predicate::str::contains("Accepted defeat on 1 file"));
+        .stdout(predicate::str::contains("Relaxed limits for 1 file"));
 
     let content = std::fs::read_to_string(temp.path().join("loq.toml")).unwrap();
     assert!(content.contains("path = \"**/*.rs\""));
@@ -127,13 +127,13 @@ fn exits_one_when_no_violations() {
 
     let output = cargo_bin_cmd!("loq")
         .current_dir(temp.path())
-        .args(["accept-defeat"])
+        .args(["relax"])
         .output()
         .unwrap();
 
     assert_eq!(output.status.code(), Some(1));
     let stdout = strip_ansi(&String::from_utf8_lossy(&output.stdout));
-    assert!(stdout.contains("No violations to accept"));
+    assert!(stdout.contains("No violations to relax"));
 }
 
 #[test]
@@ -146,15 +146,15 @@ fn orders_paths_and_applies_buffer_for_multiple_files() {
 
     let output = cargo_bin_cmd!("loq")
         .current_dir(temp.path())
-        .args(["accept-defeat", "--buffer", "3"])
+        .args(["relax", "--buffer", "3"])
         .output()
         .unwrap();
 
     assert!(output.status.success());
     let stdout = strip_ansi(&String::from_utf8_lossy(&output.stdout));
     let mut lines = stdout.lines().filter(|line| line.contains("->"));
-    let first = lines.next().and_then(parse_defeat_line).unwrap();
-    let second = lines.next().and_then(parse_defeat_line).unwrap();
+    let first = lines.next().and_then(parse_relax_line).unwrap();
+    let second = lines.next().and_then(parse_relax_line).unwrap();
     assert_eq!(first, (12, 15, "src/b.rs"));
     assert_eq!(second, (15, 18, "src/a.rs"));
 
