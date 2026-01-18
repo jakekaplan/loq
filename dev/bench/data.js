@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1768690681721,
+  "lastUpdate": 1768697146626,
   "repoUrl": "https://github.com/jakekaplan/loq",
   "entries": {
     "Benchmark": [
@@ -479,6 +479,54 @@ window.BENCHMARK_DATA = {
             "name": "ruff",
             "value": 0.12890401458,
             "range": "± 0.0013",
+            "unit": "seconds"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "40362401+jakekaplan@users.noreply.github.com",
+            "name": "Jake Kaplan",
+            "username": "jakekaplan"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "62d62c9e5659f73dd9117a329917392fedf9fb84",
+          "message": "Merge pull request #30 from jakekaplan/accept-defeat-to-relax\n\nRename `accept-defeat` to `relax`",
+          "timestamp": "2026-01-17T19:44:54-05:00",
+          "tree_id": "18a241642f4f6d73b76bd456940318d701dd6174",
+          "url": "https://github.com/jakekaplan/loq/commit/62d62c9e5659f73dd9117a329917392fedf9fb84"
+        },
+        "date": 1768697146206,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "cpython",
+            "value": 0.050970545,
+            "range": "± 0.0029",
+            "unit": "seconds"
+          },
+          {
+            "name": "airflow",
+            "value": 0.1427606369,
+            "range": "± 0.0008",
+            "unit": "seconds"
+          },
+          {
+            "name": "prefect",
+            "value": 0.05971009890000001,
+            "range": "± 0.0007",
+            "unit": "seconds"
+          },
+          {
+            "name": "ruff",
+            "value": 0.12560179440000002,
+            "range": "± 0.0017",
             "unit": "seconds"
           }
         ]
