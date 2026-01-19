@@ -106,7 +106,7 @@ exclude = [".git/**", "**/generated/**", "*.lock"]
 # with each violation when piping output to an LLM:
 fix_guidance = "Split large files: helpers → src/utils/, types → src/types/"
 
-# last match wins, ** matches any path
+# last match wins; * stays within a path segment, ** matches across directories
 [[rules]]                   
 path = "**/*.tsx"
 max_lines = 300

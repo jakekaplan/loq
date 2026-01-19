@@ -83,6 +83,11 @@ fn default_config_text() -> String {
         "# Rules override defaults for specific paths. Last match wins."
     )
     .unwrap();
+    writeln!(
+        out,
+        "# Globs: * stays within a path segment; ** matches across directories."
+    )
+    .unwrap();
     writeln!(out, "# [[rules]]").unwrap();
     writeln!(out, "# path = \"**/*.ext\"").unwrap();
     writeln!(out, "# max_lines = 300").unwrap();
