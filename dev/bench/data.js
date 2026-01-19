@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1768848656550,
+  "lastUpdate": 1768861119164,
   "repoUrl": "https://github.com/jakekaplan/loq",
   "entries": {
     "Benchmark": [
@@ -719,6 +719,54 @@ window.BENCHMARK_DATA = {
             "name": "ruff",
             "value": 0.12407336256000004,
             "range": "± 0.0006",
+            "unit": "seconds"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "40362401+jakekaplan@users.noreply.github.com",
+            "name": "Jake Kaplan",
+            "username": "jakekaplan"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "6fafd55d5ce8f9bca5d68c180ac31bc9c4c53c7c",
+          "message": "Merge pull request #36 from jakekaplan/fix-relax-exit-code\n\nfixed `relax` exit code",
+          "timestamp": "2026-01-19T17:17:31-05:00",
+          "tree_id": "3e5c6ae41265ff4087f0bdc0039c3deaaaab3318",
+          "url": "https://github.com/jakekaplan/loq/commit/6fafd55d5ce8f9bca5d68c180ac31bc9c4c53c7c"
+        },
+        "date": 1768861118308,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "cpython",
+            "value": 0.05403905604000001,
+            "range": "± 0.0039",
+            "unit": "seconds"
+          },
+          {
+            "name": "airflow",
+            "value": 0.14513170914,
+            "range": "± 0.0012",
+            "unit": "seconds"
+          },
+          {
+            "name": "prefect",
+            "value": 0.06253692654000001,
+            "range": "± 0.004",
+            "unit": "seconds"
+          },
+          {
+            "name": "ruff",
+            "value": 0.12776928374000002,
+            "range": "± 0.0024",
             "unit": "seconds"
           }
         ]
