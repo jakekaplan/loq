@@ -306,13 +306,14 @@ fn compile_patterns(patterns: &[String], source_path: &Path) -> Result<PatternLi
 
 fn compile_glob(pattern: &str, source_path: &Path) -> Result<GlobMatcher, ConfigError> {
     #[cfg(windows)]
-    let builder = {
-        let mut builder = GlobBuilder::new(pattern);
-        builder.case_insensitive(true);
-        builder
-    };
+    let mut builder = GlobBuilder::new(pattern);
     #[cfg(not(windows))]
-    let builder = GlobBuilder::new(pattern);
+    let mut builder = GlobBuilder::new(pattern);
+    #[cfg(windows)]
+    {
+        builder.case_insensitive(true);
+    }
+    builder.literal_separator(true);
     let glob = builder.build().map_err(|err| ConfigError::Glob {
         path: source_path.to_path_buf(),
         pattern: pattern.to_string(),
@@ -388,6 +389,26 @@ mod tests {
         let err =
             compile_config(ConfigOrigin::BuiltIn, PathBuf::from("."), config, None).unwrap_err();
         assert!(err.to_string().contains("invalid glob"));
+    }
+
+    #[test]
+    fn glob_star_does_not_cross_directories() {
+        let config = LoqConfig {
+            default_max_lines: None,
+            respect_gitignore: true,
+            exclude: vec![],
+            rules: vec![Rule {
+                path: vec!["src/*.rs".to_string()],
+                max_lines: 1,
+            }],
+            fix_guidance: None,
+        };
+        let compiled =
+            compile_config(ConfigOrigin::BuiltIn, PathBuf::from("."), config, None).unwrap();
+        let rule = &compiled.rules()[0];
+
+        assert!(rule.matches("src/lib.rs").is_some());
+        assert!(rule.matches("src/nested/lib.rs").is_none());
     }
 
     #[test]
