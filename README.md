@@ -147,7 +147,7 @@ loq relax --buffer 50
 ```yaml
 repos:
   - repo: https://github.com/jakekaplan/loq
-    rev: v0.1.0-alpha.6
+    rev: v0.1.0-alpha.7
     hooks:
       - id: loq
 ```
