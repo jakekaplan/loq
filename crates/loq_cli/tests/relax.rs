@@ -121,7 +121,7 @@ max_lines = 700
 }
 
 #[test]
-fn exits_one_when_no_violations() {
+fn exits_zero_when_no_violations() {
     let temp = TempDir::new().unwrap();
     write_file(&temp, "src/small.rs", &repeat_lines(10));
 
@@ -131,7 +131,7 @@ fn exits_one_when_no_violations() {
         .output()
         .unwrap();
 
-    assert_eq!(output.status.code(), Some(1));
+    assert!(output.status.success());
     let stdout = strip_ansi(&String::from_utf8_lossy(&output.stdout));
     assert!(stdout.contains("No violations to relax"));
 }

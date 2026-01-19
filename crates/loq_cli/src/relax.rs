@@ -40,7 +40,7 @@ pub fn run_relax<W1: WriteColor, W2: WriteColor>(
         Ok(report) => {
             if report.is_empty() {
                 let _ = writeln!(stdout, "No violations to relax");
-                return ExitStatus::Failure;
+                return ExitStatus::Success;
             }
             let _ = write_report(stdout, &report);
             ExitStatus::Success
