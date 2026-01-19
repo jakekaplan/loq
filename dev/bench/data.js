@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1768795588940,
+  "lastUpdate": 1768848656550,
   "repoUrl": "https://github.com/jakekaplan/loq",
   "entries": {
     "Benchmark": [
@@ -671,6 +671,54 @@ window.BENCHMARK_DATA = {
             "name": "ruff",
             "value": 0.12826274716,
             "range": "± 0.001",
+            "unit": "seconds"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "40362401+jakekaplan@users.noreply.github.com",
+            "name": "Jake Kaplan",
+            "username": "jakekaplan"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "baf5c6e1fc03de22b35e93aeda0066a042c470f8",
+          "message": "Merge pull request #35 from jakekaplan/fix-globs\n\nFix glob pattern matching",
+          "timestamp": "2026-01-19T13:50:03-05:00",
+          "tree_id": "a91d5903d385fd9ac64447c9bc35e0788064790a",
+          "url": "https://github.com/jakekaplan/loq/commit/baf5c6e1fc03de22b35e93aeda0066a042c470f8"
+        },
+        "date": 1768848656146,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "cpython",
+            "value": 0.052172354659999996,
+            "range": "± 0.0051",
+            "unit": "seconds"
+          },
+          {
+            "name": "airflow",
+            "value": 0.14635064936000003,
+            "range": "± 0.0116",
+            "unit": "seconds"
+          },
+          {
+            "name": "prefect",
+            "value": 0.05915001346,
+            "range": "± 0.0008",
+            "unit": "seconds"
+          },
+          {
+            "name": "ruff",
+            "value": 0.12407336256000004,
+            "range": "± 0.0006",
             "unit": "seconds"
           }
         ]
