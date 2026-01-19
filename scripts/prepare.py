@@ -195,8 +195,8 @@ def main():
     update_pyproject(pep440_version)
     update_readme(semver)
 
-    print("Running cargo update -p loq_core -p loq_fs -p loq_cli...")
-    run(["cargo", "update", "-p", "loq_core", "-p", "loq_fs", "-p", "loq_cli"])
+    print("Running cargo update -p loq_core -p loq_fs -p loq...")
+    run(["cargo", "update", "-p", "loq_core", "-p", "loq_fs", "-p", "loq"])
 
     print("Committing changes...")
     run(["git", "add"] + [str(REPO_ROOT / f) for f in VERSION_FILES])
