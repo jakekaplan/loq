@@ -136,7 +136,7 @@ loq relax
 loq relax src/legacy.rs
 
 # Add 50 lines above current size
-loq relax --buffer 50
+loq relax --extra 50
 ```
 
 ## Add as a Pre-commit Hook

@@ -26,7 +26,7 @@ pub enum Command {
     Init(InitArgs),
     /// Reset baseline rules to match current file sizes.
     Baseline(BaselineArgs),
-    /// Relax limits for currently failing files.
+    /// Add a buffer to current violations.
     Relax(RelaxArgs),
 }
 
@@ -76,6 +76,6 @@ pub struct RelaxArgs {
     pub files: Vec<PathBuf>,
 
     /// Extra lines to add above the current line count.
-    #[arg(long = "buffer", default_value_t = 100)]
-    pub buffer: usize,
+    #[arg(long = "extra", visible_alias = "buffer", default_value_t = 100)]
+    pub extra: usize,
 }
