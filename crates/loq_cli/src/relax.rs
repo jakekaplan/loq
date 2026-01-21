@@ -10,7 +10,8 @@ use toml_edit::DocumentMut;
 
 use crate::cli::RelaxArgs;
 use crate::config_edit::{
-    add_rule, collect_exact_path_rules, normalize_display_path, update_rule_max_lines,
+    add_rule, collect_exact_path_rules, default_document, normalize_display_path,
+    update_rule_max_lines,
 };
 use crate::output::{format_number, print_error, write_path};
 use crate::ExitStatus;
@@ -103,12 +104,6 @@ fn collect_violations(outcomes: &[loq_core::FileOutcome]) -> HashMap<String, usi
         }
     }
     violations
-}
-
-fn default_document() -> DocumentMut {
-    let mut doc = DocumentMut::new();
-    doc["default_max_lines"] = toml_edit::value(500_i64);
-    doc
 }
 
 fn apply_relax_changes(

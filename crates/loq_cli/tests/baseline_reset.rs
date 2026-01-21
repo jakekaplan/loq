@@ -1,4 +1,4 @@
-//! Integration tests for the --allow-growth flag.
+//! Integration tests for baseline reset behavior.
 
 use assert_cmd::cargo::cargo_bin_cmd;
 use predicates::prelude::*;
@@ -18,8 +18,7 @@ fn repeat_lines(count: usize) -> String {
 
 #[test]
 fn updates_grown_files() {
-    // Without --allow-growth, grown files are left unchanged
-    // With --allow-growth, grown files get updated limits
+    // Baselining should reset limits to the current file size.
     let temp = TempDir::new().unwrap();
     let config = r#"default_max_lines = 500
 
@@ -33,7 +32,7 @@ max_lines = 600
 
     cargo_bin_cmd!("loq")
         .current_dir(temp.path())
-        .args(["baseline", "--allow-growth"])
+        .args(["baseline"])
         .assert()
         .success()
         .stdout(predicate::str::contains("Updated 1 rule"));
@@ -45,9 +44,9 @@ max_lines = 600
 
 #[test]
 fn handles_mixed_changes() {
-    // Scenario with --allow-growth:
-    // - file_a: shrinks (always updated)
-    // - file_b: grows (updated because of flag)
+    // Scenario:
+    // - file_a: shrinks (updated)
+    // - file_b: grows (updated)
     // - file_c: unchanged (no update needed)
     // - file_d: drops below threshold (removed)
     let temp = TempDir::new().unwrap();
@@ -82,7 +81,7 @@ max_lines = 550
 
     cargo_bin_cmd!("loq")
         .current_dir(temp.path())
-        .args(["baseline", "--allow-growth"])
+        .args(["baseline"])
         .assert()
         .success()
         .stdout(predicate::str::contains("Updated 2 rules"))
@@ -106,35 +105,8 @@ max_lines = 550
 }
 
 #[test]
-fn without_flag_grown_files_stay_unchanged() {
-    // Verify that without the flag, grown files are NOT updated
-    let temp = TempDir::new().unwrap();
-    let config = r#"default_max_lines = 500
-
-[[rules]]
-path = "grown.txt"
-max_lines = 600
-"#;
-    write_file(&temp, "loq.toml", config);
-    // File grew from 600 to 700
-    write_file(&temp, "grown.txt", &repeat_lines(700));
-
-    cargo_bin_cmd!("loq")
-        .current_dir(temp.path())
-        .args(["baseline"]) // No --allow-growth
-        .assert()
-        .success()
-        .stdout(predicate::str::contains("No changes needed"));
-
-    let updated = std::fs::read_to_string(temp.path().join("loq.toml")).unwrap();
-    // Limit should still be 600, not 700
-    assert!(updated.contains("max_lines = 600"));
-    assert!(!updated.contains("max_lines = 700"));
-}
-
-#[test]
 fn combined_with_threshold() {
-    // --allow-growth works with --threshold
+    // Reset works with --threshold
     let temp = TempDir::new().unwrap();
     let config = r#"default_max_lines = 500
 
@@ -147,10 +119,10 @@ max_lines = 400
     write_file(&temp, "file.txt", &repeat_lines(450));
 
     // With --threshold 300, file is a violation (450 > 300)
-    // With --allow-growth, the limit should update from 400 to 450
+    // The limit should update from 400 to 450
     cargo_bin_cmd!("loq")
         .current_dir(temp.path())
-        .args(["baseline", "--threshold", "300", "--allow-growth"])
+        .args(["baseline", "--threshold", "300"])
         .assert()
         .success()
         .stdout(predicate::str::contains("Updated 1 rule"));
@@ -162,7 +134,7 @@ max_lines = 400
 
 #[test]
 fn only_affects_exact_path_rules() {
-    // Glob rules should never be updated, even with --allow-growth
+    // Glob rules should never be updated
     let temp = TempDir::new().unwrap();
     let config = r#"default_max_lines = 500
 
@@ -182,7 +154,7 @@ max_lines = 600
 
     cargo_bin_cmd!("loq")
         .current_dir(temp.path())
-        .args(["baseline", "--allow-growth"])
+        .args(["baseline"])
         .assert()
         .success();
 
@@ -213,7 +185,7 @@ max_lines = 800
 
     cargo_bin_cmd!("loq")
         .current_dir(temp.path())
-        .args(["baseline", "--allow-growth"])
+        .args(["baseline"])
         .assert()
         .success();
 

@@ -35,7 +35,7 @@ pub fn run_init<W1: WriteColor, W2: WriteColor>(
 }
 
 /// Adds `.loq_cache` to `.gitignore` if the file exists and doesn't already contain it.
-fn add_to_gitignore(cwd: &Path) {
+pub(crate) fn add_to_gitignore(cwd: &Path) {
     let gitignore_path = cwd.join(".gitignore");
 
     // Only modify existing .gitignore files

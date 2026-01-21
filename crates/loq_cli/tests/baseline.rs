@@ -77,16 +77,25 @@ fn rules_are_respected_after_baseline() {
 }
 
 #[test]
-fn requires_config() {
+fn creates_config_when_missing() {
     let temp = TempDir::new().unwrap();
-    write_file(&temp, "file.txt", "content\n");
+    write_file(&temp, ".gitignore", "target\n");
+    write_file(&temp, "file.txt", &repeat_lines(600));
 
     cargo_bin_cmd!("loq")
         .current_dir(temp.path())
         .args(["baseline"])
         .assert()
-        .failure()
-        .stderr(predicate::str::contains("loq init"));
+        .success()
+        .stdout(predicate::str::contains("Added 1 rule"));
+
+    let config = std::fs::read_to_string(temp.path().join("loq.toml")).unwrap();
+    assert!(config.contains("default_max_lines = 500"));
+    assert!(config.contains("\"file.txt\""));
+    assert!(config.contains("max_lines = 600"));
+
+    let gitignore = std::fs::read_to_string(temp.path().join(".gitignore")).unwrap();
+    assert!(gitignore.contains(".loq_cache"));
 }
 
 #[test]
@@ -260,7 +269,7 @@ fn handles_multiple_violations() {
 }
 
 #[test]
-fn leaves_unchanged_if_file_grew() {
+fn updates_rule_if_file_grew() {
     let temp = TempDir::new().unwrap();
     let config = r#"default_max_lines = 500
 
@@ -276,10 +285,11 @@ max_lines = 600
         .args(["baseline"])
         .assert()
         .success()
-        .stdout(predicate::str::contains("No changes needed"));
+        .stdout(predicate::str::contains("Updated 1 rule"));
 
     let updated = std::fs::read_to_string(temp.path().join("loq.toml")).unwrap();
-    assert!(updated.contains("max_lines = 600"));
+    assert!(updated.contains("max_lines = 650"));
+    assert!(!updated.contains("max_lines = 600"));
 }
 
 #[test]

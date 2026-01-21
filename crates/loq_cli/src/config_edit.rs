@@ -40,7 +40,8 @@ pub(crate) fn collect_exact_path_rules(doc: &DocumentMut) -> HashMap<String, (us
                 // Only consider single-path rules that look like exact paths (no glob chars)
                 if paths.len() == 1 && is_exact_path(&paths[0]) {
                     if let Some(max_lines) = rule.get("max_lines").and_then(Item::as_integer) {
-                        rules.insert(paths[0].clone(), (max_lines as usize, idx));
+                        let normalized = normalize_display_path(&paths[0]);
+                        rules.insert(normalized, (max_lines as usize, idx));
                     }
                 }
             }
@@ -90,6 +91,15 @@ pub(crate) fn add_rule(doc: &mut DocumentMut, path: &str, max_lines: usize) {
         rule["max_lines"] = toml_edit::value(max_lines as i64);
         rules.push(rule);
     }
+}
+
+/// Create a default document for initializing `loq.toml`.
+pub(crate) fn default_document() -> DocumentMut {
+    let mut doc = DocumentMut::new();
+    doc["default_max_lines"] = toml_edit::value(500_i64);
+    doc["respect_gitignore"] = toml_edit::value(true);
+    doc["exclude"] = Item::Value(toml_edit::Value::Array(toml_edit::Array::default()));
+    doc
 }
 
 #[cfg(test)]
@@ -175,5 +185,36 @@ max_lines = 30
         assert_eq!(rules.len(), 1);
         let first = rules.get(0).unwrap();
         assert_eq!(first.get("path").and_then(Item::as_str), Some("src/a.rs"));
+    }
+
+    #[test]
+    fn collect_exact_path_rules_normalizes_dot_slash() {
+        let doc: DocumentMut = r#"
+[[rules]]
+path = "./src/a.rs"
+max_lines = 10
+"#
+        .parse()
+        .unwrap();
+
+        let rules = collect_exact_path_rules(&doc);
+        assert_eq!(rules.len(), 1);
+        assert_eq!(rules["src/a.rs"].0, 10);
+    }
+
+    #[test]
+    fn default_document_has_expected_defaults() {
+        let doc = default_document();
+        assert_eq!(
+            doc.get("default_max_lines").and_then(Item::as_integer),
+            Some(500)
+        );
+        assert_eq!(
+            doc.get("respect_gitignore").and_then(Item::as_bool),
+            Some(true)
+        );
+        let exclude = doc.get("exclude").and_then(Item::as_array);
+        assert!(exclude.is_some());
+        assert_eq!(exclude.unwrap().len(), 0);
     }
 }

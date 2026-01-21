@@ -114,19 +114,16 @@ max_lines = 300
 
 ## Managing legacy files
 
-Existing large files? Baseline them and ratchet down over time:
+Existing large files? Baseline them to the current state:
 
 ```bash
-# Create loq.toml first
-loq init      
-# Add rules for files over the limit 
-loq baseline 
+# Create loq.toml (if missing) and add rules for files over the limit
+loq baseline
 ```
 
-Run periodically. It tightens limits as files shrink, removes rules once files
-are under the threshold, and ignores files that grew. Files cannot be
-rebaselined to a higher limit unless you pass `--allow-growth`. Use
-`--threshold 300` to set a custom limit.
+Run it whenever you want to accept the current sizes. It updates limits to
+match current line counts, removes rules once files are under the threshold,
+and adds rules for new violations. Use `--threshold 300` to set a custom limit.
 
 Need to ship while files are still too big? Relax creates or updates exact-path
 rules for the files currently failing checks:

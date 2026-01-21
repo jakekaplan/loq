@@ -24,7 +24,7 @@ pub enum Command {
     Check(CheckArgs),
     /// Create a loq.toml config file.
     Init(InitArgs),
-    /// Update baseline rules for files exceeding the limit.
+    /// Reset baseline rules to match current file sizes.
     Baseline(BaselineArgs),
     /// Relax limits for currently failing files.
     Relax(RelaxArgs),
@@ -66,10 +66,6 @@ pub struct BaselineArgs {
     /// Line threshold for baseline (defaults to `default_max_lines` from config).
     #[arg(long = "threshold")]
     pub threshold: Option<usize>,
-
-    /// Allow increasing limits for files that grew beyond their baseline.
-    #[arg(long = "allow-growth")]
-    pub allow_growth: bool,
 }
 
 /// Arguments for the relax command.
