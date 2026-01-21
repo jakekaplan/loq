@@ -125,6 +125,12 @@ Run it whenever you want to accept the current sizes. It updates limits to
 match current line counts, removes rules once files are under the threshold,
 and adds rules for new violations. Use `--threshold 300` to set a custom limit.
 
+Want to ratchet limits down over time without raising them? Use tighten:
+
+```bash
+loq tighten
+```
+
 Need to ship while files are still too big? Relax creates or updates exact-path
 rules for the files currently failing checks:
 

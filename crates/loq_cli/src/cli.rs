@@ -26,6 +26,8 @@ pub enum Command {
     Init(InitArgs),
     /// Reset baseline rules to match current file sizes.
     Baseline(BaselineArgs),
+    /// Tighten baseline rules without raising limits.
+    Tighten(TightenArgs),
     /// Add a buffer to current violations.
     Relax(RelaxArgs),
 }
@@ -64,6 +66,14 @@ pub struct InitArgs {}
 #[derive(Args, Debug, Clone)]
 pub struct BaselineArgs {
     /// Line threshold for baseline (defaults to `default_max_lines` from config).
+    #[arg(long = "threshold")]
+    pub threshold: Option<usize>,
+}
+
+/// Arguments for the tighten command.
+#[derive(Args, Debug, Clone)]
+pub struct TightenArgs {
+    /// Line threshold for tightening (defaults to `default_max_lines` from config).
     #[arg(long = "threshold")]
     pub threshold: Option<usize>,
 }
