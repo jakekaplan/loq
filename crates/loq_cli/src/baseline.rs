@@ -10,9 +10,10 @@ use toml_edit::{DocumentMut, Item};
 
 use crate::cli::BaselineArgs;
 use crate::config_edit::{
-    add_rule, collect_exact_path_rules, extract_paths, is_exact_path, normalize_display_path,
-    remove_rule, update_rule_max_lines,
+    add_rule, collect_exact_path_rules, default_document, extract_paths, is_exact_path,
+    normalize_display_path, remove_rule, update_rule_max_lines,
 };
+use crate::init::add_to_gitignore;
 use crate::output::print_error;
 use crate::ExitStatus;
 
@@ -47,17 +48,17 @@ fn run_baseline_inner(args: &BaselineArgs) -> Result<BaselineStats> {
     let cwd = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
     let config_path = cwd.join("loq.toml");
 
-    // Require existing config
-    if !config_path.exists() {
-        anyhow::bail!("loq.toml not found. Run `loq init` first.");
-    }
-
-    // Step 1: Read and parse the config file
-    let config_text = std::fs::read_to_string(&config_path)
-        .with_context(|| format!("failed to read {}", config_path.display()))?;
-    let mut doc: DocumentMut = config_text
-        .parse()
-        .with_context(|| format!("failed to parse {}", config_path.display()))?;
+    let config_exists = config_path.exists();
+    // Step 1: Read and parse the config file (or create defaults if missing)
+    let mut doc: DocumentMut = if config_exists {
+        let config_text = std::fs::read_to_string(&config_path)
+            .with_context(|| format!("failed to read {}", config_path.display()))?;
+        config_text
+            .parse()
+            .with_context(|| format!("failed to parse {}", config_path.display()))?
+    } else {
+        default_document()
+    };
 
     // Step 2: Determine threshold (--threshold or default_max_lines from config)
     #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
@@ -74,11 +75,14 @@ fn run_baseline_inner(args: &BaselineArgs) -> Result<BaselineStats> {
     let existing_rules = collect_exact_path_rules(&doc);
 
     // Step 5: Compute changes
-    let stats = apply_baseline_changes(&mut doc, &violations, &existing_rules, args.allow_growth);
+    let stats = apply_baseline_changes(&mut doc, &violations, &existing_rules);
 
     // Step 6: Write config back
     std::fs::write(&config_path, doc.to_string())
         .with_context(|| format!("failed to write {}", config_path.display()))?;
+    if !config_exists {
+        add_to_gitignore(&cwd);
+    }
 
     Ok(stats)
 }
@@ -167,7 +171,6 @@ fn apply_baseline_changes(
     doc: &mut DocumentMut,
     violations: &HashMap<String, usize>,
     existing_rules: &HashMap<String, (usize, usize)>,
-    allow_growth: bool,
 ) -> BaselineStats {
     let mut stats = BaselineStats {
         added: 0,
@@ -181,17 +184,11 @@ fn apply_baseline_changes(
     // Process existing exact-path rules
     for (path, (current_limit, idx)) in existing_rules {
         if let Some(&actual) = violations.get(path) {
-            // File still violates - update if it changed size
-            if actual < *current_limit {
-                // File shrunk - always tighten the limit
-                update_rule_max_lines(doc, *idx, actual);
-                stats.updated += 1;
-            } else if actual > *current_limit && allow_growth {
-                // File grew - only update if --allow-growth is set
+            // File still violates - reset to current size if it changed
+            if actual != *current_limit {
                 update_rule_max_lines(doc, *idx, actual);
                 stats.updated += 1;
             }
-            // If actual == current_limit, or grew without --allow-growth, leave unchanged
         } else {
             // File is now compliant (under threshold) - remove the rule
             indices_to_remove.push(*idx);
