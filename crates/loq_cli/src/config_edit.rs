@@ -201,4 +201,20 @@ max_lines = 10
         assert_eq!(rules.len(), 1);
         assert_eq!(rules["src/a.rs"].0, 10);
     }
+
+    #[test]
+    fn default_document_has_expected_defaults() {
+        let doc = default_document();
+        assert_eq!(
+            doc.get("default_max_lines").and_then(Item::as_integer),
+            Some(500)
+        );
+        assert_eq!(
+            doc.get("respect_gitignore").and_then(Item::as_bool),
+            Some(true)
+        );
+        let exclude = doc.get("exclude").and_then(Item::as_array);
+        assert!(exclude.is_some());
+        assert_eq!(exclude.unwrap().len(), 0);
+    }
 }
