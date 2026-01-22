@@ -13,7 +13,7 @@ use crate::config_edit::{
     add_rule, collect_exact_path_rules, load_doc_or_default, persist_doc, update_rule_max_lines,
 };
 use crate::output::{
-    change_style, max_number_width, print_error, write_change_line, ChangeKind, ChangeRow,
+    change_style, max_formatted_width, print_error, write_change_row, ChangeKind, ChangeRow,
 };
 use crate::ExitStatus;
 use loq_fs::normalize_display_path;
@@ -127,14 +127,14 @@ fn write_report<W: WriteColor>(writer: &mut W, report: &RelaxReport) -> std::io:
 
     let mut changes: Vec<_> = report.changes.iter().collect();
     changes.sort_by_key(|change| (change.to, change.from, change.path.as_str()));
-    let width = max_number_width(
+    let width = max_formatted_width(
         changes
             .iter()
             .flat_map(|change| change.from.into_iter().chain(change.to)),
     );
 
     for change in changes {
-        write_change_line(
+        write_change_row(
             writer,
             &style,
             width,

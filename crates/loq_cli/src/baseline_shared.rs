@@ -12,7 +12,7 @@ use crate::config_edit::{extract_paths, is_exact_path};
 use loq_fs::normalize_display_path;
 
 /// Find all files that violate the given threshold.
-pub(crate) fn find_violations(
+pub(crate) fn scan_violations_with_threshold(
     cwd: &Path,
     doc: &DocumentMut,
     threshold: usize,

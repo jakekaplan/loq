@@ -379,6 +379,6 @@ fn normalize_path_strips_leading_dot_slash() {
 fn relative_path_handles_verbatim_root() {
     let path = Path::new(r"C:\repo\project\generated\big.txt");
     let root = Path::new(r"\\?\C:\repo\project");
-    let relative = relative_path(path, root);
+    let relative = relative_path_for_match(path, root);
     assert_eq!(relative, "generated/big.txt");
 }

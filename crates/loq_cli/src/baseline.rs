@@ -7,14 +7,14 @@ use anyhow::Result;
 use termcolor::WriteColor;
 use toml_edit::DocumentMut;
 
-use crate::baseline_shared::find_violations;
+use crate::baseline_shared::scan_violations_with_threshold;
 use crate::cli::BaselineArgs;
 use crate::config_edit::{
     add_rule, collect_exact_path_rules, load_doc_or_default, persist_doc, remove_rule,
     threshold_from_doc, update_rule_max_lines,
 };
 use crate::output::{
-    change_style, max_number_width, print_error, write_change_line, ChangeKind, ChangeRow,
+    change_style, max_formatted_width, print_error, write_change_row, ChangeKind, ChangeRow,
 };
 use crate::ExitStatus;
 
@@ -57,7 +57,8 @@ fn run_baseline_inner(args: &BaselineArgs) -> Result<BaselineReport> {
     let threshold = threshold_from_doc(&doc, args.threshold);
 
     // Step 3: Run check to find violations (respects config's exclude and gitignore settings)
-    let violations = find_violations(&cwd, &doc, threshold, "baseline check failed")?;
+    let violations =
+        scan_violations_with_threshold(&cwd, &doc, threshold, "baseline check failed")?;
 
     // Step 4: Collect existing exact-path rules (baseline candidates)
     let existing_rules = collect_exact_path_rules(&doc);
@@ -142,7 +143,7 @@ fn write_report<W: WriteColor>(writer: &mut W, report: &BaselineReport) -> std::
 
     let mut changes: Vec<_> = report.changes.iter().collect();
     changes.sort_by_key(|change| (change_sort_value(change), change.path.as_str()));
-    let width = max_number_width(
+    let width = max_formatted_width(
         changes
             .iter()
             .flat_map(|change| change.from.into_iter().chain(change.to)),
@@ -220,7 +221,7 @@ fn write_change_lines<W: WriteColor>(
         }
 
         let symbol = change.kind.symbol();
-        write_change_line(
+        write_change_row(
             writer,
             style,
             width,

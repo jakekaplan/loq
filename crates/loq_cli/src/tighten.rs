@@ -7,14 +7,14 @@ use anyhow::Result;
 use termcolor::WriteColor;
 use toml_edit::DocumentMut;
 
-use crate::baseline_shared::find_violations;
+use crate::baseline_shared::scan_violations_with_threshold;
 use crate::cli::TightenArgs;
 use crate::config_edit::{
     collect_exact_path_rules, load_doc_or_default, persist_doc, remove_rule, threshold_from_doc,
     update_rule_max_lines,
 };
 use crate::output::{
-    change_style, max_number_width, print_error, write_change_line, ChangeKind, ChangeRow,
+    change_style, max_formatted_width, print_error, write_change_row, ChangeKind, ChangeRow,
 };
 use crate::ExitStatus;
 
@@ -54,7 +54,7 @@ fn run_tighten_inner(args: &TightenArgs) -> Result<TightenReport> {
     let (mut doc, config_exists) = load_doc_or_default(&config_path)?;
     let threshold = threshold_from_doc(&doc, args.threshold);
 
-    let violations = find_violations(&cwd, &doc, threshold, "tighten check failed")?;
+    let violations = scan_violations_with_threshold(&cwd, &doc, threshold, "tighten check failed")?;
     let existing_rules = collect_exact_path_rules(&doc);
     let report = apply_tighten_changes(&mut doc, &violations, &existing_rules);
 
@@ -105,14 +105,14 @@ fn write_report<W: WriteColor>(writer: &mut W, report: &TightenReport) -> std::i
         let mut changes: Vec<_> = report.changes.iter().collect();
         changes.sort_by_key(|change| (change.to, change.path.as_str()));
 
-        let width = max_number_width(
+        let width = max_formatted_width(
             changes
                 .iter()
                 .flat_map(|change| change.from.into_iter().chain(change.to)),
         );
 
         for change in changes {
-            write_change_line(
+            write_change_row(
                 writer,
                 &style,
                 width,

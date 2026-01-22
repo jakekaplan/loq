@@ -84,7 +84,7 @@ pub fn change_style() -> ChangeStyle {
 }
 
 /// Computes a display width for formatted numbers (minimum 6).
-pub fn max_number_width<I>(values: I) -> usize
+pub fn max_formatted_width<I>(values: I) -> usize
 where
     I: IntoIterator<Item = usize>,
 {
@@ -93,7 +93,7 @@ where
         .fold(6, |current, value| current.max(format_number(value).len()))
 }
 
-pub fn write_change_line<W: WriteColor>(
+pub fn write_change_row<W: WriteColor>(
     writer: &mut W,
     style: &ChangeStyle,
     width: usize,
