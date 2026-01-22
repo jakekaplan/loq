@@ -146,6 +146,23 @@ pub fn run_check(paths: Vec<PathBuf>, options: CheckOptions) -> Result<CheckOutp
     })
 }
 
+/// Normalizes a path string for display and matching.
+///
+/// - Converts backslashes to forward slashes (Windows)
+/// - Strips leading `./` prefix (walker returns `./foo` when started from `.`)
+#[must_use]
+pub fn normalize_display_path(path: &str) -> String {
+    #[cfg(windows)]
+    {
+        let path = path.replace('\\', "/");
+        path.strip_prefix("./").unwrap_or(&path).to_string()
+    }
+    #[cfg(not(windows))]
+    {
+        path.strip_prefix("./").unwrap_or(path).to_string()
+    }
+}
+
 fn check_group(
     paths: &[PathBuf],
     compiled: &CompiledConfig,
@@ -180,7 +197,7 @@ fn check_file(
         kind,
     };
 
-    let relative_path = relative_path(&abs_path, &compiled.root_dir);
+    let relative_path = relative_path_for_match(&abs_path, &compiled.root_dir);
 
     let kind = match decide(compiled, &relative_path) {
         Decision::SkipNoLimit => OutcomeKind::NoLimit,
@@ -203,43 +220,24 @@ fn check_file_lines(
     let mtime = std::fs::metadata(path).and_then(|m| m.modified()).ok();
 
     // Try cache first (using relative path as key for consistency across directories)
-    if let Some(mt) = mtime {
-        if let Ok(cache) = file_cache.lock() {
-            if let Some(result) = cache.get(cache_key, mt) {
-                return cached_result_to_outcome(result, limit, matched_by);
-            }
-        }
+    if let Some(outcome) = try_cached_outcome(cache_key, mtime, file_cache, limit, &matched_by) {
+        return outcome;
     }
 
     // Cache miss - read file
     match count::inspect_file(path) {
         Ok(count::FileInspection::Binary) => {
-            if let Some(mt) = mtime {
-                if let Ok(mut cache) = file_cache.lock() {
-                    cache.insert(cache_key.to_string(), mt, cache::CachedResult::Binary);
-                }
-            }
+            cache_result(file_cache, cache_key, mtime, cache::CachedResult::Binary);
             OutcomeKind::Binary
         }
         Ok(count::FileInspection::Text { lines }) => {
-            if let Some(mt) = mtime {
-                if let Ok(mut cache) = file_cache.lock() {
-                    cache.insert(cache_key.to_string(), mt, cache::CachedResult::Text(lines));
-                }
-            }
-            if lines > limit {
-                OutcomeKind::Violation {
-                    limit,
-                    actual: lines,
-                    matched_by,
-                }
-            } else {
-                OutcomeKind::Pass {
-                    limit,
-                    actual: lines,
-                    matched_by,
-                }
-            }
+            cache_result(
+                file_cache,
+                cache_key,
+                mtime,
+                cache::CachedResult::Text(lines),
+            );
+            outcome_for_lines(lines, limit, matched_by)
         }
         // Missing/Unreadable can't be cached (no mtime available)
         Err(count::CountError::Missing) => OutcomeKind::Missing,
@@ -249,35 +247,71 @@ fn check_file_lines(
     }
 }
 
+fn try_cached_outcome(
+    cache_key: &str,
+    mtime: Option<std::time::SystemTime>,
+    file_cache: &Mutex<cache::Cache>,
+    limit: usize,
+    matched_by: &loq_core::MatchBy,
+) -> Option<OutcomeKind> {
+    if let Some(mt) = mtime {
+        if let Ok(cache) = file_cache.lock() {
+            if let Some(result) = cache.get(cache_key, mt) {
+                return Some(cached_result_to_outcome(result, limit, matched_by.clone()));
+            }
+        }
+    }
+    None
+}
+
+fn cache_result(
+    file_cache: &Mutex<cache::Cache>,
+    cache_key: &str,
+    mtime: Option<std::time::SystemTime>,
+    result: cache::CachedResult,
+) {
+    if let Some(mt) = mtime {
+        if let Ok(mut cache) = file_cache.lock() {
+            cache.insert(cache_key.to_string(), mt, result);
+        }
+    }
+}
+
 fn cached_result_to_outcome(
     result: cache::CachedResult,
     limit: usize,
     matched_by: loq_core::MatchBy,
 ) -> OutcomeKind {
     match result {
-        cache::CachedResult::Text(lines) => {
-            if lines > limit {
-                OutcomeKind::Violation {
-                    limit,
-                    actual: lines,
-                    matched_by,
-                }
-            } else {
-                OutcomeKind::Pass {
-                    limit,
-                    actual: lines,
-                    matched_by,
-                }
-            }
-        }
+        cache::CachedResult::Text(lines) => outcome_for_lines(lines, limit, matched_by),
         cache::CachedResult::Binary => OutcomeKind::Binary,
+    }
+}
+
+const fn outcome_for_lines(
+    lines: usize,
+    limit: usize,
+    matched_by: loq_core::MatchBy,
+) -> OutcomeKind {
+    if lines > limit {
+        OutcomeKind::Violation {
+            limit,
+            actual: lines,
+            matched_by,
+        }
+    } else {
+        OutcomeKind::Pass {
+            limit,
+            actual: lines,
+            matched_by,
+        }
     }
 }
 
 /// Computes a path relative to root, normalized to forward slashes.
 ///
 /// Falls back to the original path if it cannot be made relative.
-pub(crate) fn relative_path(path: &Path, root: &Path) -> String {
+pub(crate) fn relative_path_for_match(path: &Path, root: &Path) -> String {
     let relative = {
         #[cfg(windows)]
         {
@@ -334,8 +368,7 @@ fn strip_verbatim_prefix(path: &Path) -> PathBuf {
 /// - Strips leading `./` prefix (walker returns `./foo` when started from `.`)
 #[cfg(windows)]
 fn normalize_path(path: &Path) -> String {
-    let s = path.to_string_lossy().replace('\\', "/");
-    s.strip_prefix("./").unwrap_or(&s).to_string()
+    normalize_display_path(path.to_string_lossy().as_ref())
 }
 
 /// Normalizes a path for pattern matching.
@@ -343,8 +376,7 @@ fn normalize_path(path: &Path) -> String {
 /// Strips leading `./` prefix (walker returns `./foo` when started from `.`).
 #[cfg(not(windows))]
 fn normalize_path(path: &Path) -> String {
-    let s = path.to_string_lossy();
-    s.strip_prefix("./").unwrap_or(&s).to_string()
+    normalize_display_path(path.to_string_lossy().as_ref())
 }
 
 #[cfg(test)]

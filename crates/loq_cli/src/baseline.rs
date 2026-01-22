@@ -3,34 +3,23 @@
 use std::collections::HashMap;
 use std::path::PathBuf;
 
-use anyhow::{Context, Result};
-use termcolor::{Color, ColorSpec, WriteColor};
-use toml_edit::{DocumentMut, Item};
+use anyhow::Result;
+use termcolor::WriteColor;
+use toml_edit::DocumentMut;
 
-use crate::baseline_shared::find_violations;
+use crate::baseline_shared::scan_violations_with_threshold;
 use crate::cli::BaselineArgs;
 use crate::config_edit::{
-    add_rule, collect_exact_path_rules, default_document, remove_rule, update_rule_max_lines,
+    add_rule, collect_exact_path_rules, load_doc_or_default, persist_doc, remove_rule,
+    threshold_from_doc, update_rule_max_lines,
 };
-use crate::init::add_to_gitignore;
-use crate::output::{format_number, print_error, write_path};
+use crate::output::{
+    change_style, max_formatted_width, print_error, write_change_row, ChangeKind, ChangeRow,
+};
 use crate::ExitStatus;
 
-enum BaselineChangeKind {
-    Added,
-    Updated,
-    Removed,
-}
-
-struct BaselineChange {
-    path: String,
-    from: usize,
-    to: Option<usize>,
-    kind: BaselineChangeKind,
-}
-
 struct BaselineReport {
-    changes: Vec<BaselineChange>,
+    changes: Vec<ChangeRow>,
 }
 
 impl BaselineReport {
@@ -61,28 +50,15 @@ fn run_baseline_inner(args: &BaselineArgs) -> Result<BaselineReport> {
     let cwd = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
     let config_path = cwd.join("loq.toml");
 
-    let config_exists = config_path.exists();
     // Step 1: Read and parse the config file (or create defaults if missing)
-    let mut doc: DocumentMut = if config_exists {
-        let config_text = std::fs::read_to_string(&config_path)
-            .with_context(|| format!("failed to read {}", config_path.display()))?;
-        config_text
-            .parse()
-            .with_context(|| format!("failed to parse {}", config_path.display()))?
-    } else {
-        default_document()
-    };
+    let (mut doc, config_exists) = load_doc_or_default(&config_path)?;
 
     // Step 2: Determine threshold (--threshold or default_max_lines from config)
-    #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
-    let threshold = args.threshold.unwrap_or_else(|| {
-        doc.get("default_max_lines")
-            .and_then(Item::as_integer)
-            .map_or(500, |v| v as usize)
-    });
+    let threshold = threshold_from_doc(&doc, args.threshold);
 
     // Step 3: Run check to find violations (respects config's exclude and gitignore settings)
-    let violations = find_violations(&cwd, &doc, threshold, "baseline check failed")?;
+    let violations =
+        scan_violations_with_threshold(&cwd, &doc, threshold, "baseline check failed")?;
 
     // Step 4: Collect existing exact-path rules (baseline candidates)
     let existing_rules = collect_exact_path_rules(&doc);
@@ -91,11 +67,7 @@ fn run_baseline_inner(args: &BaselineArgs) -> Result<BaselineReport> {
     let report = apply_baseline_changes(&mut doc, &violations, &existing_rules);
 
     // Step 6: Write config back
-    std::fs::write(&config_path, doc.to_string())
-        .with_context(|| format!("failed to write {}", config_path.display()))?;
-    if !config_exists {
-        add_to_gitignore(&cwd);
-    }
+    persist_doc(&cwd, &config_path, &doc, config_exists)?;
 
     Ok(report)
 }
@@ -117,21 +89,21 @@ fn apply_baseline_changes(
             // File still violates - reset to current size if it changed
             if actual != *current_limit {
                 update_rule_max_lines(doc, *idx, actual);
-                changes.push(BaselineChange {
+                changes.push(ChangeRow {
                     path: path.clone(),
-                    from: *current_limit,
+                    from: Some(*current_limit),
                     to: Some(actual),
-                    kind: BaselineChangeKind::Updated,
+                    kind: ChangeKind::Updated,
                 });
             }
         } else {
             // File is now compliant (under threshold) - remove the rule
             indices_to_remove.push(*idx);
-            changes.push(BaselineChange {
+            changes.push(ChangeRow {
                 path: path.clone(),
-                from: *current_limit,
+                from: Some(*current_limit),
                 to: None,
-                kind: BaselineChangeKind::Removed,
+                kind: ChangeKind::Removed,
             });
         }
     }
@@ -151,11 +123,11 @@ fn apply_baseline_changes(
 
     for (path, &actual) in new_violations {
         add_rule(doc, path, actual);
-        changes.push(BaselineChange {
+        changes.push(ChangeRow {
             path: (*path).clone(),
-            from: actual,
+            from: None,
             to: Some(actual),
-            kind: BaselineChangeKind::Added,
+            kind: ChangeKind::Added,
         });
     }
 
@@ -167,25 +139,22 @@ fn write_report<W: WriteColor>(writer: &mut W, report: &BaselineReport) -> std::
         return Ok(());
     }
 
-    let mut from_spec = ColorSpec::new();
-    from_spec.set_fg(Some(Color::Red)).set_bold(true);
-    let mut to_spec = ColorSpec::new();
-    to_spec.set_fg(Some(Color::Green));
-    let mut green_spec = ColorSpec::new();
-    green_spec.set_fg(Some(Color::Green));
-    let mut dimmed_spec = ColorSpec::new();
-    dimmed_spec.set_dimmed(true);
+    let style = change_style();
 
     let mut changes: Vec<_> = report.changes.iter().collect();
     changes.sort_by_key(|change| (change_sort_value(change), change.path.as_str()));
-    let width = max_width(&changes);
-    let counts = write_change_lines(writer, &changes, width, &from_spec, &to_spec, &dimmed_spec)?;
+    let width = max_formatted_width(
+        changes
+            .iter()
+            .flat_map(|change| change.from.into_iter().chain(change.to)),
+    );
+    let counts = write_change_lines(writer, &changes, width, &style)?;
 
     if counts.added > 0 || counts.updated > 0 {
-        writer.set_color(&green_spec)?;
+        writer.set_color(&style.ok)?;
         write!(writer, "✔ ")?;
         writer.reset()?;
-        writer.set_color(&dimmed_spec)?;
+        writer.set_color(&style.dimmed)?;
         let output = capitalize_first(&change_summary(&counts));
         write!(writer, "{output}")?;
         writer.reset()?;
@@ -193,10 +162,10 @@ fn write_report<W: WriteColor>(writer: &mut W, report: &BaselineReport) -> std::
     }
 
     if counts.removed > 0 {
-        writer.set_color(&green_spec)?;
+        writer.set_color(&style.ok)?;
         write!(writer, "✔ ")?;
         writer.reset()?;
-        writer.set_color(&dimmed_spec)?;
+        writer.set_color(&style.dimmed)?;
         write!(
             writer,
             "Removed limits for {} file{}",
@@ -218,17 +187,10 @@ fn capitalize_first(s: &str) -> String {
     }
 }
 
-fn change_sort_value(change: &BaselineChange) -> usize {
+fn change_sort_value(change: &ChangeRow) -> usize {
     match change.kind {
-        BaselineChangeKind::Removed => change.from,
-        _ => change.to.unwrap_or(change.from),
-    }
-}
-
-const fn display_from(change: &BaselineChange) -> Option<usize> {
-    match change.kind {
-        BaselineChangeKind::Added => None,
-        _ => Some(change.from),
+        ChangeKind::Removed => change.from.unwrap_or(0),
+        _ => change.to.or(change.from).unwrap_or(0),
     }
 }
 
@@ -238,21 +200,11 @@ struct ChangeCounts {
     removed: usize,
 }
 
-fn max_width(changes: &[&BaselineChange]) -> usize {
-    changes.iter().fold(6, |current, change| {
-        let from_len = display_from(change).map_or(1, |from| format_number(from).len());
-        let to_len = change.to.map_or(1, |to| format_number(to).len());
-        current.max(from_len).max(to_len)
-    })
-}
-
 fn write_change_lines<W: WriteColor>(
     writer: &mut W,
-    changes: &[&BaselineChange],
+    changes: &[&ChangeRow],
     width: usize,
-    from_spec: &ColorSpec,
-    to_spec: &ColorSpec,
-    dimmed_spec: &ColorSpec,
+    style: &crate::output::ChangeStyle,
 ) -> std::io::Result<ChangeCounts> {
     let mut counts = ChangeCounts {
         added: 0,
@@ -262,43 +214,22 @@ fn write_change_lines<W: WriteColor>(
 
     for change in changes {
         match change.kind {
-            BaselineChangeKind::Added => counts.added += 1,
-            BaselineChangeKind::Updated => counts.updated += 1,
-            BaselineChangeKind::Removed => counts.removed += 1,
+            ChangeKind::Added => counts.added += 1,
+            ChangeKind::Updated => counts.updated += 1,
+            ChangeKind::Removed => counts.removed += 1,
+            ChangeKind::Adjusted => {}
         }
 
-        let symbol = match change.kind {
-            BaselineChangeKind::Added => "+",
-            BaselineChangeKind::Updated => "~",
-            BaselineChangeKind::Removed => "-",
-        };
-        let from_value = display_from(change);
-        let from_str = from_value.map_or_else(|| "-".to_string(), format_number);
-        let to_str = change.to.map_or_else(|| "-".to_string(), format_number);
-
-        writer.set_color(dimmed_spec)?;
-        write!(writer, "{symbol} ")?;
-        writer.reset()?;
-        if from_value.is_some() {
-            writer.set_color(from_spec)?;
-        } else {
-            writer.set_color(dimmed_spec)?;
-        }
-        write!(writer, "{from_str:>width$}")?;
-        writer.reset()?;
-        writer.set_color(dimmed_spec)?;
-        write!(writer, " -> ")?;
-        writer.reset()?;
-        if change.to.is_some() {
-            writer.set_color(to_spec)?;
-        } else {
-            writer.set_color(dimmed_spec)?;
-        }
-        write!(writer, "{to_str:<width$}")?;
-        writer.reset()?;
-        write!(writer, " ")?;
-        write_path(writer, &change.path)?;
-        writeln!(writer)?;
+        let symbol = change.kind.symbol();
+        write_change_row(
+            writer,
+            style,
+            width,
+            symbol,
+            change.from,
+            change.to,
+            &change.path,
+        )?;
     }
 
     Ok(counts)
@@ -336,21 +267,21 @@ mod tests {
         assert!(report.is_empty());
 
         let report = BaselineReport {
-            changes: vec![BaselineChange {
+            changes: vec![ChangeRow {
                 path: "src/lib.rs".into(),
-                from: 10,
+                from: Some(10),
                 to: Some(12),
-                kind: BaselineChangeKind::Updated,
+                kind: ChangeKind::Updated,
             }],
         };
         assert!(!report.is_empty());
 
         let report = BaselineReport {
-            changes: vec![BaselineChange {
+            changes: vec![ChangeRow {
                 path: "src/old.rs".into(),
-                from: 10,
+                from: Some(10),
                 to: None,
-                kind: BaselineChangeKind::Removed,
+                kind: ChangeKind::Removed,
             }],
         };
         assert!(!report.is_empty());
@@ -360,23 +291,23 @@ mod tests {
     fn write_report_sorts_by_limit_and_summarizes() {
         let report = BaselineReport {
             changes: vec![
-                BaselineChange {
+                ChangeRow {
                     path: "b.rs".into(),
-                    from: 200,
+                    from: Some(200),
                     to: Some(150),
-                    kind: BaselineChangeKind::Updated,
+                    kind: ChangeKind::Updated,
                 },
-                BaselineChange {
+                ChangeRow {
                     path: "a.rs".into(),
-                    from: 120,
+                    from: None,
                     to: Some(120),
-                    kind: BaselineChangeKind::Added,
+                    kind: ChangeKind::Added,
                 },
-                BaselineChange {
+                ChangeRow {
                     path: "c.rs".into(),
-                    from: 300,
+                    from: Some(300),
                     to: None,
-                    kind: BaselineChangeKind::Removed,
+                    kind: ChangeKind::Removed,
                 },
             ],
         };
@@ -400,11 +331,11 @@ mod tests {
     #[test]
     fn write_report_handles_removed_only() {
         let report = BaselineReport {
-            changes: vec![BaselineChange {
+            changes: vec![ChangeRow {
                 path: "src/old.rs".into(),
-                from: 10,
+                from: Some(10),
                 to: None,
-                kind: BaselineChangeKind::Removed,
+                kind: ChangeKind::Removed,
             }],
         };
 

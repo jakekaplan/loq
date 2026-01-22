@@ -5,26 +5,21 @@ use std::path::PathBuf;
 
 use anyhow::{Context, Result};
 use loq_fs::CheckOptions;
-use termcolor::{Color, ColorSpec, WriteColor};
+use termcolor::WriteColor;
 use toml_edit::DocumentMut;
 
 use crate::cli::RelaxArgs;
 use crate::config_edit::{
-    add_rule, collect_exact_path_rules, default_document, normalize_display_path,
-    update_rule_max_lines,
+    add_rule, collect_exact_path_rules, load_doc_or_default, persist_doc, update_rule_max_lines,
 };
-use crate::init::add_to_gitignore;
-use crate::output::{format_number, print_error, write_path};
+use crate::output::{
+    change_style, max_formatted_width, print_error, write_change_row, ChangeKind, ChangeRow,
+};
 use crate::ExitStatus;
-
-struct RelaxChange {
-    path: String,
-    actual: usize,
-    new_limit: usize,
-}
+use loq_fs::normalize_display_path;
 
 struct RelaxReport {
-    changes: Vec<RelaxChange>,
+    changes: Vec<ChangeRow>,
 }
 
 impl RelaxReport {
@@ -77,24 +72,12 @@ fn run_relax_inner(args: &RelaxArgs) -> Result<RelaxReport> {
         });
     }
 
-    let mut doc = if config_exists {
-        let config_text = std::fs::read_to_string(&config_path)
-            .with_context(|| format!("failed to read {}", config_path.display()))?;
-        config_text
-            .parse()
-            .with_context(|| format!("failed to parse {}", config_path.display()))?
-    } else {
-        default_document()
-    };
+    let (mut doc, config_exists_for_write) = load_doc_or_default(&config_path)?;
 
     let existing_rules = collect_exact_path_rules(&doc);
     let changes = apply_relax_changes(&mut doc, &violations, &existing_rules, args.extra);
 
-    std::fs::write(&config_path, doc.to_string())
-        .with_context(|| format!("failed to write {}", config_path.display()))?;
-    if !config_exists {
-        add_to_gitignore(&cwd);
-    }
+    persist_doc(&cwd, &config_path, &doc, config_exists_for_write)?;
 
     Ok(RelaxReport { changes })
 }
@@ -115,7 +98,7 @@ fn apply_relax_changes(
     violations: &HashMap<String, usize>,
     existing_rules: &HashMap<String, (usize, usize)>,
     buffer: usize,
-) -> Vec<RelaxChange> {
+) -> Vec<ChangeRow> {
     let mut paths: Vec<_> = violations.iter().collect();
     paths.sort_by(|(a, _), (b, _)| a.cmp(b));
 
@@ -127,10 +110,11 @@ fn apply_relax_changes(
         } else {
             add_rule(doc, path, new_limit);
         }
-        changes.push(RelaxChange {
+        changes.push(ChangeRow {
             path: path.clone(),
-            actual,
-            new_limit,
+            from: Some(actual),
+            to: Some(new_limit),
+            kind: ChangeKind::Adjusted,
         });
     }
 
@@ -139,43 +123,31 @@ fn apply_relax_changes(
 
 fn write_report<W: WriteColor>(writer: &mut W, report: &RelaxReport) -> std::io::Result<()> {
     let count = report.changes.len();
-    let mut actual_spec = ColorSpec::new();
-    actual_spec.set_fg(Some(Color::Red)).set_bold(true);
-    let mut limit_spec = ColorSpec::new();
-    limit_spec.set_fg(Some(Color::Green));
-    let mut green_spec = ColorSpec::new();
-    green_spec.set_fg(Some(Color::Green));
-    let mut dimmed_spec = ColorSpec::new();
-    dimmed_spec.set_dimmed(true);
+    let style = change_style();
 
     let mut changes: Vec<_> = report.changes.iter().collect();
-    changes.sort_by_key(|change| (change.new_limit, change.actual, change.path.as_str()));
-    let width = changes.iter().fold(6, |current, change| {
-        let actual_len = format_number(change.actual).len();
-        let limit_len = format_number(change.new_limit).len();
-        current.max(actual_len).max(limit_len)
-    });
+    changes.sort_by_key(|change| (change.to, change.from, change.path.as_str()));
+    let width = max_formatted_width(
+        changes
+            .iter()
+            .flat_map(|change| change.from.into_iter().chain(change.to)),
+    );
 
     for change in changes {
-        let actual_str = format_number(change.actual);
-        let limit_str = format_number(change.new_limit);
-        writer.set_color(&actual_spec)?;
-        write!(writer, "{actual_str:>width$}")?;
-        writer.reset()?;
-        writer.set_color(&dimmed_spec)?;
-        write!(writer, " -> ")?;
-        writer.reset()?;
-        writer.set_color(&limit_spec)?;
-        write!(writer, "{limit_str:<width$}")?;
-        writer.reset()?;
-        write!(writer, " ")?;
-        write_path(writer, &change.path)?;
-        writeln!(writer)?;
+        write_change_row(
+            writer,
+            &style,
+            width,
+            change.kind.symbol(),
+            change.from,
+            change.to,
+            &change.path,
+        )?;
     }
-    writer.set_color(&green_spec)?;
+    writer.set_color(&style.ok)?;
     write!(writer, "✔ ")?;
     writer.reset()?;
-    writer.set_color(&dimmed_spec)?;
+    writer.set_color(&style.dimmed)?;
     write!(
         writer,
         "Relaxed limits for {count} file{}",
@@ -255,10 +227,11 @@ max_lines = 10
     #[test]
     fn write_report_formats_output() {
         let report = RelaxReport {
-            changes: vec![RelaxChange {
+            changes: vec![ChangeRow {
                 path: "src/file.rs".into(),
-                actual: 1_000,
-                new_limit: 1_050,
+                from: Some(1_000),
+                to: Some(1_050),
+                kind: ChangeKind::Adjusted,
             }],
         };
 
@@ -279,15 +252,17 @@ max_lines = 10
     fn write_report_formats_plural_summary() {
         let report = RelaxReport {
             changes: vec![
-                RelaxChange {
+                ChangeRow {
                     path: "src/a.rs".into(),
-                    actual: 10,
-                    new_limit: 20,
+                    from: Some(10),
+                    to: Some(20),
+                    kind: ChangeKind::Adjusted,
                 },
-                RelaxChange {
+                ChangeRow {
                     path: "src/b.rs".into(),
-                    actual: 30,
-                    new_limit: 40,
+                    from: Some(30),
+                    to: Some(40),
+                    kind: ChangeKind::Adjusted,
                 },
             ],
         };

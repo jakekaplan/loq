@@ -11,7 +11,7 @@ use ignore::WalkBuilder;
 use loq_core::PatternList;
 use thiserror::Error;
 
-use crate::relative_path;
+use crate::relative_path_for_match;
 
 /// Files/directories that are always excluded regardless of configuration.
 const HARDCODED_EXCLUDES: &[&str] = &[".loq_cache", "loq.toml"];
@@ -95,7 +95,7 @@ fn should_skip_explicit_path(path: &Path, options: &WalkOptions) -> bool {
     is_hardcoded_exclude(path)
         || options
             .exclude
-            .matches(&relative_path(path, options.root_dir))
+            .matches(&relative_path_for_match(path, options.root_dir))
             .is_some()
 }
 
@@ -153,7 +153,7 @@ fn walk_directory(path: &PathBuf, options: &WalkOptions) -> WalkResult {
     let paths: Vec<PathBuf> = path_rx
         .into_iter()
         .filter(|p| {
-            let relative_path = relative_path(p, options.root_dir);
+            let relative_path = relative_path_for_match(p, options.root_dir);
             options.exclude.matches(&relative_path).is_none()
         })
         .collect();

@@ -4,7 +4,7 @@ use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result};
-use loq_core::report::{build_report, FindingKind, OutcomeKind, Report};
+use loq_core::report::{build_report, FindingKind, Report};
 use loq_fs::{CheckOptions, CheckOutput, FsError};
 use termcolor::{Color, WriteColor};
 
@@ -69,28 +69,23 @@ fn handle_check_output<W: WriteColor + Write>(
     mode: OutputMode,
     format: OutputFormat,
 ) -> ExitStatus {
-    let violation_count = output
-        .outcomes
-        .iter()
-        .filter(|outcome| matches!(&outcome.kind, OutcomeKind::Violation { .. }))
-        .count();
+    let CheckOutput {
+        outcomes,
+        walk_errors,
+        fix_guidance,
+    } = output;
+    let report = build_report(&outcomes, fix_guidance);
 
     match format {
         OutputFormat::Json => {
-            let _ = write_json(stdout, &output);
+            let _ = write_json(stdout, &report, &walk_errors);
         }
         OutputFormat::Text => {
-            let CheckOutput {
-                outcomes,
-                walk_errors,
-                fix_guidance,
-            } = output;
-            let report = build_report(&outcomes, fix_guidance);
             write_text_output(stdout, &report, &walk_errors, mode);
         }
     }
 
-    if violation_count > 0 {
+    if report.summary.errors > 0 {
         ExitStatus::Failure
     } else {
         ExitStatus::Success

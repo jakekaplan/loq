@@ -9,6 +9,11 @@ use globset::{GlobBuilder, GlobMatcher};
 use serde::{Deserialize, Deserializer};
 use thiserror::Error;
 
+/// Default line limit when no config is provided.
+pub const DEFAULT_MAX_LINES: usize = 500;
+/// Default behavior for respecting `.gitignore`.
+pub const DEFAULT_RESPECT_GITIGNORE: bool = true;
+
 /// A path-specific line limit rule.
 #[derive(Debug, Clone, Deserialize)]
 pub struct Rule {
@@ -58,8 +63,8 @@ pub struct LoqConfig {
 impl Default for LoqConfig {
     fn default() -> Self {
         Self {
-            default_max_lines: Some(500),
-            respect_gitignore: true,
+            default_max_lines: Some(DEFAULT_MAX_LINES),
+            respect_gitignore: DEFAULT_RESPECT_GITIGNORE,
             exclude: Vec::new(),
             rules: Vec::new(),
             fix_guidance: None,
@@ -85,7 +90,7 @@ impl LoqConfig {
                 },
                 Rule {
                     path: vec!["tests/**/*".to_string()],
-                    max_lines: 500,
+                    max_lines: DEFAULT_MAX_LINES,
                 },
             ],
             ..Self::default()
@@ -305,9 +310,6 @@ fn compile_patterns(patterns: &[String], source_path: &Path) -> Result<PatternLi
 }
 
 fn compile_glob(pattern: &str, source_path: &Path) -> Result<GlobMatcher, ConfigError> {
-    #[cfg(windows)]
-    let mut builder = GlobBuilder::new(pattern);
-    #[cfg(not(windows))]
     let mut builder = GlobBuilder::new(pattern);
     #[cfg(windows)]
     {
@@ -323,7 +325,7 @@ fn compile_glob(pattern: &str, source_path: &Path) -> Result<GlobMatcher, Config
 }
 
 const fn default_respect_gitignore() -> bool {
-    true
+    DEFAULT_RESPECT_GITIGNORE
 }
 
 #[cfg(test)]
@@ -334,7 +336,7 @@ mod tests {
     #[test]
     fn default_config_has_expected_values() {
         let config = LoqConfig::default();
-        assert_eq!(config.default_max_lines, Some(500));
+        assert_eq!(config.default_max_lines, Some(DEFAULT_MAX_LINES));
         assert!(config.respect_gitignore);
         assert!(config.exclude.is_empty());
         assert!(config.rules.is_empty());
@@ -351,7 +353,7 @@ mod tests {
     #[test]
     fn init_template_has_rules() {
         let template = LoqConfig::init_template();
-        assert_eq!(template.default_max_lines, Some(500));
+        assert_eq!(template.default_max_lines, Some(DEFAULT_MAX_LINES));
         assert_eq!(template.rules.len(), 2);
         assert_eq!(template.rules[0].path, vec!["**/*.tsx"]);
         assert_eq!(template.rules[1].path, vec!["tests/**/*"]);

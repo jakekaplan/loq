@@ -26,6 +26,115 @@ fn dimmed() -> ColorSpec {
     spec
 }
 
+/// Color specs for change reports (baseline/tighten/relax).
+pub struct ChangeStyle {
+    /// Color spec for the "from" value.
+    pub from: ColorSpec,
+    /// Color spec for the "to" value.
+    pub to: ColorSpec,
+    /// Color spec for success markers.
+    pub ok: ColorSpec,
+    /// Color spec for dimmed text.
+    pub dimmed: ColorSpec,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ChangeKind {
+    Added,
+    Updated,
+    Removed,
+    Adjusted,
+}
+
+impl ChangeKind {
+    pub const fn symbol(self) -> Option<&'static str> {
+        match self {
+            Self::Added => Some("+"),
+            Self::Updated => Some("~"),
+            Self::Removed => Some("-"),
+            Self::Adjusted => None,
+        }
+    }
+}
+
+pub struct ChangeRow {
+    pub path: String,
+    pub from: Option<usize>,
+    pub to: Option<usize>,
+    pub kind: ChangeKind,
+}
+
+/// Builds color specs for change reports.
+#[must_use]
+pub fn change_style() -> ChangeStyle {
+    let mut from = ColorSpec::new();
+    from.set_fg(Some(Color::Red)).set_bold(true);
+    let mut to = ColorSpec::new();
+    to.set_fg(Some(Color::Green));
+    let mut ok = ColorSpec::new();
+    ok.set_fg(Some(Color::Green));
+    let mut dimmed = ColorSpec::new();
+    dimmed.set_dimmed(true);
+    ChangeStyle {
+        from,
+        to,
+        ok,
+        dimmed,
+    }
+}
+
+/// Computes a display width for formatted numbers (minimum 6).
+pub fn max_formatted_width<I>(values: I) -> usize
+where
+    I: IntoIterator<Item = usize>,
+{
+    values
+        .into_iter()
+        .fold(6, |current, value| current.max(format_number(value).len()))
+}
+
+pub fn write_change_row<W: WriteColor>(
+    writer: &mut W,
+    style: &ChangeStyle,
+    width: usize,
+    symbol: Option<&str>,
+    from: Option<usize>,
+    to: Option<usize>,
+    path: &str,
+) -> io::Result<()> {
+    if let Some(symbol) = symbol {
+        writer.set_color(&style.dimmed)?;
+        write!(writer, "{symbol} ")?;
+        writer.reset()?;
+    }
+
+    let from_str = from.map_or_else(|| "-".to_string(), format_number);
+    let to_str = to.map_or_else(|| "-".to_string(), format_number);
+
+    if from.is_some() {
+        writer.set_color(&style.from)?;
+    } else {
+        writer.set_color(&style.dimmed)?;
+    }
+    write!(writer, "{from_str:>width$}")?;
+    writer.reset()?;
+    writer.set_color(&style.dimmed)?;
+    write!(writer, " -> ")?;
+    writer.reset()?;
+    if to.is_some() {
+        writer.set_color(&style.to)?;
+    } else {
+        writer.set_color(&style.dimmed)?;
+    }
+    write!(writer, "{to_str:<width$}")?;
+    writer.reset()?;
+    write!(writer, " ")?;
+    write_path(writer, path)?;
+    writeln!(writer)?;
+
+    Ok(())
+}
+
 pub fn write_line<W: WriteColor>(
     writer: &mut W,
     color: Option<Color>,

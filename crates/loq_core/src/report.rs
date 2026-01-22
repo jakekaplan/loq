@@ -139,33 +139,19 @@ pub fn build_report(outcomes: &[FileOutcome], fix_guidance: Option<String>) -> R
             }
             OutcomeKind::Missing => {
                 summary.skipped += 1;
-                findings.push(Finding {
-                    path: outcome.display_path.clone(),
-                    config_source: outcome.config_source.clone(),
-                    kind: FindingKind::SkipWarning {
-                        reason: SkipReason::Missing,
-                    },
-                });
+                push_skip_warning(&mut findings, outcome, SkipReason::Missing);
             }
             OutcomeKind::Unreadable { error } => {
                 summary.skipped += 1;
-                findings.push(Finding {
-                    path: outcome.display_path.clone(),
-                    config_source: outcome.config_source.clone(),
-                    kind: FindingKind::SkipWarning {
-                        reason: SkipReason::Unreadable(error.clone()),
-                    },
-                });
+                push_skip_warning(
+                    &mut findings,
+                    outcome,
+                    SkipReason::Unreadable(error.clone()),
+                );
             }
             OutcomeKind::Binary => {
                 summary.skipped += 1;
-                findings.push(Finding {
-                    path: outcome.display_path.clone(),
-                    config_source: outcome.config_source.clone(),
-                    kind: FindingKind::SkipWarning {
-                        reason: SkipReason::Binary,
-                    },
-                });
+                push_skip_warning(&mut findings, outcome, SkipReason::Binary);
             }
             OutcomeKind::Pass { .. } => {
                 summary.passed += 1;
@@ -175,17 +161,7 @@ pub fn build_report(outcomes: &[FileOutcome], fix_guidance: Option<String>) -> R
                 actual,
                 matched_by,
             } => {
-                let over_by = actual.saturating_sub(*limit);
-                findings.push(Finding {
-                    path: outcome.display_path.clone(),
-                    config_source: outcome.config_source.clone(),
-                    kind: FindingKind::Violation {
-                        limit: *limit,
-                        actual: *actual,
-                        over_by,
-                        matched_by: matched_by.clone(),
-                    },
-                });
+                push_violation(&mut findings, outcome, *limit, *actual, matched_by.clone());
                 summary.errors += 1;
             }
         }
@@ -205,6 +181,34 @@ pub fn build_report(outcomes: &[FileOutcome], fix_guidance: Option<String>) -> R
         summary,
         fix_guidance,
     }
+}
+
+fn push_skip_warning(findings: &mut Vec<Finding>, outcome: &FileOutcome, reason: SkipReason) {
+    findings.push(Finding {
+        path: outcome.display_path.clone(),
+        config_source: outcome.config_source.clone(),
+        kind: FindingKind::SkipWarning { reason },
+    });
+}
+
+fn push_violation(
+    findings: &mut Vec<Finding>,
+    outcome: &FileOutcome,
+    limit: usize,
+    actual: usize,
+    matched_by: MatchBy,
+) {
+    let over_by = actual.saturating_sub(limit);
+    findings.push(Finding {
+        path: outcome.display_path.clone(),
+        config_source: outcome.config_source.clone(),
+        kind: FindingKind::Violation {
+            limit,
+            actual,
+            over_by,
+            matched_by,
+        },
+    });
 }
 
 /// Sorts findings with skip warnings first, then violations by overage.

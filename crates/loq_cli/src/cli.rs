@@ -28,7 +28,7 @@ pub enum Command {
     Baseline(BaselineArgs),
     /// Tighten baseline limits without raising them.
     Tighten(TightenArgs),
-    /// Optionally add a buffer to current violations.
+    /// Allow violations by raising their limits.
     Relax(RelaxArgs),
 }
 

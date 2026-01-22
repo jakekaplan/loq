@@ -6,7 +6,7 @@
 //! Note: Exclusion filtering (gitignore, exclude patterns) is handled
 //! at the walk layer, not here.
 
-use crate::config::{CompiledConfig, CompiledRule};
+use crate::config::CompiledConfig;
 
 /// How a file's limit was determined.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -39,18 +39,15 @@ pub enum Decision {
 /// Checks rules (last match wins), then falls back to default.
 #[must_use]
 pub fn decide(config: &CompiledConfig, path: &str) -> Decision {
-    let mut last_matching_rule: Option<(&CompiledRule, String)> = None;
-    for rule in config.rules() {
+    for rule in config.rules().iter().rev() {
         if let Some(pattern) = rule.matches(path) {
-            last_matching_rule = Some((rule, pattern.to_string()));
+            return Decision::Check {
+                limit: rule.max_lines,
+                matched_by: MatchBy::Rule {
+                    pattern: pattern.to_string(),
+                },
+            };
         }
-    }
-
-    if let Some((rule, pattern)) = last_matching_rule {
-        return Decision::Check {
-            limit: rule.max_lines,
-            matched_by: MatchBy::Rule { pattern },
-        };
     }
 
     if let Some(default_max) = config.default_max_lines {
