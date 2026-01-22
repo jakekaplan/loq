@@ -40,7 +40,7 @@ struct BaselineReport {
 }
 
 impl BaselineReport {
-    const fn is_empty(&self) -> bool {
+    fn is_empty(&self) -> bool {
         self.changes.is_empty() && self.removed == 0
     }
 }
@@ -261,5 +261,89 @@ fn capitalize_first(s: &str) -> String {
     match chars.next() {
         None => String::new(),
         Some(c) => c.to_uppercase().collect::<String>() + chars.as_str(),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use termcolor::NoColor;
+
+    #[test]
+    fn baseline_report_is_empty() {
+        let report = BaselineReport {
+            changes: Vec::new(),
+            removed: 0,
+        };
+        assert!(report.is_empty());
+
+        let report = BaselineReport {
+            changes: vec![BaselineChange {
+                path: "src/lib.rs".into(),
+                from: 10,
+                to: 12,
+                kind: BaselineChangeKind::Updated,
+            }],
+            removed: 0,
+        };
+        assert!(!report.is_empty());
+
+        let report = BaselineReport {
+            changes: Vec::new(),
+            removed: 1,
+        };
+        assert!(!report.is_empty());
+    }
+
+    #[test]
+    fn write_report_sorts_by_delta_and_summarizes() {
+        let report = BaselineReport {
+            changes: vec![
+                BaselineChange {
+                    path: "b.rs".into(),
+                    from: 200,
+                    to: 150,
+                    kind: BaselineChangeKind::Updated,
+                },
+                BaselineChange {
+                    path: "a.rs".into(),
+                    from: 120,
+                    to: 120,
+                    kind: BaselineChangeKind::Added,
+                },
+            ],
+            removed: 1,
+        };
+
+        let mut out = NoColor::new(Vec::new());
+        write_report(&mut out, &report).unwrap();
+        let output = String::from_utf8(out.into_inner()).unwrap();
+        let lines: Vec<_> = output.lines().collect();
+
+        assert_eq!(lines.len(), 4);
+        assert!(lines[0].contains("120"));
+        assert!(lines[0].contains("->"));
+        assert!(lines[0].contains("a.rs"));
+        assert!(lines[1].contains("200"));
+        assert!(lines[1].contains("150"));
+        assert!(lines[1].contains("b.rs"));
+        assert_eq!(lines[2], "✔ Added 1 file, updated 1 file");
+        assert_eq!(lines[3], "✔ Removed limits for 1 file");
+    }
+
+    #[test]
+    fn write_report_handles_removed_only() {
+        let report = BaselineReport {
+            changes: Vec::new(),
+            removed: 2,
+        };
+
+        let mut out = NoColor::new(Vec::new());
+        write_report(&mut out, &report).unwrap();
+        let output = String::from_utf8(out.into_inner()).unwrap();
+        assert_eq!(
+            output.lines().collect::<Vec<_>>(),
+            vec!["✔ Removed limits for 2 files"]
+        );
     }
 }
