@@ -23,6 +23,11 @@ struct RelaxChange {
     new_limit: usize,
 }
 
+impl RelaxChange {
+    const fn delta(&self) -> usize {
+        self.new_limit.saturating_sub(self.actual)
+    }
+}
 struct RelaxReport {
     changes: Vec<RelaxChange>,
 }
@@ -41,7 +46,7 @@ pub fn run_relax<W1: WriteColor, W2: WriteColor>(
     match run_relax_inner(args) {
         Ok(report) => {
             if report.is_empty() {
-                let _ = writeln!(stdout, "No violations to relax");
+                let _ = writeln!(stdout, "✔ No changes needed");
                 return ExitStatus::Success;
             }
             let _ = write_report(stdout, &report);
@@ -143,28 +148,38 @@ fn write_report<W: WriteColor>(writer: &mut W, report: &RelaxReport) -> std::io:
     actual_spec.set_fg(Some(Color::Red)).set_bold(true);
     let mut limit_spec = ColorSpec::new();
     limit_spec.set_fg(Some(Color::Green));
+    let mut green_spec = ColorSpec::new();
+    green_spec.set_fg(Some(Color::Green));
     let mut dimmed_spec = ColorSpec::new();
     dimmed_spec.set_dimmed(true);
 
     let mut changes: Vec<_> = report.changes.iter().collect();
-    changes.sort_by_key(|change| (change.actual, change.path.as_str()));
+    changes.sort_by_key(|change| (change.delta(), change.actual, change.path.as_str()));
+    let width = changes.iter().fold(6, |current, change| {
+        let actual_len = format_number(change.actual).len();
+        let limit_len = format_number(change.new_limit).len();
+        current.max(actual_len).max(limit_len)
+    });
 
     for change in changes {
         let actual_str = format_number(change.actual);
         let limit_str = format_number(change.new_limit);
         writer.set_color(&actual_spec)?;
-        write!(writer, "{actual_str:>6}")?;
+        write!(writer, "{actual_str:>width$}")?;
         writer.reset()?;
         writer.set_color(&dimmed_spec)?;
         write!(writer, " -> ")?;
         writer.reset()?;
         writer.set_color(&limit_spec)?;
-        write!(writer, "{limit_str:<6}")?;
+        write!(writer, "{limit_str:<width$}")?;
         writer.reset()?;
         write!(writer, " ")?;
         write_path(writer, &change.path)?;
         writeln!(writer)?;
     }
+    writer.set_color(&green_spec)?;
+    write!(writer, "✔ ")?;
+    writer.reset()?;
     writer.set_color(&dimmed_spec)?;
     write!(
         writer,
@@ -261,7 +276,7 @@ max_lines = 10
         assert!(change_line.contains("->"));
         assert!(change_line.contains("1_050"));
         assert!(change_line.contains("src/file.rs"));
-        assert_eq!(lines.next(), Some("Relaxed limits for 1 file"));
+        assert_eq!(lines.next(), Some("✔ Relaxed limits for 1 file"));
         assert!(lines.next().is_none());
     }
 
@@ -285,6 +300,6 @@ max_lines = 10
         let mut out = NoColor::new(Vec::new());
         write_report(&mut out, &report).unwrap();
         let output = String::from_utf8(out.into_inner()).unwrap();
-        assert_eq!(output.lines().last(), Some("Relaxed limits for 2 files"));
+        assert_eq!(output.lines().last(), Some("✔ Relaxed limits for 2 files"));
     }
 }

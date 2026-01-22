@@ -35,7 +35,7 @@ max_lines = 600
         .args(["baseline"])
         .assert()
         .success()
-        .stdout(predicate::str::contains("Updated 1 rule"));
+        .stdout(predicate::str::contains("Updated 1 file"));
 
     let updated = std::fs::read_to_string(temp.path().join("loq.toml")).unwrap();
     assert!(updated.contains("max_lines = 700"));
@@ -84,8 +84,8 @@ max_lines = 550
         .args(["baseline"])
         .assert()
         .success()
-        .stdout(predicate::str::contains("Updated 2 rules"))
-        .stdout(predicate::str::contains("removed 1 rule"));
+        .stdout(predicate::str::contains("Updated 2 files"))
+        .stdout(predicate::str::contains("removed 1 file"));
 
     let updated = std::fs::read_to_string(temp.path().join("loq.toml")).unwrap();
 
@@ -125,7 +125,7 @@ max_lines = 400
         .args(["baseline", "--threshold", "300"])
         .assert()
         .success()
-        .stdout(predicate::str::contains("Updated 1 rule"));
+        .stdout(predicate::str::contains("Updated 1 file"));
 
     let updated = std::fs::read_to_string(temp.path().join("loq.toml")).unwrap();
     assert!(updated.contains("max_lines = 450"));

@@ -29,26 +29,26 @@ pub(crate) fn write_stats<W: WriteColor>(
     stats: &BaselineStats,
 ) -> std::io::Result<()> {
     if stats.has_no_changes() {
-        writeln!(writer, "No changes needed")?;
+        writeln!(writer, "✔ No changes needed")?;
     } else {
         let mut parts = Vec::new();
         if stats.added > 0 {
             parts.push(format!(
-                "added {} rule{}",
+                "added {} file{}",
                 stats.added,
                 if stats.added == 1 { "" } else { "s" }
             ));
         }
         if stats.updated > 0 {
             parts.push(format!(
-                "updated {} rule{}",
+                "updated {} file{}",
                 stats.updated,
                 if stats.updated == 1 { "" } else { "s" }
             ));
         }
         if stats.removed > 0 {
             parts.push(format!(
-                "removed {} rule{}",
+                "removed {} file{}",
                 stats.removed,
                 if stats.removed == 1 { "" } else { "s" }
             ));

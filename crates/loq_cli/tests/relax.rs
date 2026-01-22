@@ -137,7 +137,7 @@ fn exits_zero_when_no_violations() {
 
     assert!(output.status.success());
     let stdout = strip_ansi(&String::from_utf8_lossy(&output.stdout));
-    assert!(stdout.contains("No violations to relax"));
+    assert!(stdout.contains("✔ No changes needed"));
 }
 
 #[test]

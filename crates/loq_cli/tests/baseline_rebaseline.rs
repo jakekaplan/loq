@@ -54,9 +54,9 @@ max_lines = 550
         .args(["baseline"])
         .assert()
         .success()
-        .stdout(predicate::str::contains("Added 1 rule"))
-        .stdout(predicate::str::contains("updated 1 rule"))
-        .stdout(predicate::str::contains("removed 1 rule"));
+        .stdout(predicate::str::contains("Added 1 file"))
+        .stdout(predicate::str::contains("updated 1 file"))
+        .stdout(predicate::str::contains("removed 1 file"));
 
     let updated = std::fs::read_to_string(temp.path().join("loq.toml")).unwrap();
 
@@ -98,8 +98,8 @@ max_lines = 600
         .args(["baseline"])
         .assert()
         .success()
-        .stdout(predicate::str::contains("Added 1 rule"))
-        .stdout(predicate::str::contains("removed 1 rule"));
+        .stdout(predicate::str::contains("Added 1 file"))
+        .stdout(predicate::str::contains("removed 1 file"));
 
     let updated = std::fs::read_to_string(temp.path().join("loq.toml")).unwrap();
     assert!(!updated.contains("old_file.txt"));
@@ -182,7 +182,7 @@ max_lines = 1000
         .args(["baseline"])
         .assert()
         .success()
-        .stdout(predicate::str::contains("Updated 3 rules"));
+        .stdout(predicate::str::contains("Updated 3 files"));
 
     let updated = std::fs::read_to_string(temp.path().join("loq.toml")).unwrap();
     assert!(updated.contains("max_lines = 550"));
@@ -206,7 +206,7 @@ fn idempotent_when_no_changes() {
         .args(["baseline"])
         .assert()
         .success()
-        .stdout(predicate::str::contains("Added 1 rule"));
+        .stdout(predicate::str::contains("Added 1 file"));
 
     let after_first = std::fs::read_to_string(temp.path().join("loq.toml")).unwrap();
 
@@ -216,7 +216,7 @@ fn idempotent_when_no_changes() {
         .args(["baseline"])
         .assert()
         .success()
-        .stdout(predicate::str::contains("No changes needed"));
+        .stdout(predicate::str::contains("✔ No changes needed"));
 
     let after_second = std::fs::read_to_string(temp.path().join("loq.toml")).unwrap();
     assert_eq!(after_first, after_second);

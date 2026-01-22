@@ -24,9 +24,9 @@ pub enum Command {
     Check(CheckArgs),
     /// Create a loq.toml config file.
     Init(InitArgs),
-    /// Reset baseline rules to match current file sizes.
+    /// Reset baseline limits to match current file sizes.
     Baseline(BaselineArgs),
-    /// Tighten baseline rules without raising limits.
+    /// Tighten baseline limits without raising them.
     Tighten(TightenArgs),
     /// Optionally add a buffer to current violations.
     Relax(RelaxArgs),
