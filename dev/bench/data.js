@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1769048978698,
+  "lastUpdate": 1769051564665,
   "repoUrl": "https://github.com/jakekaplan/loq",
   "entries": {
     "Benchmark": [
@@ -958,6 +958,54 @@ window.BENCHMARK_DATA = {
           {
             "name": "ruff",
             "value": 0.12573178128,
+            "range": "± 0.0013",
+            "unit": "seconds"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "40362401+jakekaplan@users.noreply.github.com",
+            "name": "Jake Kaplan",
+            "username": "jakekaplan"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "c068ccc4edceffb81d28bfb1d1ca56e12a104f54",
+          "message": "Merge pull request #43 from jakekaplan/fix-sorting\n\nfix sorting, updated output",
+          "timestamp": "2026-01-21T22:11:37-05:00",
+          "tree_id": "d0c1bc7d4c307a81bc3bd7d18f8b31c56559d3a3",
+          "url": "https://github.com/jakekaplan/loq/commit/c068ccc4edceffb81d28bfb1d1ca56e12a104f54"
+        },
+        "date": 1769051564175,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "cpython",
+            "value": 0.053187184080000005,
+            "range": "± 0.0034",
+            "unit": "seconds"
+          },
+          {
+            "name": "airflow",
+            "value": 0.14249884328,
+            "range": "± 0.0006",
+            "unit": "seconds"
+          },
+          {
+            "name": "prefect",
+            "value": 0.061034503080000004,
+            "range": "± 0.0009",
+            "unit": "seconds"
+          },
+          {
+            "name": "ruff",
+            "value": 0.12681795068,
             "range": "± 0.0013",
             "unit": "seconds"
           }
