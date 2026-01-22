@@ -6,12 +6,14 @@
 #![warn(missing_docs)]
 
 mod baseline;
+mod baseline_shared;
 mod check;
 mod cli;
 mod config_edit;
 mod init;
 mod output;
 mod relax;
+mod tighten;
 
 use std::ffi::OsString;
 use std::io::{self, Read, Write};
@@ -24,6 +26,7 @@ use baseline::run_baseline;
 use check::{output_mode, run_check};
 use init::run_init;
 use relax::run_relax;
+use tighten::run_tighten;
 
 pub use cli::{Cli, Command};
 
@@ -78,6 +81,7 @@ where
         Command::Check(args) => run_check(args, &mut stdin, stdout, stderr, mode),
         Command::Init(args) => run_init(args, stdout, stderr),
         Command::Baseline(args) => run_baseline(args, stdout, stderr),
+        Command::Tighten(args) => run_tighten(args, stdout, stderr),
         Command::Relax(args) => run_relax(args, stdout, stderr),
     }
 }

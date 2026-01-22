@@ -1,4 +1,4 @@
-//! Baseline command implementation.
+//! Tighten command implementation.
 
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -8,7 +8,7 @@ use termcolor::WriteColor;
 use toml_edit::{DocumentMut, Item};
 
 use crate::baseline_shared::{find_violations, write_stats, BaselineStats};
-use crate::cli::BaselineArgs;
+use crate::cli::TightenArgs;
 use crate::config_edit::{
     add_rule, collect_exact_path_rules, default_document, remove_rule, update_rule_max_lines,
 };
@@ -16,12 +16,12 @@ use crate::init::add_to_gitignore;
 use crate::output::print_error;
 use crate::ExitStatus;
 
-pub fn run_baseline<W1: WriteColor, W2: WriteColor>(
-    args: &BaselineArgs,
+pub fn run_tighten<W1: WriteColor, W2: WriteColor>(
+    args: &TightenArgs,
     stdout: &mut W1,
     stderr: &mut W2,
 ) -> ExitStatus {
-    match run_baseline_inner(args) {
+    match run_tighten_inner(args) {
         Ok(stats) => {
             let _ = write_stats(stdout, &stats);
             ExitStatus::Success
@@ -30,12 +30,11 @@ pub fn run_baseline<W1: WriteColor, W2: WriteColor>(
     }
 }
 
-fn run_baseline_inner(args: &BaselineArgs) -> Result<BaselineStats> {
+fn run_tighten_inner(args: &TightenArgs) -> Result<BaselineStats> {
     let cwd = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
     let config_path = cwd.join("loq.toml");
 
     let config_exists = config_path.exists();
-    // Step 1: Read and parse the config file (or create defaults if missing)
     let mut doc: DocumentMut = if config_exists {
         let config_text = std::fs::read_to_string(&config_path)
             .with_context(|| format!("failed to read {}", config_path.display()))?;
@@ -46,7 +45,6 @@ fn run_baseline_inner(args: &BaselineArgs) -> Result<BaselineStats> {
         default_document()
     };
 
-    // Step 2: Determine threshold (--threshold or default_max_lines from config)
     #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
     let threshold = args.threshold.unwrap_or_else(|| {
         doc.get("default_max_lines")
@@ -54,16 +52,10 @@ fn run_baseline_inner(args: &BaselineArgs) -> Result<BaselineStats> {
             .map_or(500, |v| v as usize)
     });
 
-    // Step 3: Run check to find violations (respects config's exclude and gitignore settings)
-    let violations = find_violations(&cwd, &doc, threshold, "baseline check failed")?;
-
-    // Step 4: Collect existing exact-path rules (baseline candidates)
+    let violations = find_violations(&cwd, &doc, threshold, "tighten check failed")?;
     let existing_rules = collect_exact_path_rules(&doc);
+    let stats = apply_tighten_changes(&mut doc, &violations, &existing_rules);
 
-    // Step 5: Compute changes
-    let stats = apply_baseline_changes(&mut doc, &violations, &existing_rules);
-
-    // Step 6: Write config back
     std::fs::write(&config_path, doc.to_string())
         .with_context(|| format!("failed to write {}", config_path.display()))?;
     if !config_exists {
@@ -73,8 +65,7 @@ fn run_baseline_inner(args: &BaselineArgs) -> Result<BaselineStats> {
     Ok(stats)
 }
 
-/// Apply baseline changes to the document.
-fn apply_baseline_changes(
+fn apply_tighten_changes(
     doc: &mut DocumentMut,
     violations: &HashMap<String, usize>,
     existing_rules: &HashMap<String, (usize, usize)>,
@@ -85,31 +76,25 @@ fn apply_baseline_changes(
         removed: 0,
     };
 
-    // Track which indices to remove (in reverse order to maintain correctness)
     let mut indices_to_remove: Vec<usize> = Vec::new();
 
-    // Process existing exact-path rules
     for (path, (current_limit, idx)) in existing_rules {
         if let Some(&actual) = violations.get(path) {
-            // File still violates - reset to current size if it changed
-            if actual != *current_limit {
+            if actual < *current_limit {
                 update_rule_max_lines(doc, *idx, actual);
                 stats.updated += 1;
             }
         } else {
-            // File is now compliant (under threshold) - remove the rule
             indices_to_remove.push(*idx);
             stats.removed += 1;
         }
     }
 
-    // Remove rules in reverse order to maintain index validity
     indices_to_remove.sort_by(|a, b| b.cmp(a));
     for idx in indices_to_remove {
         remove_rule(doc, idx);
     }
 
-    // Add new rules for violations not already covered (sorted for deterministic output)
     let mut new_violations: Vec<_> = violations
         .iter()
         .filter(|(path, _)| !existing_rules.contains_key(*path))
