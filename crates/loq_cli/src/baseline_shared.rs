@@ -157,4 +157,44 @@ mod tests {
         };
         assert!(!not_empty.has_no_changes());
     }
+
+    #[test]
+    fn build_temp_config_keeps_glob_rules_only() {
+        let doc: DocumentMut = r#"
+default_max_lines = 500
+
+[[rules]]
+path = "**/*.rs"
+max_lines = 1000
+
+[[rules]]
+path = "src/main.rs"
+max_lines = 200
+"#
+        .parse()
+        .unwrap();
+        let temp = build_temp_config(&doc, 123);
+        assert!(temp.contains("path = \"**/*.rs\""));
+        assert!(!temp.contains("path = \"src/main.rs\""));
+        assert!(temp.contains("default_max_lines = 123"));
+    }
+
+    #[test]
+    fn capitalize_first_handles_empty() {
+        assert_eq!(capitalize_first(""), "");
+    }
+
+    #[test]
+    fn build_temp_config_ignores_rules_without_path() {
+        let doc: DocumentMut = r"
+default_max_lines = 500
+
+[[rules]]
+max_lines = 10
+"
+        .parse()
+        .unwrap();
+        let temp = build_temp_config(&doc, 500);
+        assert!(!temp.contains("[[rules]]"));
+    }
 }

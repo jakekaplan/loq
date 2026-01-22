@@ -126,3 +126,16 @@ fn creates_config_when_missing() {
     let gitignore = std::fs::read_to_string(temp.path().join(".gitignore")).unwrap();
     assert!(gitignore.contains(".loq_cache"));
 }
+
+#[test]
+fn fails_on_invalid_config() {
+    let temp = TempDir::new().unwrap();
+    write_file(&temp, "loq.toml", "default_max_lines =\n");
+
+    cargo_bin_cmd!("loq")
+        .current_dir(temp.path())
+        .args(["tighten"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("failed to parse"));
+}
