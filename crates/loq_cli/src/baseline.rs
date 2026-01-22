@@ -13,24 +13,13 @@ use crate::config_edit::{
     add_rule, collect_exact_path_rules, load_doc_or_default, persist_doc, remove_rule,
     threshold_from_doc, update_rule_max_lines,
 };
-use crate::output::{change_style, max_number_width, print_error, write_change_line};
+use crate::output::{
+    change_style, max_number_width, print_error, write_change_line, ChangeKind, ChangeRow,
+};
 use crate::ExitStatus;
 
-enum BaselineChangeKind {
-    Added,
-    Updated,
-    Removed,
-}
-
-struct BaselineChange {
-    path: String,
-    from: usize,
-    to: Option<usize>,
-    kind: BaselineChangeKind,
-}
-
 struct BaselineReport {
-    changes: Vec<BaselineChange>,
+    changes: Vec<ChangeRow>,
 }
 
 impl BaselineReport {
@@ -99,21 +88,21 @@ fn apply_baseline_changes(
             // File still violates - reset to current size if it changed
             if actual != *current_limit {
                 update_rule_max_lines(doc, *idx, actual);
-                changes.push(BaselineChange {
+                changes.push(ChangeRow {
                     path: path.clone(),
-                    from: *current_limit,
+                    from: Some(*current_limit),
                     to: Some(actual),
-                    kind: BaselineChangeKind::Updated,
+                    kind: ChangeKind::Updated,
                 });
             }
         } else {
             // File is now compliant (under threshold) - remove the rule
             indices_to_remove.push(*idx);
-            changes.push(BaselineChange {
+            changes.push(ChangeRow {
                 path: path.clone(),
-                from: *current_limit,
+                from: Some(*current_limit),
                 to: None,
-                kind: BaselineChangeKind::Removed,
+                kind: ChangeKind::Removed,
             });
         }
     }
@@ -133,11 +122,11 @@ fn apply_baseline_changes(
 
     for (path, &actual) in new_violations {
         add_rule(doc, path, actual);
-        changes.push(BaselineChange {
+        changes.push(ChangeRow {
             path: (*path).clone(),
-            from: actual,
+            from: None,
             to: Some(actual),
-            kind: BaselineChangeKind::Added,
+            kind: ChangeKind::Added,
         });
     }
 
@@ -156,7 +145,7 @@ fn write_report<W: WriteColor>(writer: &mut W, report: &BaselineReport) -> std::
     let width = max_number_width(
         changes
             .iter()
-            .flat_map(|change| display_from(change).into_iter().chain(change.to)),
+            .flat_map(|change| change.from.into_iter().chain(change.to)),
     );
     let counts = write_change_lines(writer, &changes, width, &style)?;
 
@@ -197,17 +186,10 @@ fn capitalize_first(s: &str) -> String {
     }
 }
 
-fn change_sort_value(change: &BaselineChange) -> usize {
+fn change_sort_value(change: &ChangeRow) -> usize {
     match change.kind {
-        BaselineChangeKind::Removed => change.from,
-        _ => change.to.unwrap_or(change.from),
-    }
-}
-
-const fn display_from(change: &BaselineChange) -> Option<usize> {
-    match change.kind {
-        BaselineChangeKind::Added => None,
-        _ => Some(change.from),
+        ChangeKind::Removed => change.from.unwrap_or(0),
+        _ => change.to.or(change.from).unwrap_or(0),
     }
 }
 
@@ -219,7 +201,7 @@ struct ChangeCounts {
 
 fn write_change_lines<W: WriteColor>(
     writer: &mut W,
-    changes: &[&BaselineChange],
+    changes: &[&ChangeRow],
     width: usize,
     style: &crate::output::ChangeStyle,
 ) -> std::io::Result<ChangeCounts> {
@@ -231,23 +213,19 @@ fn write_change_lines<W: WriteColor>(
 
     for change in changes {
         match change.kind {
-            BaselineChangeKind::Added => counts.added += 1,
-            BaselineChangeKind::Updated => counts.updated += 1,
-            BaselineChangeKind::Removed => counts.removed += 1,
+            ChangeKind::Added => counts.added += 1,
+            ChangeKind::Updated => counts.updated += 1,
+            ChangeKind::Removed => counts.removed += 1,
+            ChangeKind::Adjusted => {}
         }
 
-        let symbol = match change.kind {
-            BaselineChangeKind::Added => "+",
-            BaselineChangeKind::Updated => "~",
-            BaselineChangeKind::Removed => "-",
-        };
-        let from_value = display_from(change);
+        let symbol = change.kind.symbol();
         write_change_line(
             writer,
             style,
             width,
-            Some(symbol),
-            from_value,
+            symbol,
+            change.from,
             change.to,
             &change.path,
         )?;
@@ -288,21 +266,21 @@ mod tests {
         assert!(report.is_empty());
 
         let report = BaselineReport {
-            changes: vec![BaselineChange {
+            changes: vec![ChangeRow {
                 path: "src/lib.rs".into(),
-                from: 10,
+                from: Some(10),
                 to: Some(12),
-                kind: BaselineChangeKind::Updated,
+                kind: ChangeKind::Updated,
             }],
         };
         assert!(!report.is_empty());
 
         let report = BaselineReport {
-            changes: vec![BaselineChange {
+            changes: vec![ChangeRow {
                 path: "src/old.rs".into(),
-                from: 10,
+                from: Some(10),
                 to: None,
-                kind: BaselineChangeKind::Removed,
+                kind: ChangeKind::Removed,
             }],
         };
         assert!(!report.is_empty());
@@ -312,23 +290,23 @@ mod tests {
     fn write_report_sorts_by_limit_and_summarizes() {
         let report = BaselineReport {
             changes: vec![
-                BaselineChange {
+                ChangeRow {
                     path: "b.rs".into(),
-                    from: 200,
+                    from: Some(200),
                     to: Some(150),
-                    kind: BaselineChangeKind::Updated,
+                    kind: ChangeKind::Updated,
                 },
-                BaselineChange {
+                ChangeRow {
                     path: "a.rs".into(),
-                    from: 120,
+                    from: None,
                     to: Some(120),
-                    kind: BaselineChangeKind::Added,
+                    kind: ChangeKind::Added,
                 },
-                BaselineChange {
+                ChangeRow {
                     path: "c.rs".into(),
-                    from: 300,
+                    from: Some(300),
                     to: None,
-                    kind: BaselineChangeKind::Removed,
+                    kind: ChangeKind::Removed,
                 },
             ],
         };
@@ -352,11 +330,11 @@ mod tests {
     #[test]
     fn write_report_handles_removed_only() {
         let report = BaselineReport {
-            changes: vec![BaselineChange {
+            changes: vec![ChangeRow {
                 path: "src/old.rs".into(),
-                from: 10,
+                from: Some(10),
                 to: None,
-                kind: BaselineChangeKind::Removed,
+                kind: ChangeKind::Removed,
             }],
         };
 

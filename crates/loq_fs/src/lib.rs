@@ -220,43 +220,24 @@ fn check_file_lines(
     let mtime = std::fs::metadata(path).and_then(|m| m.modified()).ok();
 
     // Try cache first (using relative path as key for consistency across directories)
-    if let Some(mt) = mtime {
-        if let Ok(cache) = file_cache.lock() {
-            if let Some(result) = cache.get(cache_key, mt) {
-                return cached_result_to_outcome(result, limit, matched_by);
-            }
-        }
+    if let Some(outcome) = try_cached_outcome(cache_key, mtime, file_cache, limit, &matched_by) {
+        return outcome;
     }
 
     // Cache miss - read file
     match count::inspect_file(path) {
         Ok(count::FileInspection::Binary) => {
-            if let Some(mt) = mtime {
-                if let Ok(mut cache) = file_cache.lock() {
-                    cache.insert(cache_key.to_string(), mt, cache::CachedResult::Binary);
-                }
-            }
+            cache_result(file_cache, cache_key, mtime, cache::CachedResult::Binary);
             OutcomeKind::Binary
         }
         Ok(count::FileInspection::Text { lines }) => {
-            if let Some(mt) = mtime {
-                if let Ok(mut cache) = file_cache.lock() {
-                    cache.insert(cache_key.to_string(), mt, cache::CachedResult::Text(lines));
-                }
-            }
-            if lines > limit {
-                OutcomeKind::Violation {
-                    limit,
-                    actual: lines,
-                    matched_by,
-                }
-            } else {
-                OutcomeKind::Pass {
-                    limit,
-                    actual: lines,
-                    matched_by,
-                }
-            }
+            cache_result(
+                file_cache,
+                cache_key,
+                mtime,
+                cache::CachedResult::Text(lines),
+            );
+            outcome_for_lines(lines, limit, matched_by)
         }
         // Missing/Unreadable can't be cached (no mtime available)
         Err(count::CountError::Missing) => OutcomeKind::Missing,
@@ -266,28 +247,64 @@ fn check_file_lines(
     }
 }
 
+fn try_cached_outcome(
+    cache_key: &str,
+    mtime: Option<std::time::SystemTime>,
+    file_cache: &Mutex<cache::Cache>,
+    limit: usize,
+    matched_by: &loq_core::MatchBy,
+) -> Option<OutcomeKind> {
+    if let Some(mt) = mtime {
+        if let Ok(cache) = file_cache.lock() {
+            if let Some(result) = cache.get(cache_key, mt) {
+                return Some(cached_result_to_outcome(result, limit, matched_by.clone()));
+            }
+        }
+    }
+    None
+}
+
+fn cache_result(
+    file_cache: &Mutex<cache::Cache>,
+    cache_key: &str,
+    mtime: Option<std::time::SystemTime>,
+    result: cache::CachedResult,
+) {
+    if let Some(mt) = mtime {
+        if let Ok(mut cache) = file_cache.lock() {
+            cache.insert(cache_key.to_string(), mt, result);
+        }
+    }
+}
+
 fn cached_result_to_outcome(
     result: cache::CachedResult,
     limit: usize,
     matched_by: loq_core::MatchBy,
 ) -> OutcomeKind {
     match result {
-        cache::CachedResult::Text(lines) => {
-            if lines > limit {
-                OutcomeKind::Violation {
-                    limit,
-                    actual: lines,
-                    matched_by,
-                }
-            } else {
-                OutcomeKind::Pass {
-                    limit,
-                    actual: lines,
-                    matched_by,
-                }
-            }
-        }
+        cache::CachedResult::Text(lines) => outcome_for_lines(lines, limit, matched_by),
         cache::CachedResult::Binary => OutcomeKind::Binary,
+    }
+}
+
+const fn outcome_for_lines(
+    lines: usize,
+    limit: usize,
+    matched_by: loq_core::MatchBy,
+) -> OutcomeKind {
+    if lines > limit {
+        OutcomeKind::Violation {
+            limit,
+            actual: lines,
+            matched_by,
+        }
+    } else {
+        OutcomeKind::Pass {
+            limit,
+            actual: lines,
+            matched_by,
+        }
     }
 }
 

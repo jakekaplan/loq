@@ -38,6 +38,32 @@ pub struct ChangeStyle {
     pub dimmed: ColorSpec,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ChangeKind {
+    Added,
+    Updated,
+    Removed,
+    Adjusted,
+}
+
+impl ChangeKind {
+    pub const fn symbol(self) -> Option<&'static str> {
+        match self {
+            Self::Added => Some("+"),
+            Self::Updated => Some("~"),
+            Self::Removed => Some("-"),
+            Self::Adjusted => None,
+        }
+    }
+}
+
+pub struct ChangeRow {
+    pub path: String,
+    pub from: Option<usize>,
+    pub to: Option<usize>,
+    pub kind: ChangeKind,
+}
+
 /// Builds color specs for change reports.
 #[must_use]
 pub fn change_style() -> ChangeStyle {

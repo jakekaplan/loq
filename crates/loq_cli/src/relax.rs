@@ -12,18 +12,14 @@ use crate::cli::RelaxArgs;
 use crate::config_edit::{
     add_rule, collect_exact_path_rules, load_doc_or_default, persist_doc, update_rule_max_lines,
 };
-use crate::output::{change_style, max_number_width, print_error, write_change_line};
+use crate::output::{
+    change_style, max_number_width, print_error, write_change_line, ChangeKind, ChangeRow,
+};
 use crate::ExitStatus;
 use loq_fs::normalize_display_path;
 
-struct RelaxChange {
-    path: String,
-    actual: usize,
-    new_limit: usize,
-}
-
 struct RelaxReport {
-    changes: Vec<RelaxChange>,
+    changes: Vec<ChangeRow>,
 }
 
 impl RelaxReport {
@@ -102,7 +98,7 @@ fn apply_relax_changes(
     violations: &HashMap<String, usize>,
     existing_rules: &HashMap<String, (usize, usize)>,
     buffer: usize,
-) -> Vec<RelaxChange> {
+) -> Vec<ChangeRow> {
     let mut paths: Vec<_> = violations.iter().collect();
     paths.sort_by(|(a, _), (b, _)| a.cmp(b));
 
@@ -114,10 +110,11 @@ fn apply_relax_changes(
         } else {
             add_rule(doc, path, new_limit);
         }
-        changes.push(RelaxChange {
+        changes.push(ChangeRow {
             path: path.clone(),
-            actual,
-            new_limit,
+            from: Some(actual),
+            to: Some(new_limit),
+            kind: ChangeKind::Adjusted,
         });
     }
 
@@ -129,19 +126,21 @@ fn write_report<W: WriteColor>(writer: &mut W, report: &RelaxReport) -> std::io:
     let style = change_style();
 
     let mut changes: Vec<_> = report.changes.iter().collect();
-    changes.sort_by_key(|change| (change.new_limit, change.actual, change.path.as_str()));
-    let width = max_number_width(changes.iter().flat_map(|change| {
-        std::iter::once(change.actual).chain(std::iter::once(change.new_limit))
-    }));
+    changes.sort_by_key(|change| (change.to, change.from, change.path.as_str()));
+    let width = max_number_width(
+        changes
+            .iter()
+            .flat_map(|change| change.from.into_iter().chain(change.to)),
+    );
 
     for change in changes {
         write_change_line(
             writer,
             &style,
             width,
-            None,
-            Some(change.actual),
-            Some(change.new_limit),
+            change.kind.symbol(),
+            change.from,
+            change.to,
             &change.path,
         )?;
     }
@@ -228,10 +227,11 @@ max_lines = 10
     #[test]
     fn write_report_formats_output() {
         let report = RelaxReport {
-            changes: vec![RelaxChange {
+            changes: vec![ChangeRow {
                 path: "src/file.rs".into(),
-                actual: 1_000,
-                new_limit: 1_050,
+                from: Some(1_000),
+                to: Some(1_050),
+                kind: ChangeKind::Adjusted,
             }],
         };
 
@@ -252,15 +252,17 @@ max_lines = 10
     fn write_report_formats_plural_summary() {
         let report = RelaxReport {
             changes: vec![
-                RelaxChange {
+                ChangeRow {
                     path: "src/a.rs".into(),
-                    actual: 10,
-                    new_limit: 20,
+                    from: Some(10),
+                    to: Some(20),
+                    kind: ChangeKind::Adjusted,
                 },
-                RelaxChange {
+                ChangeRow {
                     path: "src/b.rs".into(),
-                    actual: 30,
-                    new_limit: 40,
+                    from: Some(30),
+                    to: Some(40),
+                    kind: ChangeKind::Adjusted,
                 },
             ],
         };
