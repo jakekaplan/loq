@@ -346,4 +346,9 @@ mod tests {
             vec!["✔ Removed limits for 2 files"]
         );
     }
+
+    #[test]
+    fn capitalize_first_handles_empty() {
+        assert_eq!(capitalize_first(""), "");
+    }
 }

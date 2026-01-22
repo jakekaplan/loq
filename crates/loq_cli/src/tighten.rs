@@ -250,4 +250,29 @@ mod tests {
             vec!["✔ Removed limits for 2 files"]
         );
     }
+
+    #[test]
+    fn tighten_report_is_empty() {
+        let report = TightenReport {
+            changes: Vec::new(),
+            removed: 0,
+        };
+        assert!(report.is_empty());
+
+        let report = TightenReport {
+            changes: vec![TightenChange {
+                path: "src/lib.rs".into(),
+                from: 10,
+                to: 9,
+            }],
+            removed: 0,
+        };
+        assert!(!report.is_empty());
+
+        let report = TightenReport {
+            changes: Vec::new(),
+            removed: 1,
+        };
+        assert!(!report.is_empty());
+    }
 }
