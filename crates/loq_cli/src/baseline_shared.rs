@@ -5,59 +5,9 @@ use std::path::Path;
 
 use anyhow::{Context, Result};
 use loq_fs::CheckOptions;
-use termcolor::WriteColor;
 use toml_edit::{DocumentMut, Item};
 
 use crate::config_edit::{extract_paths, is_exact_path, normalize_display_path};
-
-/// Statistics about rule changes.
-pub(crate) struct BaselineStats {
-    pub(crate) added: usize,
-    pub(crate) updated: usize,
-    pub(crate) removed: usize,
-}
-
-impl BaselineStats {
-    pub(crate) const fn has_no_changes(&self) -> bool {
-        self.added == 0 && self.updated == 0 && self.removed == 0
-    }
-}
-
-/// Write a summary line for rule updates.
-pub(crate) fn write_stats<W: WriteColor>(
-    writer: &mut W,
-    stats: &BaselineStats,
-) -> std::io::Result<()> {
-    if stats.has_no_changes() {
-        writeln!(writer, "No changes needed")?;
-    } else {
-        let mut parts = Vec::new();
-        if stats.added > 0 {
-            parts.push(format!(
-                "added {} rule{}",
-                stats.added,
-                if stats.added == 1 { "" } else { "s" }
-            ));
-        }
-        if stats.updated > 0 {
-            parts.push(format!(
-                "updated {} rule{}",
-                stats.updated,
-                if stats.updated == 1 { "" } else { "s" }
-            ));
-        }
-        if stats.removed > 0 {
-            parts.push(format!(
-                "removed {} rule{}",
-                stats.removed,
-                if stats.removed == 1 { "" } else { "s" }
-            ));
-        }
-        let output = capitalize_first(&parts.join(", "));
-        writeln!(writer, "{output}")?;
-    }
-    Ok(())
-}
 
 /// Find all files that violate the given threshold.
 pub(crate) fn find_violations(
@@ -129,34 +79,9 @@ fn build_temp_config(doc: &DocumentMut, threshold: usize) -> String {
     temp_doc.to_string()
 }
 
-fn capitalize_first(s: &str) -> String {
-    let mut chars = s.chars();
-    match chars.next() {
-        None => String::new(),
-        Some(c) => c.to_uppercase().collect::<String>() + chars.as_str(),
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn stats_has_no_changes() {
-        let empty = BaselineStats {
-            added: 0,
-            updated: 0,
-            removed: 0,
-        };
-        assert!(empty.has_no_changes());
-
-        let not_empty = BaselineStats {
-            added: 1,
-            updated: 0,
-            removed: 0,
-        };
-        assert!(!not_empty.has_no_changes());
-    }
 
     #[test]
     fn build_temp_config_keeps_glob_rules_only() {
@@ -177,11 +102,6 @@ max_lines = 200
         assert!(temp.contains("path = \"**/*.rs\""));
         assert!(!temp.contains("path = \"src/main.rs\""));
         assert!(temp.contains("default_max_lines = 123"));
-    }
-
-    #[test]
-    fn capitalize_first_handles_empty() {
-        assert_eq!(capitalize_first(""), "");
     }
 
     #[test]

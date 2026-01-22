@@ -33,7 +33,7 @@ fn adds_rules_for_violations() {
         .args(["baseline"])
         .assert()
         .success()
-        .stdout(predicate::str::contains("Added 1 rule"));
+        .stdout(predicate::str::contains("Added 1 file"));
 
     let content = std::fs::read_to_string(temp.path().join("loq.toml")).unwrap();
     assert!(content.contains("\"src/legacy.txt\""));
@@ -87,7 +87,7 @@ fn creates_config_when_missing() {
         .args(["baseline"])
         .assert()
         .success()
-        .stdout(predicate::str::contains("Added 1 rule"));
+        .stdout(predicate::str::contains("Added 1 file"));
 
     let config = std::fs::read_to_string(temp.path().join("loq.toml")).unwrap();
     assert!(config.contains("default_max_lines = 500"));
@@ -126,7 +126,7 @@ fn updates_rule_if_file_shrunk() {
         .args(["baseline"])
         .assert()
         .success()
-        .stdout(predicate::str::contains("Updated 1 rule"));
+        .stdout(predicate::str::contains("Updated 1 file"));
 
     let config = std::fs::read_to_string(temp.path().join("loq.toml")).unwrap();
     assert!(config.contains("max_lines = 550"));
@@ -160,7 +160,7 @@ fn removes_rule_if_file_compliant() {
         .args(["baseline"])
         .assert()
         .success()
-        .stdout(predicate::str::contains("Removed 1 rule"));
+        .stdout(predicate::str::contains("Removed limits for 1 file"));
 
     let config = std::fs::read_to_string(temp.path().join("loq.toml")).unwrap();
     assert!(!config.contains("max_lines = 501"));
@@ -183,7 +183,7 @@ fn threshold_flag() {
         .args(["baseline", "--threshold", "300"])
         .assert()
         .success()
-        .stdout(predicate::str::contains("Added 1 rule"));
+        .stdout(predicate::str::contains("Added 1 file"));
 
     let config = std::fs::read_to_string(temp.path().join("loq.toml")).unwrap();
     assert!(config.contains("max_lines = 350"));
@@ -209,7 +209,7 @@ max_lines = 1000
         .args(["baseline"])
         .assert()
         .success()
-        .stdout(predicate::str::contains("Added 1 rule"));
+        .stdout(predicate::str::contains("Added 1 file"));
 
     let updated = std::fs::read_to_string(temp.path().join("loq.toml")).unwrap();
     // Glob rule preserved
@@ -238,7 +238,7 @@ fn no_changes_when_all_compliant() {
         .args(["baseline"])
         .assert()
         .success()
-        .stdout(predicate::str::contains("No changes needed"));
+        .stdout(predicate::str::contains("✔ No changes needed"));
 }
 
 #[test]
@@ -260,7 +260,7 @@ fn handles_multiple_violations() {
         .args(["baseline"])
         .assert()
         .success()
-        .stdout(predicate::str::contains("Added 3 rules"));
+        .stdout(predicate::str::contains("Added 3 files"));
 
     let config = std::fs::read_to_string(temp.path().join("loq.toml")).unwrap();
     assert!(config.contains("max_lines = 501"));
@@ -285,7 +285,7 @@ max_lines = 600
         .args(["baseline"])
         .assert()
         .success()
-        .stdout(predicate::str::contains("Updated 1 rule"));
+        .stdout(predicate::str::contains("Updated 1 file"));
 
     let updated = std::fs::read_to_string(temp.path().join("loq.toml")).unwrap();
     assert!(updated.contains("max_lines = 650"));
@@ -307,7 +307,7 @@ exclude = ["generated/**"]
         .args(["baseline"])
         .assert()
         .success()
-        .stdout(predicate::str::contains("Added 1 rule"));
+        .stdout(predicate::str::contains("Added 1 file"));
 
     let updated = std::fs::read_to_string(temp.path().join("loq.toml")).unwrap();
     assert!(updated.contains("src/big.txt"));
@@ -327,7 +327,7 @@ fn respects_gitignore() {
         .args(["baseline"])
         .assert()
         .success()
-        .stdout(predicate::str::contains("Added 1 rule"));
+        .stdout(predicate::str::contains("Added 1 file"));
 
     let updated = std::fs::read_to_string(temp.path().join("loq.toml")).unwrap();
     assert!(updated.contains("src/main.txt"));
@@ -350,7 +350,7 @@ fn can_disable_gitignore() {
         .args(["baseline"])
         .assert()
         .success()
-        .stdout(predicate::str::contains("Added 1 rule"));
+        .stdout(predicate::str::contains("Added 1 file"));
 
     let updated = std::fs::read_to_string(temp.path().join("loq.toml")).unwrap();
     assert!(updated.contains("build/output.txt"));
@@ -372,7 +372,7 @@ max_lines = 600
         .args(["baseline"])
         .assert()
         .success()
-        .stdout(predicate::str::contains("Removed 1 rule"));
+        .stdout(predicate::str::contains("Removed limits for 1 file"));
 
     let updated = std::fs::read_to_string(temp.path().join("loq.toml")).unwrap();
     assert!(!updated.contains("deleted.txt"));
@@ -395,7 +395,7 @@ exclude = ["generated/**", "vendor/**", "*.gen.rs"]
         .args(["baseline"])
         .assert()
         .success()
-        .stdout(predicate::str::contains("Added 1 rule"));
+        .stdout(predicate::str::contains("Added 1 file"));
 
     let updated = std::fs::read_to_string(temp.path().join("loq.toml")).unwrap();
     assert!(updated.contains("src/main.txt"));
@@ -427,7 +427,7 @@ max_lines = 800
         .args(["baseline"])
         .assert()
         .success()
-        .stdout(predicate::str::contains("Added 1 rule"));
+        .stdout(predicate::str::contains("Added 1 file"));
 
     let updated = std::fs::read_to_string(temp.path().join("loq.toml")).unwrap();
 

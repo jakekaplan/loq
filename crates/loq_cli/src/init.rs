@@ -30,6 +30,7 @@ pub fn run_init<W1: WriteColor, W2: WriteColor>(
     // Add .loq_cache to .gitignore if not already present
     add_to_gitignore(&cwd);
 
+    let _ = writeln!(stdout, "✔ Created loq.toml");
     let _ = std::io::Write::flush(stdout);
     ExitStatus::Success
 }

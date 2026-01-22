@@ -33,7 +33,10 @@ max_lines = 600
         .args(["tighten"])
         .assert()
         .success()
-        .stdout(predicate::str::contains("Updated 1 rule"));
+        .stdout(predicate::str::contains("Tightened limits for 1 file"))
+        .stdout(predicate::str::contains("600"))
+        .stdout(predicate::str::contains("->"))
+        .stdout(predicate::str::contains("550"));
 
     let updated = std::fs::read_to_string(temp.path().join("loq.toml")).unwrap();
     assert!(updated.contains("max_lines = 550"));
@@ -57,7 +60,7 @@ max_lines = 600
         .args(["tighten"])
         .assert()
         .success()
-        .stdout(predicate::str::contains("No changes needed"));
+        .stdout(predicate::str::contains("✔ No changes needed"));
 
     let updated = std::fs::read_to_string(temp.path().join("loq.toml")).unwrap();
     assert!(updated.contains("max_lines = 600"));
@@ -81,7 +84,7 @@ max_lines = 600
         .args(["tighten"])
         .assert()
         .success()
-        .stdout(predicate::str::contains("Removed 1 rule"));
+        .stdout(predicate::str::contains("Removed limits for 1 file"));
 
     let updated = std::fs::read_to_string(temp.path().join("loq.toml")).unwrap();
     assert!(!updated.contains("small.txt"));
@@ -98,7 +101,7 @@ fn does_not_add_rules_for_new_violations() {
         .args(["tighten"])
         .assert()
         .success()
-        .stdout(predicate::str::contains("No changes needed"));
+        .stdout(predicate::str::contains("✔ No changes needed"));
 
     let updated = std::fs::read_to_string(temp.path().join("loq.toml")).unwrap();
     assert!(!updated.contains("path = \"new.txt\""));
@@ -115,7 +118,7 @@ fn creates_config_when_missing() {
         .args(["tighten"])
         .assert()
         .success()
-        .stdout(predicate::str::contains("No changes needed"));
+        .stdout(predicate::str::contains("✔ No changes needed"));
 
     let config = std::fs::read_to_string(temp.path().join("loq.toml")).unwrap();
     assert!(config.contains("default_max_lines = 500"));
