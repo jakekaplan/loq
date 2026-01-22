@@ -26,7 +26,9 @@ pub enum Command {
     Init(InitArgs),
     /// Reset baseline rules to match current file sizes.
     Baseline(BaselineArgs),
-    /// Relax limits for currently failing files.
+    /// Tighten baseline rules without raising limits.
+    Tighten(TightenArgs),
+    /// Add a buffer to current violations.
     Relax(RelaxArgs),
 }
 
@@ -68,6 +70,14 @@ pub struct BaselineArgs {
     pub threshold: Option<usize>,
 }
 
+/// Arguments for the tighten command.
+#[derive(Args, Debug, Clone)]
+pub struct TightenArgs {
+    /// Line threshold for tightening (defaults to `default_max_lines` from config).
+    #[arg(long = "threshold")]
+    pub threshold: Option<usize>,
+}
+
 /// Arguments for the relax command.
 #[derive(Args, Debug, Clone)]
 pub struct RelaxArgs {
@@ -76,6 +86,6 @@ pub struct RelaxArgs {
     pub files: Vec<PathBuf>,
 
     /// Extra lines to add above the current line count.
-    #[arg(long = "buffer", default_value_t = 100)]
-    pub buffer: usize,
+    #[arg(long = "extra", visible_alias = "buffer", default_value_t = 100)]
+    pub extra: usize,
 }

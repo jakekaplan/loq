@@ -77,7 +77,7 @@ max_lines = 600
 
     let output = cargo_bin_cmd!("loq")
         .current_dir(temp.path())
-        .args(["relax", "--buffer", "50", "src/legacy.rs"])
+        .args(["relax", "--extra", "50", "src/legacy.rs"])
         .output()
         .unwrap();
 

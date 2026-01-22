@@ -87,7 +87,7 @@ fn run_relax_inner(args: &RelaxArgs) -> Result<RelaxReport> {
     };
 
     let existing_rules = collect_exact_path_rules(&doc);
-    let changes = apply_relax_changes(&mut doc, &violations, &existing_rules, args.buffer);
+    let changes = apply_relax_changes(&mut doc, &violations, &existing_rules, args.extra);
 
     std::fs::write(&config_path, doc.to_string())
         .with_context(|| format!("failed to write {}", config_path.display()))?;
