@@ -19,29 +19,23 @@ use crate::ExitStatus;
 enum BaselineChangeKind {
     Added,
     Updated,
+    Removed,
 }
 
 struct BaselineChange {
     path: String,
     from: usize,
-    to: usize,
+    to: Option<usize>,
     kind: BaselineChangeKind,
-}
-
-impl BaselineChange {
-    const fn delta(&self) -> usize {
-        self.from.abs_diff(self.to)
-    }
 }
 
 struct BaselineReport {
     changes: Vec<BaselineChange>,
-    removed: usize,
 }
 
 impl BaselineReport {
     fn is_empty(&self) -> bool {
-        self.changes.is_empty() && self.removed == 0
+        self.changes.is_empty()
     }
 }
 
@@ -113,7 +107,6 @@ fn apply_baseline_changes(
     existing_rules: &HashMap<String, (usize, usize)>,
 ) -> BaselineReport {
     let mut changes = Vec::new();
-    let mut removed = 0;
 
     // Track which indices to remove (in reverse order to maintain correctness)
     let mut indices_to_remove: Vec<usize> = Vec::new();
@@ -127,14 +120,19 @@ fn apply_baseline_changes(
                 changes.push(BaselineChange {
                     path: path.clone(),
                     from: *current_limit,
-                    to: actual,
+                    to: Some(actual),
                     kind: BaselineChangeKind::Updated,
                 });
             }
         } else {
             // File is now compliant (under threshold) - remove the rule
             indices_to_remove.push(*idx);
-            removed += 1;
+            changes.push(BaselineChange {
+                path: path.clone(),
+                from: *current_limit,
+                to: None,
+                kind: BaselineChangeKind::Removed,
+            });
         }
     }
 
@@ -156,15 +154,19 @@ fn apply_baseline_changes(
         changes.push(BaselineChange {
             path: (*path).clone(),
             from: actual,
-            to: actual,
+            to: Some(actual),
             kind: BaselineChangeKind::Added,
         });
     }
 
-    BaselineReport { changes, removed }
+    BaselineReport { changes }
 }
 
 fn write_report<W: WriteColor>(writer: &mut W, report: &BaselineReport) -> std::io::Result<()> {
+    if report.changes.is_empty() {
+        return Ok(());
+    }
+
     let mut from_spec = ColorSpec::new();
     from_spec.set_fg(Some(Color::Red)).set_bold(true);
     let mut to_spec = ColorSpec::new();
@@ -174,71 +176,23 @@ fn write_report<W: WriteColor>(writer: &mut W, report: &BaselineReport) -> std::
     let mut dimmed_spec = ColorSpec::new();
     dimmed_spec.set_dimmed(true);
 
-    if !report.changes.is_empty() {
-        let mut changes: Vec<_> = report.changes.iter().collect();
-        changes.sort_by_key(|change| (change.delta(), change.path.as_str()));
+    let mut changes: Vec<_> = report.changes.iter().collect();
+    changes.sort_by_key(|change| (change_sort_value(change), change.path.as_str()));
+    let width = max_width(&changes);
+    let counts = write_change_lines(writer, &changes, width, &from_spec, &to_spec, &dimmed_spec)?;
 
-        let width = changes.iter().fold(6, |current, change| {
-            let from_len = format_number(change.from).len();
-            let to_len = format_number(change.to).len();
-            current.max(from_len).max(to_len)
-        });
-
-        for change in &changes {
-            let from_str = format_number(change.from);
-            let to_str = format_number(change.to);
-            writer.set_color(&from_spec)?;
-            write!(writer, "{from_str:>width$}")?;
-            writer.reset()?;
-            writer.set_color(&dimmed_spec)?;
-            write!(writer, " -> ")?;
-            writer.reset()?;
-            writer.set_color(&to_spec)?;
-            write!(writer, "{to_str:<width$}")?;
-            writer.reset()?;
-            write!(writer, " ")?;
-            write_path(writer, &change.path)?;
-            writeln!(writer)?;
-        }
-
-        let mut added = 0;
-        let mut updated = 0;
-        for change in &changes {
-            match change.kind {
-                BaselineChangeKind::Added => added += 1,
-                BaselineChangeKind::Updated => updated += 1,
-            }
-        }
-
-        let mut parts = Vec::new();
-        if added > 0 {
-            parts.push(format!(
-                "added {} file{}",
-                added,
-                if added == 1 { "" } else { "s" }
-            ));
-        }
-        if updated > 0 {
-            parts.push(format!(
-                "updated {} file{}",
-                updated,
-                if updated == 1 { "" } else { "s" }
-            ));
-        }
-
-        if !parts.is_empty() {
-            writer.set_color(&green_spec)?;
-            write!(writer, "✔ ")?;
-            writer.reset()?;
-            writer.set_color(&dimmed_spec)?;
-            let output = capitalize_first(&parts.join(", "));
-            write!(writer, "{output}")?;
-            writer.reset()?;
-            writeln!(writer)?;
-        }
+    if counts.added > 0 || counts.updated > 0 {
+        writer.set_color(&green_spec)?;
+        write!(writer, "✔ ")?;
+        writer.reset()?;
+        writer.set_color(&dimmed_spec)?;
+        let output = capitalize_first(&change_summary(&counts));
+        write!(writer, "{output}")?;
+        writer.reset()?;
+        writeln!(writer)?;
     }
 
-    if report.removed > 0 {
+    if counts.removed > 0 {
         writer.set_color(&green_spec)?;
         write!(writer, "✔ ")?;
         writer.reset()?;
@@ -246,8 +200,8 @@ fn write_report<W: WriteColor>(writer: &mut W, report: &BaselineReport) -> std::
         write!(
             writer,
             "Removed limits for {} file{}",
-            report.removed,
-            if report.removed == 1 { "" } else { "s" }
+            counts.removed,
+            if counts.removed == 1 { "" } else { "s" }
         )?;
         writer.reset()?;
         writeln!(writer)?;
@@ -264,6 +218,111 @@ fn capitalize_first(s: &str) -> String {
     }
 }
 
+fn change_sort_value(change: &BaselineChange) -> usize {
+    match change.kind {
+        BaselineChangeKind::Removed => change.from,
+        _ => change.to.unwrap_or(change.from),
+    }
+}
+
+const fn display_from(change: &BaselineChange) -> Option<usize> {
+    match change.kind {
+        BaselineChangeKind::Added => None,
+        _ => Some(change.from),
+    }
+}
+
+struct ChangeCounts {
+    added: usize,
+    updated: usize,
+    removed: usize,
+}
+
+fn max_width(changes: &[&BaselineChange]) -> usize {
+    changes.iter().fold(6, |current, change| {
+        let from_len = display_from(change).map_or(1, |from| format_number(from).len());
+        let to_len = change.to.map_or(1, |to| format_number(to).len());
+        current.max(from_len).max(to_len)
+    })
+}
+
+fn write_change_lines<W: WriteColor>(
+    writer: &mut W,
+    changes: &[&BaselineChange],
+    width: usize,
+    from_spec: &ColorSpec,
+    to_spec: &ColorSpec,
+    dimmed_spec: &ColorSpec,
+) -> std::io::Result<ChangeCounts> {
+    let mut counts = ChangeCounts {
+        added: 0,
+        updated: 0,
+        removed: 0,
+    };
+
+    for change in changes {
+        match change.kind {
+            BaselineChangeKind::Added => counts.added += 1,
+            BaselineChangeKind::Updated => counts.updated += 1,
+            BaselineChangeKind::Removed => counts.removed += 1,
+        }
+
+        let symbol = match change.kind {
+            BaselineChangeKind::Added => "+",
+            BaselineChangeKind::Updated => "~",
+            BaselineChangeKind::Removed => "-",
+        };
+        let from_value = display_from(change);
+        let from_str = from_value.map_or_else(|| "-".to_string(), format_number);
+        let to_str = change.to.map_or_else(|| "-".to_string(), format_number);
+
+        writer.set_color(dimmed_spec)?;
+        write!(writer, "{symbol} ")?;
+        writer.reset()?;
+        if from_value.is_some() {
+            writer.set_color(from_spec)?;
+        } else {
+            writer.set_color(dimmed_spec)?;
+        }
+        write!(writer, "{from_str:>width$}")?;
+        writer.reset()?;
+        writer.set_color(dimmed_spec)?;
+        write!(writer, " -> ")?;
+        writer.reset()?;
+        if change.to.is_some() {
+            writer.set_color(to_spec)?;
+        } else {
+            writer.set_color(dimmed_spec)?;
+        }
+        write!(writer, "{to_str:<width$}")?;
+        writer.reset()?;
+        write!(writer, " ")?;
+        write_path(writer, &change.path)?;
+        writeln!(writer)?;
+    }
+
+    Ok(counts)
+}
+
+fn change_summary(counts: &ChangeCounts) -> String {
+    let mut parts = Vec::new();
+    if counts.added > 0 {
+        parts.push(format!(
+            "added {} file{}",
+            counts.added,
+            if counts.added == 1 { "" } else { "s" }
+        ));
+    }
+    if counts.updated > 0 {
+        parts.push(format!(
+            "updated {} file{}",
+            counts.updated,
+            if counts.updated == 1 { "" } else { "s" }
+        ));
+    }
+    parts.join(", ")
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -273,7 +332,6 @@ mod tests {
     fn baseline_report_is_empty() {
         let report = BaselineReport {
             changes: Vec::new(),
-            removed: 0,
         };
         assert!(report.is_empty());
 
@@ -281,38 +339,46 @@ mod tests {
             changes: vec![BaselineChange {
                 path: "src/lib.rs".into(),
                 from: 10,
-                to: 12,
+                to: Some(12),
                 kind: BaselineChangeKind::Updated,
             }],
-            removed: 0,
         };
         assert!(!report.is_empty());
 
         let report = BaselineReport {
-            changes: Vec::new(),
-            removed: 1,
+            changes: vec![BaselineChange {
+                path: "src/old.rs".into(),
+                from: 10,
+                to: None,
+                kind: BaselineChangeKind::Removed,
+            }],
         };
         assert!(!report.is_empty());
     }
 
     #[test]
-    fn write_report_sorts_by_delta_and_summarizes() {
+    fn write_report_sorts_by_limit_and_summarizes() {
         let report = BaselineReport {
             changes: vec![
                 BaselineChange {
                     path: "b.rs".into(),
                     from: 200,
-                    to: 150,
+                    to: Some(150),
                     kind: BaselineChangeKind::Updated,
                 },
                 BaselineChange {
                     path: "a.rs".into(),
                     from: 120,
-                    to: 120,
+                    to: Some(120),
                     kind: BaselineChangeKind::Added,
                 },
+                BaselineChange {
+                    path: "c.rs".into(),
+                    from: 300,
+                    to: None,
+                    kind: BaselineChangeKind::Removed,
+                },
             ],
-            removed: 1,
         };
 
         let mut out = NoColor::new(Vec::new());
@@ -320,31 +386,36 @@ mod tests {
         let output = String::from_utf8(out.into_inner()).unwrap();
         let lines: Vec<_> = output.lines().collect();
 
-        assert_eq!(lines.len(), 4);
-        assert!(lines[0].contains("120"));
-        assert!(lines[0].contains("->"));
-        assert!(lines[0].contains("a.rs"));
-        assert!(lines[1].contains("200"));
-        assert!(lines[1].contains("150"));
-        assert!(lines[1].contains("b.rs"));
-        assert_eq!(lines[2], "✔ Added 1 file, updated 1 file");
-        assert_eq!(lines[3], "✔ Removed limits for 1 file");
+        assert_eq!(lines.len(), 5);
+        let added = lines[0].split_whitespace().collect::<Vec<_>>();
+        assert_eq!(added, vec!["+", "-", "->", "120", "a.rs"]);
+        let updated = lines[1].split_whitespace().collect::<Vec<_>>();
+        assert_eq!(updated, vec!["~", "200", "->", "150", "b.rs"]);
+        let removed = lines[2].split_whitespace().collect::<Vec<_>>();
+        assert_eq!(removed, vec!["-", "300", "->", "-", "c.rs"]);
+        assert_eq!(lines[3], "✔ Added 1 file, updated 1 file");
+        assert_eq!(lines[4], "✔ Removed limits for 1 file");
     }
 
     #[test]
     fn write_report_handles_removed_only() {
         let report = BaselineReport {
-            changes: Vec::new(),
-            removed: 2,
+            changes: vec![BaselineChange {
+                path: "src/old.rs".into(),
+                from: 10,
+                to: None,
+                kind: BaselineChangeKind::Removed,
+            }],
         };
 
         let mut out = NoColor::new(Vec::new());
         write_report(&mut out, &report).unwrap();
         let output = String::from_utf8(out.into_inner()).unwrap();
-        assert_eq!(
-            output.lines().collect::<Vec<_>>(),
-            vec!["✔ Removed limits for 2 files"]
-        );
+        let lines: Vec<_> = output.lines().collect();
+        assert_eq!(lines.len(), 2);
+        let removed = lines[0].split_whitespace().collect::<Vec<_>>();
+        assert_eq!(removed, vec!["-", "10", "->", "-", "src/old.rs"]);
+        assert_eq!(lines[1], "✔ Removed limits for 1 file");
     }
 
     #[test]
