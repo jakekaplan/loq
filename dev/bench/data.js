@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1769033275690,
+  "lastUpdate": 1769040757742,
   "repoUrl": "https://github.com/jakekaplan/loq",
   "entries": {
     "Benchmark": [
@@ -815,6 +815,54 @@ window.BENCHMARK_DATA = {
             "name": "ruff",
             "value": 0.12667162428000003,
             "range": "± 0.0013",
+            "unit": "seconds"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "40362401+jakekaplan@users.noreply.github.com",
+            "name": "Jake Kaplan",
+            "username": "jakekaplan"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "89d21e6f68d4af2f6b595e434d32af1ea1685b70",
+          "message": "Merge pull request #39 from jakekaplan/fix-relax\n\nupdate relax",
+          "timestamp": "2026-01-21T19:11:28-05:00",
+          "tree_id": "b9ad60968f2e3daf66b21a11b5e3453ea51b7bdc",
+          "url": "https://github.com/jakekaplan/loq/commit/89d21e6f68d4af2f6b595e434d32af1ea1685b70"
+        },
+        "date": 1769040756827,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "cpython",
+            "value": 0.0526860097,
+            "range": "± 0.0032",
+            "unit": "seconds"
+          },
+          {
+            "name": "airflow",
+            "value": 0.14319622810000002,
+            "range": "± 0.0008",
+            "unit": "seconds"
+          },
+          {
+            "name": "prefect",
+            "value": 0.05978885539999999,
+            "range": "± 0.0007",
+            "unit": "seconds"
+          },
+          {
+            "name": "ruff",
+            "value": 0.12778822029999998,
+            "range": "± 0.0075",
             "unit": "seconds"
           }
         ]
