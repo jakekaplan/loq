@@ -10,6 +10,25 @@ use toml_edit::{DocumentMut, Item, Table};
 
 use crate::init::add_to_gitignore;
 
+/// Unescape glob metacharacters that were escaped by `globset::escape`.
+///
+/// This reverses the escaping done by `globset::escape()`, converting
+/// single-character class escapes back to their literal characters:
+/// - `[*]` → `*`
+/// - `[?]` → `?`
+/// - `[[]` → `[`
+/// - `[]]` → `]`
+/// - `[{]` → `{`
+/// - `[}]` → `}`
+pub(crate) fn unescape_glob(path: &str) -> String {
+    path.replace("[*]", "*")
+        .replace("[?]", "?")
+        .replace("[[]", "[")
+        .replace("[]]", "]")
+        .replace("[{]", "{")
+        .replace("[}]", "}")
+}
+
 /// Extract path strings from a path value (can be string or array).
 pub(crate) fn extract_paths(value: &Item) -> Vec<String> {
     if let Some(s) = value.as_str() {
@@ -23,12 +42,34 @@ pub(crate) fn extract_paths(value: &Item) -> Vec<String> {
     }
 }
 
-/// Check if a path is an exact path (no glob metacharacters).
+/// Check if a path is an exact path (no unescaped glob metacharacters).
+///
+/// Escaped sequences like `[[]` and `[]]` are treated as literal characters,
+/// not glob metacharacters. This correctly identifies paths containing literal
+/// brackets (e.g., `routes/[id]/page.svelte`) when they have been escaped for
+/// glob matching.
 pub(crate) fn is_exact_path(path: &str) -> bool {
-    !path.contains('*') && !path.contains('?') && !path.contains('[') && !path.contains('{')
+    // Remove escaped sequences first, then check for remaining metacharacters.
+    // If the original path has escaped metacharacters (like [[]]), removing them
+    // leaves the rest of the path. Any remaining metacharacters are unescaped.
+    let without_escapes = path
+        .replace("[*]", "")
+        .replace("[?]", "")
+        .replace("[[]", "")
+        .replace("[]]", "")
+        .replace("[{]", "")
+        .replace("[}]", "");
+    !without_escapes.contains('*')
+        && !without_escapes.contains('?')
+        && !without_escapes.contains('[')
+        && !without_escapes.contains('{')
 }
 
 /// Collect existing exact-path rules (rules where path is a single literal path, not a glob).
+///
+/// Paths stored with escaped glob metacharacters (e.g., `routes/[[]id[]]/page.svelte`)
+/// are unescaped to their filesystem representation (e.g., `routes/[id]/page.svelte`)
+/// for use as `HashMap` keys.
 #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
 pub(crate) fn collect_exact_path_rules(doc: &DocumentMut) -> HashMap<String, (usize, usize)> {
     let mut rules = HashMap::new();
@@ -40,7 +81,9 @@ pub(crate) fn collect_exact_path_rules(doc: &DocumentMut) -> HashMap<String, (us
                 // Only consider single-path rules that look like exact paths (no glob chars)
                 if paths.len() == 1 && is_exact_path(&paths[0]) {
                     if let Some(max_lines) = rule.get("max_lines").and_then(Item::as_integer) {
-                        let normalized = normalize_display_path(&paths[0]);
+                        // Unescape the path to get the actual filesystem path for comparison
+                        let unescaped = unescape_glob(&paths[0]);
+                        let normalized = normalize_display_path(&unescaped);
                         rules.insert(normalized, (max_lines as usize, idx));
                     }
                 }
@@ -75,8 +118,15 @@ pub(crate) fn remove_rule(doc: &mut DocumentMut, idx: usize) {
 }
 
 /// Add a new exact-path rule at the end.
+///
+/// The path is escaped using `globset::escape()` so that glob metacharacters
+/// in the path (like `[` and `]`) are matched literally rather than interpreted
+/// as glob syntax.
 #[allow(clippy::cast_possible_wrap)]
 pub(crate) fn add_rule(doc: &mut DocumentMut, path: &str, max_lines: usize) {
+    // Escape glob metacharacters so the path matches literally
+    let escaped_path = globset::escape(path);
+
     // Ensure rules array exists
     if doc.get("rules").is_none() {
         doc["rules"] = Item::ArrayOfTables(toml_edit::ArrayOfTables::new());
@@ -87,7 +137,7 @@ pub(crate) fn add_rule(doc: &mut DocumentMut, path: &str, max_lines: usize) {
         .and_then(|v| v.as_array_of_tables_mut())
     {
         let mut rule = Table::new();
-        rule["path"] = toml_edit::value(path);
+        rule["path"] = toml_edit::value(escaped_path);
         rule["max_lines"] = toml_edit::value(max_lines as i64);
         rules.push(rule);
     }
@@ -161,6 +211,33 @@ mod tests {
         assert!(!is_exact_path("src/[ab].rs"));
         assert!(!is_exact_path("src/{a,b}.rs"));
         assert!(!is_exact_path("src/?.rs"));
+    }
+
+    #[test]
+    fn is_exact_path_handles_escaped_brackets() {
+        // Escaped sequences should be treated as exact paths
+        assert!(is_exact_path("routes/[[]id[]]/page.svelte"));
+        assert!(is_exact_path("src/[[]handle[]]/+page.svelte"));
+        // Fully escaped path with literal * in filename is still an exact path
+        assert!(is_exact_path("routes/[[]id[]]/[*].svelte"));
+        // Mixed escaped and unescaped should be treated as glob
+        // This has an unescaped * which makes it a glob pattern
+        assert!(!is_exact_path("routes/[[]id[]]/*.svelte"));
+    }
+
+    #[test]
+    fn unescape_glob_reverses_escape() {
+        assert_eq!(unescape_glob("foo[*]bar"), "foo*bar");
+        assert_eq!(unescape_glob("foo[?]bar"), "foo?bar");
+        assert_eq!(unescape_glob("foo[[]bar"), "foo[bar");
+        assert_eq!(unescape_glob("foo[]]bar"), "foo]bar");
+        assert_eq!(unescape_glob("foo[{]bar"), "foo{bar");
+        assert_eq!(unescape_glob("foo[}]bar"), "foo}bar");
+        // File-based routing example (Next.js, SvelteKit, Nuxt, etc.)
+        assert_eq!(
+            unescape_glob("routes/[[]id[]]/page.svelte"),
+            "routes/[id]/page.svelte"
+        );
     }
 
     #[test]
@@ -261,5 +338,62 @@ max_lines = 10
         let exclude = doc.get("exclude").and_then(Item::as_array);
         assert!(exclude.is_some());
         assert_eq!(exclude.unwrap().len(), 0);
+    }
+
+    #[test]
+    fn add_rule_escapes_glob_metacharacters() {
+        let mut doc = DocumentMut::new();
+
+        // Add a path with brackets (common in file-based routing)
+        add_rule(&mut doc, "routes/[id]/page.svelte", 100);
+
+        let rules = doc.get("rules").and_then(Item::as_array_of_tables).unwrap();
+        assert_eq!(rules.len(), 1);
+        let first = rules.get(0).unwrap();
+        // Path should be escaped in the TOML
+        assert_eq!(
+            first.get("path").and_then(Item::as_str),
+            Some("routes/[[]id[]]/page.svelte")
+        );
+        assert_eq!(first.get("max_lines").and_then(Item::as_integer), Some(100));
+    }
+
+    #[test]
+    fn collect_exact_path_rules_handles_escaped_paths() {
+        // Simulate a config file written by baseline with escaped paths
+        let doc: DocumentMut = r#"
+[[rules]]
+path = "routes/[[]id[]]/page.svelte"
+max_lines = 100
+
+[[rules]]
+path = "src/main.rs"
+max_lines = 200
+"#
+        .parse()
+        .unwrap();
+
+        let rules = collect_exact_path_rules(&doc);
+        assert_eq!(rules.len(), 2);
+        // The escaped path should be unescaped as the HashMap key
+        assert_eq!(rules["routes/[id]/page.svelte"].0, 100);
+        assert_eq!(rules["src/main.rs"].0, 200);
+    }
+
+    #[test]
+    fn add_and_collect_roundtrip_with_brackets() {
+        let mut doc = DocumentMut::new();
+
+        // Add rules with various metacharacters in paths
+        add_rule(&mut doc, "routes/[id]/page.svelte", 100);
+        add_rule(&mut doc, "routes/[handle]/profile.svelte", 200);
+
+        // Collect should return the original filesystem paths
+        let rules = collect_exact_path_rules(&doc);
+        assert_eq!(rules.len(), 2);
+        assert!(rules.contains_key("routes/[id]/page.svelte"));
+        assert!(rules.contains_key("routes/[handle]/profile.svelte"));
+        assert_eq!(rules["routes/[id]/page.svelte"].0, 100);
+        assert_eq!(rules["routes/[handle]/profile.svelte"].0, 200);
     }
 }
