@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1769051564665,
+  "lastUpdate": 1769056338639,
   "repoUrl": "https://github.com/jakekaplan/loq",
   "entries": {
     "Benchmark": [
@@ -1007,6 +1007,54 @@ window.BENCHMARK_DATA = {
             "name": "ruff",
             "value": 0.12681795068,
             "range": "± 0.0013",
+            "unit": "seconds"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "40362401+jakekaplan@users.noreply.github.com",
+            "name": "Jake Kaplan",
+            "username": "jakekaplan"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "34aa2e2d1056e671efec00e4a56703f187ff710d",
+          "message": "Merge pull request #44 from jakekaplan/simplify-consolidate\n\nCentralize and refactor helpers",
+          "timestamp": "2026-01-21T23:31:30-05:00",
+          "tree_id": "6138a5211c994ead31bfbe3884f20c0738228765",
+          "url": "https://github.com/jakekaplan/loq/commit/34aa2e2d1056e671efec00e4a56703f187ff710d"
+        },
+        "date": 1769056338351,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "cpython",
+            "value": 0.051839187259999996,
+            "range": "± 0.0033",
+            "unit": "seconds"
+          },
+          {
+            "name": "airflow",
+            "value": 0.14941659486,
+            "range": "± 0.0114",
+            "unit": "seconds"
+          },
+          {
+            "name": "prefect",
+            "value": 0.060833647459999994,
+            "range": "± 0.0008",
+            "unit": "seconds"
+          },
+          {
+            "name": "ruff",
+            "value": 0.12675547405999998,
+            "range": "± 0.0006",
             "unit": "seconds"
           }
         ]
