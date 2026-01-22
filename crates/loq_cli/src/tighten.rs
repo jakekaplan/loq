@@ -10,7 +10,7 @@ use toml_edit::{DocumentMut, Item};
 use crate::baseline_shared::{find_violations, write_stats, BaselineStats};
 use crate::cli::TightenArgs;
 use crate::config_edit::{
-    add_rule, collect_exact_path_rules, default_document, remove_rule, update_rule_max_lines,
+    collect_exact_path_rules, default_document, remove_rule, update_rule_max_lines,
 };
 use crate::init::add_to_gitignore;
 use crate::output::print_error;
@@ -93,17 +93,6 @@ fn apply_tighten_changes(
     indices_to_remove.sort_by(|a, b| b.cmp(a));
     for idx in indices_to_remove {
         remove_rule(doc, idx);
-    }
-
-    let mut new_violations: Vec<_> = violations
-        .iter()
-        .filter(|(path, _)| !existing_rules.contains_key(*path))
-        .collect();
-    new_violations.sort_by(|(a, _), (b, _)| a.cmp(b));
-
-    for (path, &actual) in new_violations {
-        add_rule(doc, path, actual);
-        stats.added += 1;
     }
 
     stats

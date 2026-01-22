@@ -88,7 +88,7 @@ max_lines = 600
 }
 
 #[test]
-fn adds_rules_for_new_violations() {
+fn does_not_add_rules_for_new_violations() {
     let temp = TempDir::new().unwrap();
     write_file(&temp, "loq.toml", "default_max_lines = 500\n");
     write_file(&temp, "new.txt", &repeat_lines(550));
@@ -98,11 +98,10 @@ fn adds_rules_for_new_violations() {
         .args(["tighten"])
         .assert()
         .success()
-        .stdout(predicate::str::contains("Added 1 rule"));
+        .stdout(predicate::str::contains("No changes needed"));
 
     let updated = std::fs::read_to_string(temp.path().join("loq.toml")).unwrap();
-    assert!(updated.contains("path = \"new.txt\""));
-    assert!(updated.contains("max_lines = 550"));
+    assert!(!updated.contains("path = \"new.txt\""));
 }
 
 #[test]
@@ -116,12 +115,11 @@ fn creates_config_when_missing() {
         .args(["tighten"])
         .assert()
         .success()
-        .stdout(predicate::str::contains("Added 1 rule"));
+        .stdout(predicate::str::contains("No changes needed"));
 
     let config = std::fs::read_to_string(temp.path().join("loq.toml")).unwrap();
     assert!(config.contains("default_max_lines = 500"));
-    assert!(config.contains("path = \"legacy.txt\""));
-    assert!(config.contains("max_lines = 520"));
+    assert!(!config.contains("legacy.txt"));
 
     let gitignore = std::fs::read_to_string(temp.path().join(".gitignore")).unwrap();
     assert!(gitignore.contains(".loq_cache"));

@@ -28,7 +28,7 @@ pub enum Command {
     Baseline(BaselineArgs),
     /// Tighten baseline rules without raising limits.
     Tighten(TightenArgs),
-    /// Add a buffer to current violations.
+    /// Optionally add a buffer to current violations.
     Relax(RelaxArgs),
 }
 
@@ -86,6 +86,6 @@ pub struct RelaxArgs {
     pub files: Vec<PathBuf>,
 
     /// Extra lines to add above the current line count.
-    #[arg(long = "extra", visible_alias = "buffer", default_value_t = 100)]
+    #[arg(long = "extra", visible_alias = "buffer", default_value_t = 0)]
     pub extra: usize,
 }
