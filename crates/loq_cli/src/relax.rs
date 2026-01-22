@@ -23,11 +23,6 @@ struct RelaxChange {
     new_limit: usize,
 }
 
-impl RelaxChange {
-    const fn delta(&self) -> usize {
-        self.new_limit.saturating_sub(self.actual)
-    }
-}
 struct RelaxReport {
     changes: Vec<RelaxChange>,
 }
@@ -154,7 +149,7 @@ fn write_report<W: WriteColor>(writer: &mut W, report: &RelaxReport) -> std::io:
     dimmed_spec.set_dimmed(true);
 
     let mut changes: Vec<_> = report.changes.iter().collect();
-    changes.sort_by_key(|change| (change.delta(), change.actual, change.path.as_str()));
+    changes.sort_by_key(|change| (change.new_limit, change.actual, change.path.as_str()));
     let width = changes.iter().fold(6, |current, change| {
         let actual_len = format_number(change.actual).len();
         let limit_len = format_number(change.new_limit).len();

@@ -22,12 +22,6 @@ struct TightenChange {
     to: usize,
 }
 
-impl TightenChange {
-    const fn delta(&self) -> usize {
-        self.from.saturating_sub(self.to)
-    }
-}
-
 struct TightenReport {
     changes: Vec<TightenChange>,
     removed: usize,
@@ -138,7 +132,7 @@ fn write_report<W: WriteColor>(writer: &mut W, report: &TightenReport) -> std::i
 
     if !report.changes.is_empty() {
         let mut changes: Vec<_> = report.changes.iter().collect();
-        changes.sort_by_key(|change| (change.delta(), change.path.as_str()));
+        changes.sort_by_key(|change| (change.to, change.path.as_str()));
 
         let width = changes.iter().fold(6, |current, change| {
             let from_len = format_number(change.from).len();
@@ -201,7 +195,7 @@ mod tests {
     use termcolor::NoColor;
 
     #[test]
-    fn write_report_sorts_by_delta_and_summarizes() {
+    fn write_report_sorts_by_limit_and_summarizes() {
         let report = TightenReport {
             changes: vec![
                 TightenChange {
