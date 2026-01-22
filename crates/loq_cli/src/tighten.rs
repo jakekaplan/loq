@@ -34,7 +34,7 @@ struct TightenReport {
 }
 
 impl TightenReport {
-    const fn is_empty(&self) -> bool {
+    fn is_empty(&self) -> bool {
         self.changes.is_empty() && self.removed == 0
     }
 }
@@ -193,4 +193,61 @@ fn write_report<W: WriteColor>(writer: &mut W, report: &TightenReport) -> std::i
     }
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use termcolor::NoColor;
+
+    #[test]
+    fn write_report_sorts_by_delta_and_summarizes() {
+        let report = TightenReport {
+            changes: vec![
+                TightenChange {
+                    path: "b.rs".into(),
+                    from: 200,
+                    to: 150,
+                },
+                TightenChange {
+                    path: "a.rs".into(),
+                    from: 120,
+                    to: 110,
+                },
+            ],
+            removed: 1,
+        };
+
+        let mut out = NoColor::new(Vec::new());
+        write_report(&mut out, &report).unwrap();
+        let output = String::from_utf8(out.into_inner()).unwrap();
+        let lines: Vec<_> = output.lines().collect();
+
+        assert_eq!(lines.len(), 4);
+        assert!(lines[0].contains("120"));
+        assert!(lines[0].contains("->"));
+        assert!(lines[0].contains("110"));
+        assert!(lines[0].contains("a.rs"));
+        assert!(lines[1].contains("200"));
+        assert!(lines[1].contains("150"));
+        assert!(lines[1].contains("b.rs"));
+        assert_eq!(lines[2], "✔ Tightened limits for 2 files");
+        assert_eq!(lines[3], "✔ Removed limits for 1 file");
+    }
+
+    #[test]
+    fn write_report_handles_removed_only() {
+        let report = TightenReport {
+            changes: Vec::new(),
+            removed: 2,
+        };
+
+        let mut out = NoColor::new(Vec::new());
+        write_report(&mut out, &report).unwrap();
+        let output = String::from_utf8(out.into_inner()).unwrap();
+        assert_eq!(
+            output.lines().collect::<Vec<_>>(),
+            vec!["✔ Removed limits for 2 files"]
+        );
+    }
 }

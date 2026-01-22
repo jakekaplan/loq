@@ -160,7 +160,7 @@ fn removes_rule_if_file_compliant() {
         .args(["baseline"])
         .assert()
         .success()
-        .stdout(predicate::str::contains("Removed 1 file"));
+        .stdout(predicate::str::contains("Removed limits for 1 file"));
 
     let config = std::fs::read_to_string(temp.path().join("loq.toml")).unwrap();
     assert!(!config.contains("max_lines = 501"));
@@ -372,7 +372,7 @@ max_lines = 600
         .args(["baseline"])
         .assert()
         .success()
-        .stdout(predicate::str::contains("Removed 1 file"));
+        .stdout(predicate::str::contains("Removed limits for 1 file"));
 
     let updated = std::fs::read_to_string(temp.path().join("loq.toml")).unwrap();
     assert!(!updated.contains("deleted.txt"));

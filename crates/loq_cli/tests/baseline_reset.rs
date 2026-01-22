@@ -85,7 +85,7 @@ max_lines = 550
         .assert()
         .success()
         .stdout(predicate::str::contains("Updated 2 files"))
-        .stdout(predicate::str::contains("removed 1 file"));
+        .stdout(predicate::str::contains("Removed limits for 1 file"));
 
     let updated = std::fs::read_to_string(temp.path().join("loq.toml")).unwrap();
 
