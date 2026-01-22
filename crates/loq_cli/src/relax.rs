@@ -13,6 +13,7 @@ use crate::config_edit::{
     add_rule, collect_exact_path_rules, default_document, normalize_display_path,
     update_rule_max_lines,
 };
+use crate::init::add_to_gitignore;
 use crate::output::{format_number, print_error, write_path};
 use crate::ExitStatus;
 
@@ -63,7 +64,7 @@ fn run_relax_inner(args: &RelaxArgs) -> Result<RelaxReport> {
 
     let options = CheckOptions {
         config_path: config_exists.then(|| config_path.clone()),
-        cwd,
+        cwd: cwd.clone(),
         use_cache: false,
     };
 
@@ -91,6 +92,9 @@ fn run_relax_inner(args: &RelaxArgs) -> Result<RelaxReport> {
 
     std::fs::write(&config_path, doc.to_string())
         .with_context(|| format!("failed to write {}", config_path.display()))?;
+    if !config_exists {
+        add_to_gitignore(&cwd);
+    }
 
     Ok(RelaxReport { changes })
 }

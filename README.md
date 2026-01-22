@@ -7,7 +7,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
 An electric fence for LLMs (and humans too). Written in Rust,
-`loq` enforces file line limits: fast, zero-config, and language agnostic.
+`loq` enforces file line limits: fast, works out of the box, and language agnostic.
 
 ## Why loq?
 - 🔒 Hard limits to prevent oversized files and context rot
@@ -32,7 +32,7 @@ cargo install loq
 
 ### Usage
 ```bash
-# Check current directory (500 line default)
+# Check current directory for violations (default: 500 lines)
 loq check           
 
 # Check specific paths               
@@ -42,51 +42,25 @@ loq check src/ lib/
 git diff --name-only | loq check - 
 ```
 
-## Output
-
-Token-efficient default output:
-
-```
-✖    892 > 500   src/utils/helpers.py
-✖  1_427 > 500   src/components/Dashboard.tsx
-2 violations
-```
-
-Use `loq -v` for more context:
-
-```
-✖  1_427 > 500   src/components/Dashboard.tsx
-                  └─ rule: max-lines=500 (match: **/*.tsx)
-```
-
-Use `--output-format json` for machine-readable output:
+### Managing legacy files
 
 ```bash
-loq check --output-format json
+# Creates, updates or removes exact-path rules
+# to match the current state of your files.
+loq baseline
+
+# Creates or updates exact-path rules for current violations
+loq relax
+loq relax src/legacy.rs   # specific file
+loq relax --extra 50      # custom buffer
+
+# Ratchets down or removes existing exact-path rules
+# as your file sizes become compliant over time
+loq tighten
 ```
 
-```json
-{
-  "version": "0.1.0",
-  "violations": [
-    {
-      "path": "src/main.rs",
-      "lines": 1427,
-      "max_lines": 500,
-      "rule": "default"
-    }
-  ],
-  "skip_warnings": [],
-  "walk_errors": [],
-  "summary": {
-    "files_checked": 42,
-    "skipped": 0,
-    "passed": 41,
-    "violations": 1,
-    "walk_errors": 0
-  }
-}
-```
+All three commands manage exact-path rules in `loq.toml`. `baseline` and
+`relax` can add new rules; `tighten` only updates or removes existing ones.
 
 ## Configuration
 
@@ -94,55 +68,34 @@ loq works zero-config. Run `loq init` to create a `loq.toml` file to customize:
 
 ```toml
 # default, for files not matching any rule
-default_max_lines = 500       
+default_max_lines = 500
 
 # skip .gitignore'd files
-respect_gitignore = true      
+respect_gitignore = true
 
 # ignore files or paths
 exclude = [".git/**", "**/generated/**", "*.lock"]
 
-# Add fix_guidance to include project-specific instructions 
+# Add fix_guidance to include project-specific instructions
 # with each violation when piping output to an LLM:
 fix_guidance = "Split large files: helpers → src/utils/, types → src/types/"
 
-# last match wins; * stays within a path segment, ** matches across directories
-[[rules]]                   
+# Last match wins
+# * stays within a path segment
+# ** matches across directories
+[[rules]]
 path = "**/*.tsx"
 max_lines = 300
 ```
 
-## Managing legacy files
-
-Existing large files? Baseline them to the current state:
+## Output options
 
 ```bash
-# Create loq.toml (if missing) and add rules for files over the limit
-loq baseline
-```
+# Detailed output
+loq check -v
 
-Run it whenever you want to accept the current sizes. It updates limits to
-match current line counts, removes rules once files are under the threshold,
-and adds rules for new violations. Use `--threshold 300` to set a custom limit.
-
-Want to ratchet limits down over time without raising them? Use tighten:
-
-```bash
-loq tighten
-```
-
-Need to ship while files are still too big? Relax creates or updates exact-path
-rules for the files currently failing checks:
-
-```bash
-# Use default buffer of 100 lines
-loq relax
-
-# Only update for one file
-loq relax src/legacy.rs
-
-# Add 50 lines above current size
-loq relax --extra 50
+# JSON format
+loq check --output-format json
 ```
 
 ## Add as a Pre-commit Hook

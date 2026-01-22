@@ -39,6 +39,7 @@ fn parse_relax_line(line: &str) -> Option<(usize, usize, &str)> {
 #[test]
 fn creates_config_and_rule_when_missing() {
     let temp = TempDir::new().unwrap();
+    write_file(&temp, ".gitignore", "target\n");
     write_file(&temp, "src/legacy.rs", &repeat_lines(523));
 
     let output = cargo_bin_cmd!("loq")
@@ -54,13 +55,16 @@ fn creates_config_and_rule_when_missing() {
         line.contains("src/legacy.rs")
             && line.contains("523")
             && line.contains("->")
-            && line.contains("623")
+            && line.contains("523")
     }));
 
     let content = std::fs::read_to_string(temp.path().join("loq.toml")).unwrap();
     assert!(content.contains("default_max_lines = 500"));
     assert!(content.contains("path = \"src/legacy.rs\""));
-    assert!(content.contains("max_lines = 623"));
+    assert!(content.contains("max_lines = 523"));
+
+    let gitignore = std::fs::read_to_string(temp.path().join(".gitignore")).unwrap();
+    assert!(gitignore.contains(".loq_cache"));
 }
 
 #[test]
@@ -117,7 +121,7 @@ max_lines = 700
     assert!(content.contains("path = \"**/*.rs\""));
     assert!(content.contains("max_lines = 700"));
     assert!(content.contains("path = \"src/big.rs\""));
-    assert!(content.contains("max_lines = 850"));
+    assert!(content.contains("max_lines = 750"));
 }
 
 #[test]
