@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1769040757742,
+  "lastUpdate": 1769043419064,
   "repoUrl": "https://github.com/jakekaplan/loq",
   "entries": {
     "Benchmark": [
@@ -863,6 +863,54 @@ window.BENCHMARK_DATA = {
             "name": "ruff",
             "value": 0.12778822029999998,
             "range": "± 0.0075",
+            "unit": "seconds"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "40362401+jakekaplan@users.noreply.github.com",
+            "name": "Jake Kaplan",
+            "username": "jakekaplan"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "71bfc1a1a857faa7a2d0c792ce72a48e8488feeb",
+          "message": "Merge pull request #41 from jakekaplan/add-new-cmds-to-readme\n\nfix tighten and relax",
+          "timestamp": "2026-01-21T19:56:06-05:00",
+          "tree_id": "ac87cd317b57fab7f13d5795f0e70c7df79a4f5d",
+          "url": "https://github.com/jakekaplan/loq/commit/71bfc1a1a857faa7a2d0c792ce72a48e8488feeb"
+        },
+        "date": 1769043418226,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "cpython",
+            "value": 0.05033774716,
+            "range": "± 0.0007",
+            "unit": "seconds"
+          },
+          {
+            "name": "airflow",
+            "value": 0.14164829296000003,
+            "range": "± 0.0014",
+            "unit": "seconds"
+          },
+          {
+            "name": "prefect",
+            "value": 0.059315228459999994,
+            "range": "± 0.0012",
+            "unit": "seconds"
+          },
+          {
+            "name": "ruff",
+            "value": 0.12376142466,
+            "range": "± 0.0008",
             "unit": "seconds"
           }
         ]
