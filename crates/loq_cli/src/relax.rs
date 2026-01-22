@@ -5,17 +5,16 @@ use std::path::PathBuf;
 
 use anyhow::{Context, Result};
 use loq_fs::CheckOptions;
-use termcolor::{Color, ColorSpec, WriteColor};
+use termcolor::WriteColor;
 use toml_edit::DocumentMut;
 
 use crate::cli::RelaxArgs;
 use crate::config_edit::{
-    add_rule, collect_exact_path_rules, default_document, normalize_display_path,
-    update_rule_max_lines,
+    add_rule, collect_exact_path_rules, load_doc_or_default, persist_doc, update_rule_max_lines,
 };
-use crate::init::add_to_gitignore;
-use crate::output::{format_number, print_error, write_path};
+use crate::output::{change_style, max_number_width, print_error, write_change_line};
 use crate::ExitStatus;
+use loq_fs::normalize_display_path;
 
 struct RelaxChange {
     path: String,
@@ -77,24 +76,12 @@ fn run_relax_inner(args: &RelaxArgs) -> Result<RelaxReport> {
         });
     }
 
-    let mut doc = if config_exists {
-        let config_text = std::fs::read_to_string(&config_path)
-            .with_context(|| format!("failed to read {}", config_path.display()))?;
-        config_text
-            .parse()
-            .with_context(|| format!("failed to parse {}", config_path.display()))?
-    } else {
-        default_document()
-    };
+    let (mut doc, config_exists_for_write) = load_doc_or_default(&config_path)?;
 
     let existing_rules = collect_exact_path_rules(&doc);
     let changes = apply_relax_changes(&mut doc, &violations, &existing_rules, args.extra);
 
-    std::fs::write(&config_path, doc.to_string())
-        .with_context(|| format!("failed to write {}", config_path.display()))?;
-    if !config_exists {
-        add_to_gitignore(&cwd);
-    }
+    persist_doc(&cwd, &config_path, &doc, config_exists_for_write)?;
 
     Ok(RelaxReport { changes })
 }
@@ -139,43 +126,29 @@ fn apply_relax_changes(
 
 fn write_report<W: WriteColor>(writer: &mut W, report: &RelaxReport) -> std::io::Result<()> {
     let count = report.changes.len();
-    let mut actual_spec = ColorSpec::new();
-    actual_spec.set_fg(Some(Color::Red)).set_bold(true);
-    let mut limit_spec = ColorSpec::new();
-    limit_spec.set_fg(Some(Color::Green));
-    let mut green_spec = ColorSpec::new();
-    green_spec.set_fg(Some(Color::Green));
-    let mut dimmed_spec = ColorSpec::new();
-    dimmed_spec.set_dimmed(true);
+    let style = change_style();
 
     let mut changes: Vec<_> = report.changes.iter().collect();
     changes.sort_by_key(|change| (change.new_limit, change.actual, change.path.as_str()));
-    let width = changes.iter().fold(6, |current, change| {
-        let actual_len = format_number(change.actual).len();
-        let limit_len = format_number(change.new_limit).len();
-        current.max(actual_len).max(limit_len)
-    });
+    let width = max_number_width(changes.iter().flat_map(|change| {
+        std::iter::once(change.actual).chain(std::iter::once(change.new_limit))
+    }));
 
     for change in changes {
-        let actual_str = format_number(change.actual);
-        let limit_str = format_number(change.new_limit);
-        writer.set_color(&actual_spec)?;
-        write!(writer, "{actual_str:>width$}")?;
-        writer.reset()?;
-        writer.set_color(&dimmed_spec)?;
-        write!(writer, " -> ")?;
-        writer.reset()?;
-        writer.set_color(&limit_spec)?;
-        write!(writer, "{limit_str:<width$}")?;
-        writer.reset()?;
-        write!(writer, " ")?;
-        write_path(writer, &change.path)?;
-        writeln!(writer)?;
+        write_change_line(
+            writer,
+            &style,
+            width,
+            None,
+            Some(change.actual),
+            Some(change.new_limit),
+            &change.path,
+        )?;
     }
-    writer.set_color(&green_spec)?;
+    writer.set_color(&style.ok)?;
     write!(writer, "✔ ")?;
     writer.reset()?;
-    writer.set_color(&dimmed_spec)?;
+    writer.set_color(&style.dimmed)?;
     write!(
         writer,
         "Relaxed limits for {count} file{}",

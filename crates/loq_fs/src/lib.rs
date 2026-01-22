@@ -146,6 +146,23 @@ pub fn run_check(paths: Vec<PathBuf>, options: CheckOptions) -> Result<CheckOutp
     })
 }
 
+/// Normalizes a path string for display and matching.
+///
+/// - Converts backslashes to forward slashes (Windows)
+/// - Strips leading `./` prefix (walker returns `./foo` when started from `.`)
+#[must_use]
+pub fn normalize_display_path(path: &str) -> String {
+    #[cfg(windows)]
+    {
+        let path = path.replace('\\', "/");
+        path.strip_prefix("./").unwrap_or(&path).to_string()
+    }
+    #[cfg(not(windows))]
+    {
+        path.strip_prefix("./").unwrap_or(path).to_string()
+    }
+}
+
 fn check_group(
     paths: &[PathBuf],
     compiled: &CompiledConfig,
@@ -334,8 +351,7 @@ fn strip_verbatim_prefix(path: &Path) -> PathBuf {
 /// - Strips leading `./` prefix (walker returns `./foo` when started from `.`)
 #[cfg(windows)]
 fn normalize_path(path: &Path) -> String {
-    let s = path.to_string_lossy().replace('\\', "/");
-    s.strip_prefix("./").unwrap_or(&s).to_string()
+    normalize_display_path(path.to_string_lossy().as_ref())
 }
 
 /// Normalizes a path for pattern matching.
@@ -343,8 +359,7 @@ fn normalize_path(path: &Path) -> String {
 /// Strips leading `./` prefix (walker returns `./foo` when started from `.`).
 #[cfg(not(windows))]
 fn normalize_path(path: &Path) -> String {
-    let s = path.to_string_lossy();
-    s.strip_prefix("./").unwrap_or(&s).to_string()
+    normalize_display_path(path.to_string_lossy().as_ref())
 }
 
 #[cfg(test)]

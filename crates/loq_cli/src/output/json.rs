@@ -2,9 +2,9 @@
 
 use std::io::{self, Write};
 
-use loq_core::report::OutcomeKind;
+use loq_core::report::{FindingKind, Report, SkipReason};
 use loq_core::MatchBy;
-use loq_fs::CheckOutput;
+use loq_fs::walk::WalkError;
 use serde::Serialize;
 
 #[derive(Debug, Serialize)]
@@ -43,64 +43,50 @@ struct JsonSkipWarning {
     detail: Option<String>,
 }
 
-pub fn write_json<W: Write>(writer: &mut W, output: &CheckOutput) -> io::Result<()> {
-    let mut summary = JsonSummary {
-        files_checked: output.outcomes.len(),
-        skipped: 0,
-        passed: 0,
-        violations: 0,
-        walk_errors: output.walk_errors.len(),
+pub fn write_json<W: Write>(
+    writer: &mut W,
+    report: &Report,
+    walk_errors: &[WalkError],
+) -> io::Result<()> {
+    let summary = JsonSummary {
+        files_checked: report.summary.total,
+        skipped: report.summary.skipped,
+        passed: report.summary.passed,
+        violations: report.summary.errors,
+        walk_errors: walk_errors.len(),
     };
     let mut violations = Vec::new();
     let mut skip_warnings = Vec::new();
 
-    for outcome in &output.outcomes {
-        match &outcome.kind {
-            OutcomeKind::NoLimit => {
-                summary.skipped += 1;
-            }
-            OutcomeKind::Missing => {
-                summary.skipped += 1;
-                skip_warnings.push(JsonSkipWarning {
-                    path: outcome.display_path.clone(),
-                    reason: "missing",
-                    detail: None,
-                });
-            }
-            OutcomeKind::Unreadable { error } => {
-                summary.skipped += 1;
-                skip_warnings.push(JsonSkipWarning {
-                    path: outcome.display_path.clone(),
-                    reason: "unreadable",
-                    detail: Some(error.clone()),
-                });
-            }
-            OutcomeKind::Binary => {
-                summary.skipped += 1;
-                skip_warnings.push(JsonSkipWarning {
-                    path: outcome.display_path.clone(),
-                    reason: "binary",
-                    detail: None,
-                });
-            }
-            OutcomeKind::Pass { .. } => {
-                summary.passed += 1;
-            }
-            OutcomeKind::Violation {
+    for finding in &report.findings {
+        match &finding.kind {
+            FindingKind::Violation {
                 limit,
                 actual,
                 matched_by,
+                ..
             } => {
-                summary.violations += 1;
                 let rule = match matched_by {
                     MatchBy::Rule { pattern } => pattern.clone(),
                     MatchBy::Default => "default".to_string(),
                 };
                 violations.push(JsonViolation {
-                    path: outcome.display_path.clone(),
+                    path: finding.path.clone(),
                     lines: *actual,
                     max_lines: *limit,
                     rule,
+                });
+            }
+            FindingKind::SkipWarning { reason } => {
+                let (reason, detail) = match reason {
+                    SkipReason::Missing => ("missing", None),
+                    SkipReason::Binary => ("binary", None),
+                    SkipReason::Unreadable(error) => ("unreadable", Some(error.clone())),
+                };
+                skip_warnings.push(JsonSkipWarning {
+                    path: finding.path.clone(),
+                    reason,
+                    detail,
                 });
             }
         }
@@ -109,18 +95,11 @@ pub fn write_json<W: Write>(writer: &mut W, output: &CheckOutput) -> io::Result<
     violations.sort_by(|a, b| a.path.cmp(&b.path));
     skip_warnings.sort_by(|a, b| a.path.cmp(&b.path));
 
-    let mut walk_errors: Vec<String> = output
-        .walk_errors
+    let mut walk_errors: Vec<String> = walk_errors
         .iter()
         .map(|error| error.message.clone())
         .collect();
     walk_errors.sort();
-
-    let fix_guidance = if summary.violations > 0 {
-        output.fix_guidance.clone()
-    } else {
-        None
-    };
 
     let output = JsonOutput {
         version: env!("CARGO_PKG_VERSION"),
@@ -128,7 +107,7 @@ pub fn write_json<W: Write>(writer: &mut W, output: &CheckOutput) -> io::Result<
         skip_warnings,
         walk_errors,
         summary,
-        fix_guidance,
+        fix_guidance: report.fix_guidance.clone(),
     };
 
     serde_json::to_writer_pretty(&mut *writer, &output)?;
@@ -139,51 +118,52 @@ pub fn write_json<W: Write>(writer: &mut W, output: &CheckOutput) -> io::Result<
 mod tests {
     use super::*;
     use loq_core::config::ConfigOrigin;
-    use loq_core::report::FileOutcome;
+    use loq_core::report::{build_report, FileOutcome, OutcomeKind};
     use loq_fs::walk;
 
-    fn json_output_string(output: &CheckOutput) -> String {
+    fn json_output_string(
+        outcomes: Vec<FileOutcome>,
+        walk_errors: Vec<walk::WalkError>,
+        fix_guidance: Option<String>,
+    ) -> String {
+        let report = build_report(&outcomes, fix_guidance);
         let mut buf = Vec::new();
-        write_json(&mut buf, output).unwrap();
+        write_json(&mut buf, &report, &walk_errors).unwrap();
         String::from_utf8(buf).unwrap()
     }
 
     #[test]
     fn all_outcomes_counted() {
-        let output = CheckOutput {
-            outcomes: vec![
-                FileOutcome {
-                    path: "a.rs".into(),
-                    display_path: "a.rs".into(),
-                    config_source: ConfigOrigin::BuiltIn,
-                    kind: OutcomeKind::NoLimit,
+        let outcomes = vec![
+            FileOutcome {
+                path: "a.rs".into(),
+                display_path: "a.rs".into(),
+                config_source: ConfigOrigin::BuiltIn,
+                kind: OutcomeKind::NoLimit,
+            },
+            FileOutcome {
+                path: "b.rs".into(),
+                display_path: "b.rs".into(),
+                config_source: ConfigOrigin::BuiltIn,
+                kind: OutcomeKind::Pass {
+                    limit: 100,
+                    actual: 50,
+                    matched_by: MatchBy::Default,
                 },
-                FileOutcome {
-                    path: "b.rs".into(),
-                    display_path: "b.rs".into(),
-                    config_source: ConfigOrigin::BuiltIn,
-                    kind: OutcomeKind::Pass {
-                        limit: 100,
-                        actual: 50,
-                        matched_by: MatchBy::Default,
-                    },
+            },
+            FileOutcome {
+                path: "c.rs".into(),
+                display_path: "c.rs".into(),
+                config_source: ConfigOrigin::BuiltIn,
+                kind: OutcomeKind::Violation {
+                    limit: 100,
+                    actual: 150,
+                    matched_by: MatchBy::Default,
                 },
-                FileOutcome {
-                    path: "c.rs".into(),
-                    display_path: "c.rs".into(),
-                    config_source: ConfigOrigin::BuiltIn,
-                    kind: OutcomeKind::Violation {
-                        limit: 100,
-                        actual: 150,
-                        matched_by: MatchBy::Default,
-                    },
-                },
-            ],
-            walk_errors: vec![],
-            fix_guidance: None,
-        };
+            },
+        ];
 
-        let json = json_output_string(&output);
+        let json = json_output_string(outcomes, vec![], None);
         let parsed: serde_json::Value = serde_json::from_str(&json).unwrap();
 
         assert_eq!(parsed["summary"]["files_checked"], 3);
@@ -194,18 +174,14 @@ mod tests {
 
     #[test]
     fn missing_file_warning() {
-        let output = CheckOutput {
-            outcomes: vec![FileOutcome {
-                path: "missing.rs".into(),
-                display_path: "missing.rs".into(),
-                config_source: ConfigOrigin::BuiltIn,
-                kind: OutcomeKind::Missing,
-            }],
-            walk_errors: vec![],
-            fix_guidance: None,
-        };
+        let outcomes = vec![FileOutcome {
+            path: "missing.rs".into(),
+            display_path: "missing.rs".into(),
+            config_source: ConfigOrigin::BuiltIn,
+            kind: OutcomeKind::Missing,
+        }];
 
-        let json = json_output_string(&output);
+        let json = json_output_string(outcomes, vec![], None);
         let parsed: serde_json::Value = serde_json::from_str(&json).unwrap();
 
         assert_eq!(parsed["summary"]["skipped"], 1);
@@ -216,20 +192,16 @@ mod tests {
 
     #[test]
     fn unreadable_file_warning() {
-        let output = CheckOutput {
-            outcomes: vec![FileOutcome {
-                path: "locked.rs".into(),
-                display_path: "locked.rs".into(),
-                config_source: ConfigOrigin::BuiltIn,
-                kind: OutcomeKind::Unreadable {
-                    error: "permission denied".into(),
-                },
-            }],
-            walk_errors: vec![],
-            fix_guidance: None,
-        };
+        let outcomes = vec![FileOutcome {
+            path: "locked.rs".into(),
+            display_path: "locked.rs".into(),
+            config_source: ConfigOrigin::BuiltIn,
+            kind: OutcomeKind::Unreadable {
+                error: "permission denied".into(),
+            },
+        }];
 
-        let json = json_output_string(&output);
+        let json = json_output_string(outcomes, vec![], None);
         let parsed: serde_json::Value = serde_json::from_str(&json).unwrap();
 
         assert_eq!(parsed["summary"]["skipped"], 1);
@@ -240,18 +212,14 @@ mod tests {
 
     #[test]
     fn binary_file_warning() {
-        let output = CheckOutput {
-            outcomes: vec![FileOutcome {
-                path: "image.png".into(),
-                display_path: "image.png".into(),
-                config_source: ConfigOrigin::BuiltIn,
-                kind: OutcomeKind::Binary,
-            }],
-            walk_errors: vec![],
-            fix_guidance: None,
-        };
+        let outcomes = vec![FileOutcome {
+            path: "image.png".into(),
+            display_path: "image.png".into(),
+            config_source: ConfigOrigin::BuiltIn,
+            kind: OutcomeKind::Binary,
+        }];
 
-        let json = json_output_string(&output);
+        let json = json_output_string(outcomes, vec![], None);
         let parsed: serde_json::Value = serde_json::from_str(&json).unwrap();
 
         assert_eq!(parsed["summary"]["skipped"], 1);
@@ -262,24 +230,20 @@ mod tests {
 
     #[test]
     fn violation_with_rule_match() {
-        let output = CheckOutput {
-            outcomes: vec![FileOutcome {
-                path: "big.rs".into(),
-                display_path: "big.rs".into(),
-                config_source: ConfigOrigin::BuiltIn,
-                kind: OutcomeKind::Violation {
-                    limit: 100,
-                    actual: 200,
-                    matched_by: MatchBy::Rule {
-                        pattern: "**/*.rs".into(),
-                    },
+        let outcomes = vec![FileOutcome {
+            path: "big.rs".into(),
+            display_path: "big.rs".into(),
+            config_source: ConfigOrigin::BuiltIn,
+            kind: OutcomeKind::Violation {
+                limit: 100,
+                actual: 200,
+                matched_by: MatchBy::Rule {
+                    pattern: "**/*.rs".into(),
                 },
-            }],
-            walk_errors: vec![],
-            fix_guidance: None,
-        };
+            },
+        }];
 
-        let json = json_output_string(&output);
+        let json = json_output_string(outcomes, vec![], None);
         let parsed: serde_json::Value = serde_json::from_str(&json).unwrap();
 
         assert_eq!(parsed["violations"][0]["path"], "big.rs");
@@ -290,22 +254,18 @@ mod tests {
 
     #[test]
     fn violation_with_default_match() {
-        let output = CheckOutput {
-            outcomes: vec![FileOutcome {
-                path: "big.rs".into(),
-                display_path: "big.rs".into(),
-                config_source: ConfigOrigin::BuiltIn,
-                kind: OutcomeKind::Violation {
-                    limit: 100,
-                    actual: 200,
-                    matched_by: MatchBy::Default,
-                },
-            }],
-            walk_errors: vec![],
-            fix_guidance: None,
-        };
+        let outcomes = vec![FileOutcome {
+            path: "big.rs".into(),
+            display_path: "big.rs".into(),
+            config_source: ConfigOrigin::BuiltIn,
+            kind: OutcomeKind::Violation {
+                limit: 100,
+                actual: 200,
+                matched_by: MatchBy::Default,
+            },
+        }];
 
-        let json = json_output_string(&output);
+        let json = json_output_string(outcomes, vec![], None);
         let parsed: serde_json::Value = serde_json::from_str(&json).unwrap();
 
         assert_eq!(parsed["violations"][0]["rule"], "default");
@@ -313,9 +273,9 @@ mod tests {
 
     #[test]
     fn walk_errors_included() {
-        let output = CheckOutput {
-            outcomes: vec![],
-            walk_errors: vec![
+        let json = json_output_string(
+            vec![],
+            vec![
                 walk::WalkError {
                     message: "path/to/error1".into(),
                 },
@@ -323,10 +283,8 @@ mod tests {
                     message: "path/to/error2".into(),
                 },
             ],
-            fix_guidance: None,
-        };
-
-        let json = json_output_string(&output);
+            None,
+        );
         let parsed: serde_json::Value = serde_json::from_str(&json).unwrap();
 
         assert_eq!(parsed["summary"]["walk_errors"], 2);
@@ -337,22 +295,18 @@ mod tests {
 
     #[test]
     fn fix_guidance_included_with_violations() {
-        let output = CheckOutput {
-            outcomes: vec![FileOutcome {
-                path: "big.rs".into(),
-                display_path: "big.rs".into(),
-                config_source: ConfigOrigin::BuiltIn,
-                kind: OutcomeKind::Violation {
-                    limit: 100,
-                    actual: 200,
-                    matched_by: MatchBy::Default,
-                },
-            }],
-            walk_errors: vec![],
-            fix_guidance: Some("Split large files.".into()),
-        };
+        let outcomes = vec![FileOutcome {
+            path: "big.rs".into(),
+            display_path: "big.rs".into(),
+            config_source: ConfigOrigin::BuiltIn,
+            kind: OutcomeKind::Violation {
+                limit: 100,
+                actual: 200,
+                matched_by: MatchBy::Default,
+            },
+        }];
 
-        let json = json_output_string(&output);
+        let json = json_output_string(outcomes, vec![], Some("Split large files.".into()));
         let parsed: serde_json::Value = serde_json::from_str(&json).unwrap();
 
         assert_eq!(parsed["fix_guidance"], "Split large files.");
@@ -360,22 +314,18 @@ mod tests {
 
     #[test]
     fn fix_guidance_excluded_without_violations() {
-        let output = CheckOutput {
-            outcomes: vec![FileOutcome {
-                path: "small.rs".into(),
-                display_path: "small.rs".into(),
-                config_source: ConfigOrigin::BuiltIn,
-                kind: OutcomeKind::Pass {
-                    limit: 100,
-                    actual: 50,
-                    matched_by: MatchBy::Default,
-                },
-            }],
-            walk_errors: vec![],
-            fix_guidance: Some("Split large files.".into()),
-        };
+        let outcomes = vec![FileOutcome {
+            path: "small.rs".into(),
+            display_path: "small.rs".into(),
+            config_source: ConfigOrigin::BuiltIn,
+            kind: OutcomeKind::Pass {
+                limit: 100,
+                actual: 50,
+                matched_by: MatchBy::Default,
+            },
+        }];
 
-        let json = json_output_string(&output);
+        let json = json_output_string(outcomes, vec![], Some("Split large files.".into()));
         let parsed: serde_json::Value = serde_json::from_str(&json).unwrap();
 
         assert!(parsed["fix_guidance"].is_null());
@@ -383,34 +333,30 @@ mod tests {
 
     #[test]
     fn violations_sorted_by_path() {
-        let output = CheckOutput {
-            outcomes: vec![
-                FileOutcome {
-                    path: "z.rs".into(),
-                    display_path: "z.rs".into(),
-                    config_source: ConfigOrigin::BuiltIn,
-                    kind: OutcomeKind::Violation {
-                        limit: 100,
-                        actual: 200,
-                        matched_by: MatchBy::Default,
-                    },
+        let outcomes = vec![
+            FileOutcome {
+                path: "z.rs".into(),
+                display_path: "z.rs".into(),
+                config_source: ConfigOrigin::BuiltIn,
+                kind: OutcomeKind::Violation {
+                    limit: 100,
+                    actual: 200,
+                    matched_by: MatchBy::Default,
                 },
-                FileOutcome {
-                    path: "a.rs".into(),
-                    display_path: "a.rs".into(),
-                    config_source: ConfigOrigin::BuiltIn,
-                    kind: OutcomeKind::Violation {
-                        limit: 100,
-                        actual: 200,
-                        matched_by: MatchBy::Default,
-                    },
+            },
+            FileOutcome {
+                path: "a.rs".into(),
+                display_path: "a.rs".into(),
+                config_source: ConfigOrigin::BuiltIn,
+                kind: OutcomeKind::Violation {
+                    limit: 100,
+                    actual: 200,
+                    matched_by: MatchBy::Default,
                 },
-            ],
-            walk_errors: vec![],
-            fix_guidance: None,
-        };
+            },
+        ];
 
-        let json = json_output_string(&output);
+        let json = json_output_string(outcomes, vec![], None);
         let parsed: serde_json::Value = serde_json::from_str(&json).unwrap();
 
         assert_eq!(parsed["violations"][0]["path"], "a.rs");

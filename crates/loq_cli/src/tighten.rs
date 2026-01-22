@@ -3,17 +3,17 @@
 use std::collections::HashMap;
 use std::path::PathBuf;
 
-use anyhow::{Context, Result};
-use termcolor::{Color, ColorSpec, WriteColor};
-use toml_edit::{DocumentMut, Item};
+use anyhow::Result;
+use termcolor::WriteColor;
+use toml_edit::DocumentMut;
 
 use crate::baseline_shared::find_violations;
 use crate::cli::TightenArgs;
 use crate::config_edit::{
-    collect_exact_path_rules, default_document, remove_rule, update_rule_max_lines,
+    collect_exact_path_rules, load_doc_or_default, persist_doc, remove_rule, threshold_from_doc,
+    update_rule_max_lines,
 };
-use crate::init::add_to_gitignore;
-use crate::output::{format_number, print_error, write_path};
+use crate::output::{change_style, max_number_width, print_error, write_change_line};
 use crate::ExitStatus;
 
 struct TightenChange {
@@ -55,33 +55,14 @@ fn run_tighten_inner(args: &TightenArgs) -> Result<TightenReport> {
     let cwd = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
     let config_path = cwd.join("loq.toml");
 
-    let config_exists = config_path.exists();
-    let mut doc: DocumentMut = if config_exists {
-        let config_text = std::fs::read_to_string(&config_path)
-            .with_context(|| format!("failed to read {}", config_path.display()))?;
-        config_text
-            .parse()
-            .with_context(|| format!("failed to parse {}", config_path.display()))?
-    } else {
-        default_document()
-    };
-
-    #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
-    let threshold = args.threshold.unwrap_or_else(|| {
-        doc.get("default_max_lines")
-            .and_then(Item::as_integer)
-            .map_or(500, |v| v as usize)
-    });
+    let (mut doc, config_exists) = load_doc_or_default(&config_path)?;
+    let threshold = threshold_from_doc(&doc, args.threshold);
 
     let violations = find_violations(&cwd, &doc, threshold, "tighten check failed")?;
     let existing_rules = collect_exact_path_rules(&doc);
     let report = apply_tighten_changes(&mut doc, &violations, &existing_rules);
 
-    std::fs::write(&config_path, doc.to_string())
-        .with_context(|| format!("failed to write {}", config_path.display()))?;
-    if !config_exists {
-        add_to_gitignore(&cwd);
-    }
+    persist_doc(&cwd, &config_path, &doc, config_exists)?;
 
     Ok(report)
 }
@@ -121,47 +102,35 @@ fn apply_tighten_changes(
 }
 
 fn write_report<W: WriteColor>(writer: &mut W, report: &TightenReport) -> std::io::Result<()> {
-    let mut from_spec = ColorSpec::new();
-    from_spec.set_fg(Some(Color::Red)).set_bold(true);
-    let mut to_spec = ColorSpec::new();
-    to_spec.set_fg(Some(Color::Green));
-    let mut green_spec = ColorSpec::new();
-    green_spec.set_fg(Some(Color::Green));
-    let mut dimmed_spec = ColorSpec::new();
-    dimmed_spec.set_dimmed(true);
+    let style = change_style();
 
     if !report.changes.is_empty() {
         let mut changes: Vec<_> = report.changes.iter().collect();
         changes.sort_by_key(|change| (change.to, change.path.as_str()));
 
-        let width = changes.iter().fold(6, |current, change| {
-            let from_len = format_number(change.from).len();
-            let to_len = format_number(change.to).len();
-            current.max(from_len).max(to_len)
-        });
+        let width = max_number_width(
+            changes
+                .iter()
+                .flat_map(|change| std::iter::once(change.from).chain(std::iter::once(change.to))),
+        );
 
         for change in changes {
-            let from_str = format_number(change.from);
-            let to_str = format_number(change.to);
-            writer.set_color(&from_spec)?;
-            write!(writer, "{from_str:>width$}")?;
-            writer.reset()?;
-            writer.set_color(&dimmed_spec)?;
-            write!(writer, " -> ")?;
-            writer.reset()?;
-            writer.set_color(&to_spec)?;
-            write!(writer, "{to_str:<width$}")?;
-            writer.reset()?;
-            write!(writer, " ")?;
-            write_path(writer, &change.path)?;
-            writeln!(writer)?;
+            write_change_line(
+                writer,
+                &style,
+                width,
+                None,
+                Some(change.from),
+                Some(change.to),
+                &change.path,
+            )?;
         }
 
         let count = report.changes.len();
-        writer.set_color(&green_spec)?;
+        writer.set_color(&style.ok)?;
         write!(writer, "✔ ")?;
         writer.reset()?;
-        writer.set_color(&dimmed_spec)?;
+        writer.set_color(&style.dimmed)?;
         write!(
             writer,
             "Tightened limits for {count} file{}",
@@ -172,10 +141,10 @@ fn write_report<W: WriteColor>(writer: &mut W, report: &TightenReport) -> std::i
     }
 
     if report.removed > 0 {
-        writer.set_color(&green_spec)?;
+        writer.set_color(&style.ok)?;
         write!(writer, "✔ ")?;
         writer.reset()?;
-        writer.set_color(&dimmed_spec)?;
+        writer.set_color(&style.dimmed)?;
         write!(
             writer,
             "Removed limits for {} file{}",

@@ -4,10 +4,12 @@ use std::collections::HashMap;
 use std::path::Path;
 
 use anyhow::{Context, Result};
+use loq_core::config::DEFAULT_RESPECT_GITIGNORE;
 use loq_fs::CheckOptions;
 use toml_edit::{DocumentMut, Item};
 
-use crate::config_edit::{extract_paths, is_exact_path, normalize_display_path};
+use crate::config_edit::{extract_paths, is_exact_path};
+use loq_fs::normalize_display_path;
 
 /// Find all files that violate the given threshold.
 pub(crate) fn find_violations(
@@ -42,16 +44,16 @@ pub(crate) fn find_violations(
 
 /// Build a temporary config for violation scanning.
 /// Copies glob rules (policy) but not exact-path rules (baseline).
-#[allow(clippy::cast_possible_wrap)]
 fn build_temp_config(doc: &DocumentMut, threshold: usize) -> String {
     let mut temp_doc = DocumentMut::new();
 
-    temp_doc["default_max_lines"] = toml_edit::value(threshold as i64);
+    let threshold_value = i64::try_from(threshold).unwrap_or(i64::MAX);
+    temp_doc["default_max_lines"] = toml_edit::value(threshold_value);
 
     let respect_gitignore = doc
         .get("respect_gitignore")
         .and_then(Item::as_bool)
-        .unwrap_or(true);
+        .unwrap_or(DEFAULT_RESPECT_GITIGNORE);
     temp_doc["respect_gitignore"] = toml_edit::value(respect_gitignore);
 
     if let Some(exclude_array) = doc.get("exclude").and_then(Item::as_array) {

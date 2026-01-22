@@ -4,6 +4,7 @@ use std::fmt::Write as _;
 use std::path::Path;
 use std::path::PathBuf;
 
+use loq_core::config::{DEFAULT_MAX_LINES, DEFAULT_RESPECT_GITIGNORE};
 use termcolor::WriteColor;
 
 use crate::cli::InitArgs;
@@ -66,8 +67,8 @@ pub(crate) fn add_to_gitignore(cwd: &Path) {
 fn default_config_text() -> String {
     let mut out = String::new();
 
-    writeln!(out, "default_max_lines = 500").unwrap();
-    writeln!(out, "respect_gitignore = true").unwrap();
+    writeln!(out, "default_max_lines = {DEFAULT_MAX_LINES}").unwrap();
+    writeln!(out, "respect_gitignore = {DEFAULT_RESPECT_GITIGNORE}").unwrap();
     writeln!(out).unwrap();
     writeln!(out, "# Paths, files, or glob patterns to exclude").unwrap();
     writeln!(out, "exclude = []").unwrap();
@@ -108,8 +109,8 @@ mod tests {
     #[test]
     fn default_config_has_expected_values() {
         let text = default_config_text();
-        assert!(text.contains("default_max_lines = 500"));
-        assert!(text.contains("respect_gitignore = true"));
+        assert!(text.contains(&format!("default_max_lines = {DEFAULT_MAX_LINES}")));
+        assert!(text.contains(&format!("respect_gitignore = {DEFAULT_RESPECT_GITIGNORE}")));
         assert!(text.contains("exclude = []"));
         assert!(text.contains("# [[rules]]"));
         assert!(text.contains("# max_lines = 1000"));
