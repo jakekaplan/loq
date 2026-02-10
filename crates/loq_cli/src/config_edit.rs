@@ -36,11 +36,10 @@ pub(crate) fn unescape_glob(path: &str) -> String {
             continue;
         }
 
-        let Some(ch) = rest.chars().next() else {
-            break;
-        };
-        out.push(ch);
-        i += ch.len_utf8();
+        if let Some(ch) = rest.chars().next() {
+            out.push(ch);
+            i += ch.len_utf8();
+        }
     }
 
     out
