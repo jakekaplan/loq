@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1769056525095,
+  "lastUpdate": 1770730365336,
   "repoUrl": "https://github.com/jakekaplan/loq",
   "entries": {
     "Benchmark": [
@@ -1103,6 +1103,54 @@ window.BENCHMARK_DATA = {
             "name": "ruff",
             "value": 0.09690332188,
             "range": "± 0.0005",
+            "unit": "seconds"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "40362401+jakekaplan@users.noreply.github.com",
+            "name": "Jake Kaplan",
+            "username": "jakekaplan"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "3065f71271c6bb7723c57f4d142c1a5ce428ac73",
+          "message": "Merge pull request #48 from jakekaplan/fix-46-escaped-glob-roundtrip\n\nfix: handle escaped exact paths in baseline/relax",
+          "timestamp": "2026-02-10T08:31:34-05:00",
+          "tree_id": "599ea650a34fc2bd2fec6f5f94f604e2ca13a567",
+          "url": "https://github.com/jakekaplan/loq/commit/3065f71271c6bb7723c57f4d142c1a5ce428ac73"
+        },
+        "date": 1770730364483,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "cpython",
+            "value": 0.043872018400000004,
+            "range": "± 0.001",
+            "unit": "seconds"
+          },
+          {
+            "name": "airflow",
+            "value": 0.11329012640000002,
+            "range": "± 0.0015",
+            "unit": "seconds"
+          },
+          {
+            "name": "prefect",
+            "value": 0.0511819063,
+            "range": "± 0.0017",
+            "unit": "seconds"
+          },
+          {
+            "name": "ruff",
+            "value": 0.10253594740000001,
+            "range": "± 0.0015",
             "unit": "seconds"
           }
         ]
