@@ -10,6 +10,54 @@ use toml_edit::{DocumentMut, Item, Table};
 
 use crate::init::add_to_gitignore;
 
+const GLOB_ESCAPED_LITERALS: [(&str, char); 6] = [
+    ("[*]", '*'),
+    ("[?]", '?'),
+    ("[[]", '['),
+    ("[]]", ']'),
+    ("[{]", '{'),
+    ("[}]", '}'),
+];
+
+/// Unescape glob metacharacters escaped by `globset::escape`.
+///
+/// `globset::escape` uses single-character classes for literals:
+/// `[*]`, `[?]`, `[[]`, `[]]`, `[{]`, `[}]`.
+pub(crate) fn unescape_glob(path: &str) -> String {
+    let mut out = String::with_capacity(path.len());
+    let mut i = 0;
+
+    while i < path.len() {
+        let rest = &path[i..];
+
+        if let Some((sequence, ch)) = escaped_literal_at(rest) {
+            out.push(ch);
+            i += sequence.len();
+            continue;
+        }
+
+        if let Some(ch) = rest.chars().next() {
+            out.push(ch);
+            i += ch.len_utf8();
+        }
+    }
+
+    out
+}
+
+fn escaped_literal_at(s: &str) -> Option<(&'static str, char)> {
+    for (sequence, ch) in GLOB_ESCAPED_LITERALS {
+        if s.starts_with(sequence) {
+            return Some((sequence, ch));
+        }
+    }
+    None
+}
+
+fn escape_exact_path(path: &str) -> String {
+    globset::escape(path)
+}
+
 /// Extract path strings from a path value (can be string or array).
 pub(crate) fn extract_paths(value: &Item) -> Vec<String> {
     if let Some(s) = value.as_str() {
@@ -23,9 +71,13 @@ pub(crate) fn extract_paths(value: &Item) -> Vec<String> {
     }
 }
 
-/// Check if a path is an exact path (no glob metacharacters).
+/// Check if a path is an exact path (no unescaped glob metacharacters).
+///
+/// Exact paths written by `add_rule` are escaped with `globset::escape`.
+/// If unescape -> escape round-trips to the same string, path is exact.
 pub(crate) fn is_exact_path(path: &str) -> bool {
-    !path.contains('*') && !path.contains('?') && !path.contains('[') && !path.contains('{')
+    let unescaped = unescape_glob(path);
+    escape_exact_path(&unescaped) == path
 }
 
 /// Collect existing exact-path rules (rules where path is a single literal path, not a glob).
@@ -40,7 +92,8 @@ pub(crate) fn collect_exact_path_rules(doc: &DocumentMut) -> HashMap<String, (us
                 // Only consider single-path rules that look like exact paths (no glob chars)
                 if paths.len() == 1 && is_exact_path(&paths[0]) {
                     if let Some(max_lines) = rule.get("max_lines").and_then(Item::as_integer) {
-                        let normalized = normalize_display_path(&paths[0]);
+                        let unescaped = unescape_glob(&paths[0]);
+                        let normalized = normalize_display_path(&unescaped);
                         rules.insert(normalized, (max_lines as usize, idx));
                     }
                 }
@@ -77,6 +130,8 @@ pub(crate) fn remove_rule(doc: &mut DocumentMut, idx: usize) {
 /// Add a new exact-path rule at the end.
 #[allow(clippy::cast_possible_wrap)]
 pub(crate) fn add_rule(doc: &mut DocumentMut, path: &str, max_lines: usize) {
+    let escaped_path = escape_exact_path(path);
+
     // Ensure rules array exists
     if doc.get("rules").is_none() {
         doc["rules"] = Item::ArrayOfTables(toml_edit::ArrayOfTables::new());
@@ -87,7 +142,7 @@ pub(crate) fn add_rule(doc: &mut DocumentMut, path: &str, max_lines: usize) {
         .and_then(|v| v.as_array_of_tables_mut())
     {
         let mut rule = Table::new();
-        rule["path"] = toml_edit::value(path);
+        rule["path"] = toml_edit::value(escaped_path);
         rule["max_lines"] = toml_edit::value(max_lines as i64);
         rules.push(rule);
     }
@@ -161,6 +216,28 @@ mod tests {
         assert!(!is_exact_path("src/[ab].rs"));
         assert!(!is_exact_path("src/{a,b}.rs"));
         assert!(!is_exact_path("src/?.rs"));
+    }
+
+    #[test]
+    fn is_exact_path_handles_escaped_metacharacters() {
+        assert!(is_exact_path("routes/[[]id[]]/page.svelte"));
+        assert!(is_exact_path("src/literal-[*]-[?]-[{]-[}]"));
+        assert!(!is_exact_path("routes/[[]id[]]/*.svelte"));
+        assert!(!is_exact_path("[[]a-z].rs"));
+    }
+
+    #[test]
+    fn unescape_glob_reverses_escape() {
+        for (escaped, unescaped) in GLOB_ESCAPED_LITERALS {
+            let input = format!("foo{escaped}bar");
+            let output = format!("foo{unescaped}bar");
+            assert_eq!(unescape_glob(&input), output);
+        }
+    }
+
+    #[test]
+    fn unescape_glob_handles_adjacent_escaped_sequences() {
+        assert_eq!(unescape_glob("[[][*][?][{][}][]]"), "[*?{}]");
     }
 
     #[test]
@@ -245,6 +322,34 @@ max_lines = 10
         let rules = collect_exact_path_rules(&doc);
         assert_eq!(rules.len(), 1);
         assert_eq!(rules["src/a.rs"].0, 10);
+    }
+
+    #[test]
+    fn add_rule_escapes_glob_metacharacters() {
+        let mut doc = DocumentMut::new();
+
+        add_rule(&mut doc, "routes/[id]/page.svelte", 100);
+
+        let rules = doc.get("rules").and_then(Item::as_array_of_tables).unwrap();
+        let first = rules.get(0).unwrap();
+        assert_eq!(
+            first.get("path").and_then(Item::as_str),
+            Some("routes/[[]id[]]/page.svelte")
+        );
+    }
+
+    #[test]
+    fn collect_exact_path_rules_unescapes_escaped_paths() {
+        let doc: DocumentMut = r#"
+[[rules]]
+path = "routes/[[]id[]]/page.svelte"
+max_lines = 100
+"#
+        .parse()
+        .unwrap();
+
+        let rules = collect_exact_path_rules(&doc);
+        assert_eq!(rules["routes/[id]/page.svelte"].0, 100);
     }
 
     #[test]
