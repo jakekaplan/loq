@@ -265,3 +265,80 @@ fn git_error_message_for_git_not_available() {
     let message = git_error_message(&JsonFilter::Staged, git::GitError::GitNotAvailable);
     assert_eq!(message, "--staged requires git, but git is not available");
 }
+
+#[test]
+fn git_error_message_for_io_error() {
+    let error = std::io::Error::other("boom");
+    let message = git_error_message(
+        &JsonFilter::Diff {
+            git_ref: "main".into(),
+        },
+        git::GitError::Io(error),
+    );
+    assert_eq!(message, "git failed: boom");
+}
+
+#[test]
+fn run_check_returns_error_for_stdin_and_git_filter() {
+    use termcolor::NoColor;
+
+    let args = CheckArgs {
+        paths: vec![],
+        stdin: true,
+        no_cache: false,
+        staged: true,
+        diff_ref: None,
+        output_format: OutputFormat::Text,
+    };
+    let mut stdin: &[u8] = b"a.rs\n";
+    let mut stdout = NoColor::new(Vec::new());
+    let mut stderr = NoColor::new(Vec::new());
+
+    let status = run_check(
+        &args,
+        &mut stdin,
+        &mut stdout,
+        &mut stderr,
+        OutputMode::Default,
+    );
+
+    assert_eq!(status, ExitStatus::Error);
+    let err = String::from_utf8(stderr.into_inner()).unwrap();
+    assert!(err.contains("cannot combine '-'"));
+}
+
+#[test]
+fn run_check_reports_stdin_read_error() {
+    use termcolor::NoColor;
+
+    let args = CheckArgs {
+        paths: vec![],
+        stdin: true,
+        no_cache: false,
+        staged: false,
+        diff_ref: None,
+        output_format: OutputFormat::Text,
+    };
+    let mut stdin = FailingReader;
+    let mut stdout = NoColor::new(Vec::new());
+    let mut stderr = NoColor::new(Vec::new());
+
+    let status = run_check(
+        &args,
+        &mut stdin,
+        &mut stdout,
+        &mut stderr,
+        OutputMode::Default,
+    );
+
+    assert_eq!(status, ExitStatus::Error);
+    let err = String::from_utf8(stderr.into_inner()).unwrap();
+    assert!(err.contains("failed to read stdin"));
+}
+
+#[test]
+fn normalize_components_handles_current_and_parent_segments() {
+    let path = Path::new("./src/nested/../file.rs");
+    let normalized = normalize_components(path);
+    assert_eq!(normalized, PathBuf::from("src/file.rs"));
+}

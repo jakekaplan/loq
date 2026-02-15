@@ -143,6 +143,18 @@ fn is_not_repository(error: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::process::Command;
+
+    fn init_git_repo() -> tempfile::TempDir {
+        let dir = tempfile::TempDir::new().unwrap();
+        let output = Command::new("git")
+            .current_dir(dir.path())
+            .args(["init"])
+            .output()
+            .unwrap();
+        assert!(output.status.success());
+        dir
+    }
 
     #[test]
     fn parse_paths_resolves_relative_paths() {
@@ -176,7 +188,73 @@ mod tests {
     }
 
     #[test]
+    fn command_error_uses_stdout_when_stderr_is_empty() {
+        let text = command_error_text(b"", b"fatal from stdout\n");
+        assert_eq!(text, "fatal from stdout");
+    }
+
+    #[test]
+    fn command_error_falls_back_to_unknown() {
+        let text = command_error_text(b"", b"");
+        assert_eq!(text, "unknown git error");
+    }
+
+    #[test]
     fn not_repository_detection_is_case_insensitive() {
         assert!(is_not_repository("FATAL: Not a git repository"));
+    }
+
+    #[test]
+    fn resolve_paths_returns_not_repository_outside_git_repo() {
+        let dir = tempfile::TempDir::new().unwrap();
+        let result = resolve_paths(dir.path(), &GitFilter::Staged).unwrap_err();
+        assert!(matches!(result, GitError::NotRepository));
+    }
+
+    #[test]
+    fn resolve_paths_returns_not_repository_in_bare_repo() {
+        let dir = tempfile::TempDir::new().unwrap();
+        let output = Command::new("git")
+            .current_dir(dir.path())
+            .args(["init", "--bare"])
+            .output()
+            .unwrap();
+        assert!(output.status.success());
+
+        let result = resolve_paths(dir.path(), &GitFilter::Staged).unwrap_err();
+        assert!(matches!(result, GitError::NotRepository));
+    }
+
+    #[test]
+    fn resolve_paths_returns_staged_paths_in_repo() {
+        let dir = init_git_repo();
+        let file = dir.path().join("staged.rs");
+        std::fs::write(&file, "fn main() {}\n").unwrap();
+
+        let add_output = Command::new("git")
+            .current_dir(dir.path())
+            .args(["add", "staged.rs"])
+            .output()
+            .unwrap();
+        assert!(add_output.status.success());
+
+        let paths = resolve_paths(dir.path(), &GitFilter::Staged).unwrap();
+        assert_eq!(paths, vec![file]);
+    }
+
+    #[test]
+    fn run_git_notfound_maps_to_git_not_available() {
+        let dir = tempfile::TempDir::new().unwrap();
+        let missing = dir.path().join("missing");
+        let result = run_git(&missing, &["status"]).unwrap_err();
+        assert!(matches!(result, GitError::GitNotAvailable));
+    }
+
+    #[test]
+    fn run_git_invalid_argument_maps_to_io() {
+        let dir = tempfile::TempDir::new().unwrap();
+        let result = run_git(dir.path(), &["\0bad"]).unwrap_err();
+
+        assert!(matches!(result, GitError::Io(_)));
     }
 }
