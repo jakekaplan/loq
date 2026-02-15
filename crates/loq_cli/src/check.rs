@@ -38,7 +38,7 @@ pub fn run_check<R: Read, W1: WriteColor + Write, W2: WriteColor>(
     mode: OutputMode,
 ) -> ExitStatus {
     let cwd = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
-    let inputs = match collect_inputs(args.paths.clone(), stdin, &cwd) {
+    let inputs = match collect_inputs(args.paths.clone(), args.stdin, stdin, &cwd) {
         Ok(paths) => paths,
         Err(err) => return print_error(stderr, &format!("{err:#}")),
     };
@@ -118,19 +118,10 @@ fn write_text_output<W: WriteColor>(
 
 fn collect_inputs<R: Read>(
     mut paths: Vec<PathBuf>,
+    use_stdin: bool,
     stdin: &mut R,
     cwd: &Path,
 ) -> Result<Vec<PathBuf>> {
-    let mut use_stdin = false;
-    paths.retain(|path| {
-        if path == Path::new("-") {
-            use_stdin = true;
-            false
-        } else {
-            true
-        }
-    });
-
     if use_stdin {
         let mut stdin_paths =
             loq_fs::stdin::read_paths(stdin, cwd).context("failed to read stdin")?;
@@ -159,35 +150,28 @@ mod tests {
 
     #[test]
     fn collect_inputs_reports_stdin_error() {
-        let err = collect_inputs(vec![PathBuf::from("-")], &mut FailingReader, Path::new("."))
-            .unwrap_err();
+        let err = collect_inputs(vec![], true, &mut FailingReader, Path::new(".")).unwrap_err();
         assert!(err.to_string().contains("failed to read stdin"));
     }
 
     #[test]
     fn collect_inputs_empty_defaults_to_cwd() {
         let mut empty_stdin: &[u8] = b"";
-        let result = collect_inputs(vec![], &mut empty_stdin, Path::new("/repo")).unwrap();
+        let result = collect_inputs(vec![], false, &mut empty_stdin, Path::new("/repo")).unwrap();
         assert_eq!(result, vec![PathBuf::from(".")]);
     }
 
     #[test]
     fn collect_inputs_stdin_only_no_default() {
         let mut empty_stdin: &[u8] = b"";
-        let result = collect_inputs(
-            vec![PathBuf::from("-")],
-            &mut empty_stdin,
-            Path::new("/repo"),
-        )
-        .unwrap();
+        let result = collect_inputs(vec![], true, &mut empty_stdin, Path::new("/repo")).unwrap();
         assert!(result.is_empty());
     }
 
     #[test]
     fn collect_inputs_stdin_with_paths() {
         let mut stdin: &[u8] = b"file1.rs\nfile2.rs\n";
-        let result =
-            collect_inputs(vec![PathBuf::from("-")], &mut stdin, Path::new("/repo")).unwrap();
+        let result = collect_inputs(vec![], true, &mut stdin, Path::new("/repo")).unwrap();
         assert_eq!(result.len(), 2);
         assert_eq!(result[0], PathBuf::from("/repo/file1.rs"));
         assert_eq!(result[1], PathBuf::from("/repo/file2.rs"));
@@ -197,7 +181,8 @@ mod tests {
     fn collect_inputs_mixed_paths_and_stdin() {
         let mut stdin: &[u8] = b"from_stdin.rs\n";
         let result = collect_inputs(
-            vec![PathBuf::from("explicit.rs"), PathBuf::from("-")],
+            vec![PathBuf::from("explicit.rs")],
+            true,
             &mut stdin,
             Path::new("/repo"),
         )

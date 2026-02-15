@@ -61,6 +61,43 @@ pub fn run_env() -> ExitStatus {
     run_with(args, stdin.lock(), &mut stdout, &mut stderr)
 }
 
+fn normalize_args<I>(args: I) -> Vec<OsString>
+where
+    I: IntoIterator<Item = OsString>,
+{
+    let mut iter = args.into_iter();
+    let mut normalized = Vec::new();
+
+    if let Some(program) = iter.next() {
+        normalized.push(program);
+    }
+
+    let mut subcommand_seen = false;
+    let mut in_check = false;
+
+    for arg in iter {
+        let arg_str = arg.to_string_lossy();
+        if !subcommand_seen {
+            if arg_str == "check" {
+                subcommand_seen = true;
+                in_check = true;
+            } else if !arg_str.starts_with('-') {
+                subcommand_seen = true;
+            }
+            normalized.push(arg);
+            continue;
+        }
+
+        if in_check && arg.as_os_str() == "-" {
+            normalized.push(OsString::from("--stdin"));
+        } else {
+            normalized.push(arg);
+        }
+    }
+
+    normalized
+}
+
 /// Runs the CLI with custom args and streams (for testing).
 pub fn run_with<I, R, W1, W2>(args: I, mut stdin: R, stdout: &mut W1, stderr: &mut W2) -> ExitStatus
 where
@@ -69,11 +106,12 @@ where
     W1: WriteColor + Write,
     W2: WriteColor,
 {
-    let cli = Cli::parse_from(args);
+    let cli = Cli::parse_from(normalize_args(args));
     let mode = output_mode(&cli);
 
     let default_check = Command::Check(cli::CheckArgs {
         paths: vec![],
+        stdin: false,
         no_cache: false,
         output_format: cli::OutputFormat::Text,
     });
@@ -89,11 +127,29 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::path::PathBuf;
 
     #[test]
     fn exit_status_to_exit_code() {
         assert_eq!(ExitCode::from(ExitStatus::Success), ExitCode::from(0));
         assert_eq!(ExitCode::from(ExitStatus::Failure), ExitCode::from(1));
         assert_eq!(ExitCode::from(ExitStatus::Error), ExitCode::from(2));
+    }
+
+    #[test]
+    fn normalize_args_converts_stdin_dash_for_check() {
+        let args = vec!["loq", "check", "-", "src"]
+            .into_iter()
+            .map(OsString::from)
+            .collect::<Vec<_>>();
+        let normalized = normalize_args(args);
+        let cli = Cli::parse_from(normalized);
+
+        let command = cli.command.expect("expected command");
+        let Command::Check(check) = command else {
+            panic!("expected check command");
+        };
+        assert!(check.stdin);
+        assert_eq!(check.paths, vec![PathBuf::from("src")]);
     }
 }
