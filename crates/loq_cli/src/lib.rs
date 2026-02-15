@@ -129,6 +129,14 @@ mod tests {
     use super::*;
     use std::path::PathBuf;
 
+    fn check_command_details(cli: Cli) -> Option<(bool, Vec<PathBuf>)> {
+        if let Some(Command::Check(check)) = cli.command {
+            Some((check.stdin, check.paths))
+        } else {
+            None
+        }
+    }
+
     #[test]
     fn exit_status_to_exit_code() {
         assert_eq!(ExitCode::from(ExitStatus::Success), ExitCode::from(0));
@@ -145,11 +153,13 @@ mod tests {
         let normalized = normalize_args(args);
         let cli = Cli::parse_from(normalized);
 
-        let command = cli.command.expect("expected command");
-        let Command::Check(check) = command else {
-            panic!("expected check command");
-        };
-        assert!(check.stdin);
-        assert_eq!(check.paths, vec![PathBuf::from("src")]);
+        let details = check_command_details(cli);
+        assert_eq!(details, Some((true, vec![PathBuf::from("src")])));
+    }
+
+    #[test]
+    fn check_command_details_returns_none_for_non_check_commands() {
+        let cli = Cli::parse_from(["loq", "init"]);
+        assert_eq!(check_command_details(cli), None);
     }
 }
