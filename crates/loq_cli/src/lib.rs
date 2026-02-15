@@ -74,8 +74,15 @@ where
 
     let mut subcommand_seen = false;
     let mut in_check = false;
+    let mut rewrite_enabled = true;
 
     for arg in iter {
+        if arg.as_os_str() == "--" {
+            rewrite_enabled = false;
+            normalized.push(arg);
+            continue;
+        }
+
         let arg_str = arg.to_string_lossy();
         if !subcommand_seen {
             if arg_str == "check" {
@@ -88,7 +95,7 @@ where
             continue;
         }
 
-        if in_check && arg.as_os_str() == "-" {
+        if rewrite_enabled && in_check && arg.as_os_str() == "-" {
             normalized.push(OsString::from("--stdin"));
         } else {
             normalized.push(arg);
@@ -155,6 +162,32 @@ mod tests {
 
         let details = check_command_details(cli);
         assert_eq!(details, Some((true, vec![PathBuf::from("src")])));
+    }
+
+    #[test]
+    fn normalize_args_preserves_literal_dash_after_double_dash() {
+        let args = vec!["loq", "check", "--", "-"]
+            .into_iter()
+            .map(OsString::from)
+            .collect::<Vec<_>>();
+        let normalized = normalize_args(args);
+        let cli = Cli::parse_from(normalized);
+
+        let details = check_command_details(cli);
+        assert_eq!(details, Some((false, vec![PathBuf::from("-")])));
+    }
+
+    #[test]
+    fn normalize_args_converts_stdin_dash_with_global_flags() {
+        let args = vec!["loq", "--verbose", "check", "-"]
+            .into_iter()
+            .map(OsString::from)
+            .collect::<Vec<_>>();
+        let normalized = normalize_args(args);
+        let cli = Cli::parse_from(normalized);
+
+        let details = check_command_details(cli);
+        assert_eq!(details, Some((true, Vec::new())));
     }
 
     #[test]
