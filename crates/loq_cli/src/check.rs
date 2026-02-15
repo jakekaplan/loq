@@ -4,8 +4,6 @@ use std::io::{Read, Write};
 use std::path::PathBuf;
 
 use loq_core::report::{build_report, FindingKind, Report};
-#[cfg(test)]
-use loq_fs::git;
 use loq_fs::{CheckOptions, CheckOutput, FsError};
 use termcolor::{Color, WriteColor};
 
@@ -18,9 +16,6 @@ use crate::Cli;
 use crate::ExitStatus;
 
 mod input_plan;
-
-#[cfg(test)]
-pub(crate) use input_plan::{collect_inputs, git_error_message, normalize_components};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum OutputMode {

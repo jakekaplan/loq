@@ -43,15 +43,21 @@ fn check_filter(args: &CheckArgs) -> Option<JsonFilter> {
 }
 
 fn resolve_git_paths(filter: &JsonFilter, cwd: &Path) -> Result<Vec<PathBuf>> {
-    let git_filter = match filter {
-        JsonFilter::Staged => git::GitFilter::Staged,
-        JsonFilter::Diff { git_ref } => git::GitFilter::Diff {
-            git_ref: git_ref.clone(),
-        },
-    };
+    let git_filter = git::GitFilter::from(filter);
 
     git::resolve_paths(cwd, &git_filter)
         .map_err(|error| anyhow::anyhow!(git_error_message(filter, error)))
+}
+
+impl From<&JsonFilter> for git::GitFilter {
+    fn from(filter: &JsonFilter) -> Self {
+        match filter {
+            JsonFilter::Staged => Self::Staged,
+            JsonFilter::Diff { git_ref } => Self::Diff {
+                git_ref: git_ref.clone(),
+            },
+        }
+    }
 }
 
 pub(crate) fn git_error_message(filter: &JsonFilter, error: git::GitError) -> String {
@@ -138,3 +144,6 @@ pub(crate) fn normalize_components(path: &Path) -> PathBuf {
     }
     normalized
 }
+
+#[cfg(test)]
+mod tests;
