@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1771173723557,
+  "lastUpdate": 1771174341884,
   "repoUrl": "https://github.com/jakekaplan/loq",
   "entries": {
     "Benchmark": [
@@ -1199,6 +1199,54 @@ window.BENCHMARK_DATA = {
             "name": "ruff",
             "value": 0.13796103466000004,
             "range": "± 0.0027",
+            "unit": "seconds"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "40362401+jakekaplan@users.noreply.github.com",
+            "name": "Jake Kaplan",
+            "username": "jakekaplan"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "96c507aa40ab0369ff696f7bdf2ccbd556b54a6e",
+          "message": "Merge pull request #49 from jakekaplan/fix/check-flags-after-path\n\nfix: parse check flags after positional paths",
+          "timestamp": "2026-02-15T11:51:29-05:00",
+          "tree_id": "c1ffd534d19a1d73d8b1c9ca00347fa82a9b6f63",
+          "url": "https://github.com/jakekaplan/loq/commit/96c507aa40ab0369ff696f7bdf2ccbd556b54a6e"
+        },
+        "date": 1771174341454,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "cpython",
+            "value": 0.0009261307400000001,
+            "range": "± 0",
+            "unit": "seconds"
+          },
+          {
+            "name": "airflow",
+            "value": 0.0009039711400000002,
+            "range": "± 0",
+            "unit": "seconds"
+          },
+          {
+            "name": "prefect",
+            "value": 0.0009188860400000002,
+            "range": "± 0",
+            "unit": "seconds"
+          },
+          {
+            "name": "ruff",
+            "value": 0.0009381282400000001,
+            "range": "± 0",
             "unit": "seconds"
           }
         ]
