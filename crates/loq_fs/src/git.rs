@@ -82,12 +82,18 @@ fn ensure_git_repository(cwd: &Path) -> Result<(), GitError> {
 }
 
 fn run_git(cwd: &Path, args: &[&str]) -> Result<std::process::Output, GitError> {
-    match Command::new("git").current_dir(cwd).args(args).output() {
-        Ok(output) => Ok(output),
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
-            Err(GitError::GitNotAvailable)
-        }
-        Err(error) => Err(GitError::Io(error)),
+    Command::new("git")
+        .current_dir(cwd)
+        .args(args)
+        .output()
+        .map_err(spawn_error_to_git_error)
+}
+
+fn spawn_error_to_git_error(error: std::io::Error) -> GitError {
+    if error.kind() == std::io::ErrorKind::NotFound {
+        GitError::GitNotAvailable
+    } else {
+        GitError::Io(error)
     }
 }
 
@@ -243,11 +249,10 @@ mod tests {
     }
 
     #[test]
-    fn run_git_notfound_maps_to_git_not_available() {
-        let dir = tempfile::TempDir::new().unwrap();
-        let missing = dir.path().join("missing");
-        let result = run_git(&missing, &["status"]).unwrap_err();
-        assert!(matches!(result, GitError::GitNotAvailable));
+    fn spawn_error_maps_notfound_to_git_not_available() {
+        let error = std::io::Error::from(std::io::ErrorKind::NotFound);
+        let mapped = spawn_error_to_git_error(error);
+        assert!(matches!(mapped, GitError::GitNotAvailable));
     }
 
     #[test]
