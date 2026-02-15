@@ -5,7 +5,7 @@
 //! - `--diff <ref>`: files changed relative to a git ref
 
 use std::path::{Path, PathBuf};
-use std::process::Command;
+use std::process::{Command, Output};
 
 use thiserror::Error;
 
@@ -45,19 +45,32 @@ pub enum GitError {
 ///
 /// Returned paths are absolute (resolved against `cwd`).
 pub fn resolve_paths(cwd: &Path, filter: &GitFilter) -> Result<Vec<PathBuf>, GitError> {
-    let mut args = vec!["diff", "--name-only", "-z", "--diff-filter=ACMR"];
-    match filter {
-        GitFilter::Staged => args.push("--staged"),
-        GitFilter::Diff { git_ref } => args.push(git_ref),
-    }
-
-    let output = run_git(cwd, &args)?;
+    let output = run_git_diff(cwd, filter)?;
     if !output.status.success() {
         let error = command_error_text(&output.stderr, &output.stdout);
         return Err(classify_git_failure(error));
     }
 
     Ok(parse_paths(&output.stdout, cwd))
+}
+
+fn run_git_diff(cwd: &Path, filter: &GitFilter) -> Result<Output, GitError> {
+    match filter {
+        GitFilter::Staged => run_git(
+            cwd,
+            &[
+                "diff",
+                "--name-only",
+                "-z",
+                "--diff-filter=ACMR",
+                "--staged",
+            ],
+        ),
+        GitFilter::Diff { git_ref } => run_git(
+            cwd,
+            &["diff", "--name-only", "-z", "--diff-filter=ACMR", git_ref],
+        ),
+    }
 }
 
 fn classify_git_failure(error: String) -> GitError {
@@ -68,7 +81,7 @@ fn classify_git_failure(error: String) -> GitError {
     }
 }
 
-fn run_git(cwd: &Path, args: &[&str]) -> Result<std::process::Output, GitError> {
+fn run_git(cwd: &Path, args: &[&str]) -> Result<Output, GitError> {
     Command::new("git")
         .current_dir(cwd)
         .args(args)
@@ -140,14 +153,23 @@ mod tests {
     use super::*;
     use std::process::Command;
 
-    fn init_git_repo() -> tempfile::TempDir {
-        let dir = tempfile::TempDir::new().unwrap();
+    fn run_git_ok(cwd: &Path, args: &[&str]) {
         let output = Command::new("git")
-            .current_dir(dir.path())
-            .args(["init"])
+            .current_dir(cwd)
+            .args(args)
             .output()
             .unwrap();
-        assert!(output.status.success());
+        assert!(
+            output.status.success(),
+            "git {:?} failed: {}",
+            args,
+            command_error_text(&output.stderr, &output.stdout)
+        );
+    }
+
+    fn init_git_repo() -> tempfile::TempDir {
+        let dir = tempfile::TempDir::new().unwrap();
+        run_git_ok(dir.path(), &["init"]);
         dir
     }
 
@@ -205,6 +227,19 @@ mod tests {
     }
 
     #[test]
+    fn not_repository_detection_matches_work_tree_message() {
+        assert!(is_not_repository(
+            "fatal: this operation must be run in a work tree"
+        ));
+    }
+
+    #[test]
+    fn classify_git_failure_uses_command_failed_for_other_errors() {
+        let error = classify_git_failure("fatal: bad revision 'nope'".to_string());
+        assert!(matches!(error, GitError::CommandFailed { .. }));
+    }
+
+    #[test]
     fn resolve_paths_returns_not_repository_outside_git_repo() {
         let dir = tempfile::TempDir::new().unwrap();
         let result = resolve_paths(dir.path(), &GitFilter::Staged).unwrap_err();
@@ -214,12 +249,7 @@ mod tests {
     #[test]
     fn resolve_paths_in_bare_repo_is_consistent() {
         let dir = tempfile::TempDir::new().unwrap();
-        let output = Command::new("git")
-            .current_dir(dir.path())
-            .args(["init", "--bare"])
-            .output()
-            .unwrap();
-        assert!(output.status.success());
+        run_git_ok(dir.path(), &["init", "--bare"]);
 
         match resolve_paths(dir.path(), &GitFilter::Staged) {
             Ok(paths) => assert!(paths.is_empty()),
@@ -233,12 +263,7 @@ mod tests {
         let file = dir.path().join("staged.rs");
         std::fs::write(&file, "fn main() {}\n").unwrap();
 
-        let add_output = Command::new("git")
-            .current_dir(dir.path())
-            .args(["add", "staged.rs"])
-            .output()
-            .unwrap();
-        assert!(add_output.status.success());
+        run_git_ok(dir.path(), &["add", "staged.rs"]);
 
         let paths = resolve_paths(dir.path(), &GitFilter::Staged).unwrap();
         assert_eq!(paths, vec![file]);
