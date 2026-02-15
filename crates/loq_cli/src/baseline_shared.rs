@@ -30,9 +30,17 @@ pub(crate) fn scan_violations_with_threshold(
     };
 
     let output = loq_fs::run_check(vec![cwd.to_path_buf()], options).context(context)?;
+    let temp_config_path = temp_file
+        .path()
+        .canonicalize()
+        .unwrap_or_else(|_| temp_file.path().to_path_buf());
 
     let mut violations = HashMap::new();
     for outcome in output.outcomes {
+        if outcome.path == temp_config_path {
+            continue;
+        }
+
         if let loq_core::OutcomeKind::Violation { actual, .. } = outcome.kind {
             let path = normalize_display_path(&outcome.display_path);
             violations.insert(path, actual);
@@ -84,6 +92,7 @@ fn build_temp_config(doc: &DocumentMut, threshold: usize) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use tempfile::TempDir;
 
     #[test]
     fn build_temp_config_keeps_glob_rules_only() {
@@ -118,5 +127,19 @@ max_lines = 10
         .unwrap();
         let temp = build_temp_config(&doc, 500);
         assert!(!temp.contains("[[rules]]"));
+    }
+
+    #[test]
+    fn scan_violations_does_not_include_temp_config_file() {
+        let temp = TempDir::new().unwrap();
+        std::fs::write(temp.path().join("violates.rs"), "a\nb\n").unwrap();
+        let doc = DocumentMut::new();
+
+        let violations =
+            scan_violations_with_threshold(temp.path(), &doc, 1, "baseline scan should succeed")
+                .unwrap();
+
+        assert_eq!(violations.len(), 1);
+        assert_eq!(violations.get("violates.rs"), Some(&2));
     }
 }
