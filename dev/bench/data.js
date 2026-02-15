@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1770730365336,
+  "lastUpdate": 1771173723557,
   "repoUrl": "https://github.com/jakekaplan/loq",
   "entries": {
     "Benchmark": [
@@ -1151,6 +1151,54 @@ window.BENCHMARK_DATA = {
             "name": "ruff",
             "value": 0.10253594740000001,
             "range": "± 0.0015",
+            "unit": "seconds"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "40362401+jakekaplan@users.noreply.github.com",
+            "name": "Jake Kaplan",
+            "username": "jakekaplan"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "b97a7fa8797457c1cf7ebc36e96808843cd61be7",
+          "message": "Merge pull request #50 from jakekaplan/fix/baseline-ignore-temp-config\n\nfix: ignore baseline temp config file during scan",
+          "timestamp": "2026-02-15T11:40:50-05:00",
+          "tree_id": "bab262c879c2ca4d9dfd806092e112735bbdab34",
+          "url": "https://github.com/jakekaplan/loq/commit/b97a7fa8797457c1cf7ebc36e96808843cd61be7"
+        },
+        "date": 1771173723239,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "cpython",
+            "value": 0.05583968895999999,
+            "range": "± 0.0008",
+            "unit": "seconds"
+          },
+          {
+            "name": "airflow",
+            "value": 0.15678493406,
+            "range": "± 0.0009",
+            "unit": "seconds"
+          },
+          {
+            "name": "prefect",
+            "value": 0.06596280506,
+            "range": "± 0.0007",
+            "unit": "seconds"
+          },
+          {
+            "name": "ruff",
+            "value": 0.13796103466000004,
+            "range": "± 0.0027",
             "unit": "seconds"
           }
         ]
