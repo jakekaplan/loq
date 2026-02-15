@@ -226,9 +226,8 @@ fn plan_inputs_rejects_stdin_with_git_filter() {
     let mut stdin: &[u8] = b"a.rs\n";
 
     let result = plan_inputs(&args, &mut stdin, Path::new("/repo"));
-    let err = match result {
-        Ok(_) => panic!("expected stdin/filter conflict"),
-        Err(err) => err,
+    let Err(err) = result else {
+        panic!("expected stdin/filter conflict");
     };
     assert!(err.to_string().contains("cannot combine '-'"));
 }
