@@ -43,12 +43,11 @@ jobs:
           hyperfine \
             --warmup 3 \
             --runs 10 \
-            --ignore-failure \
             --export-json bench-results.json \
-            -n cpython './target/release/loq check bench-repos/cpython --silent --no-cache' \
-            -n airflow './target/release/loq check bench-repos/airflow --silent --no-cache' \
-            -n prefect './target/release/loq check bench-repos/prefect --silent --no-cache' \
-            -n ruff './target/release/loq check bench-repos/ruff --silent --no-cache'
+            -n cpython './target/release/loq check bench-repos/cpython --no-cache >/dev/null 2>&1 || test $? -eq 1' \
+            -n airflow './target/release/loq check bench-repos/airflow --no-cache >/dev/null 2>&1 || test $? -eq 1' \
+            -n prefect './target/release/loq check bench-repos/prefect --no-cache >/dev/null 2>&1 || test $? -eq 1' \
+            -n ruff './target/release/loq check bench-repos/ruff --no-cache >/dev/null 2>&1 || test $? -eq 1'
 
       - name: Convert results for benchmark action
         run: |
