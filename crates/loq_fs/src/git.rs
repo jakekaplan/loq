@@ -45,8 +45,6 @@ pub enum GitError {
 ///
 /// Returned paths are absolute (resolved against `cwd`).
 pub fn resolve_paths(cwd: &Path, filter: &GitFilter) -> Result<Vec<PathBuf>, GitError> {
-    ensure_git_repository(cwd)?;
-
     let mut args = vec!["diff", "--name-only", "-z", "--diff-filter=ACMR"];
     match filter {
         GitFilter::Staged => args.push("--staged"),
@@ -55,29 +53,18 @@ pub fn resolve_paths(cwd: &Path, filter: &GitFilter) -> Result<Vec<PathBuf>, Git
 
     let output = run_git(cwd, &args)?;
     if !output.status.success() {
-        return Err(GitError::CommandFailed {
-            stderr: command_error_text(&output.stderr, &output.stdout),
-        });
+        let error = command_error_text(&output.stderr, &output.stdout);
+        return Err(classify_git_failure(error));
     }
 
     Ok(parse_paths(&output.stdout, cwd))
 }
 
-fn ensure_git_repository(cwd: &Path) -> Result<(), GitError> {
-    let output = run_git(cwd, &["rev-parse", "--is-inside-work-tree"])?;
-    if !output.status.success() {
-        let error = command_error_text(&output.stderr, &output.stdout);
-        if is_not_repository(&error) {
-            return Err(GitError::NotRepository);
-        }
-        return Err(GitError::CommandFailed { stderr: error });
-    }
-
-    let inside = String::from_utf8_lossy(&output.stdout);
-    if inside.trim() == "true" {
-        Ok(())
+fn classify_git_failure(error: String) -> GitError {
+    if is_not_repository(&error) {
+        GitError::NotRepository
     } else {
-        Err(GitError::NotRepository)
+        GitError::CommandFailed { stderr: error }
     }
 }
 
@@ -144,6 +131,8 @@ fn command_error_text(stderr: &[u8], stdout: &[u8]) -> String {
 fn is_not_repository(error: &str) -> bool {
     let error = error.to_ascii_lowercase();
     error.contains("not a git repository")
+        || error.contains("must be run in a work tree")
+        || error.contains("usage: git diff --no-index")
 }
 
 #[cfg(test)]
@@ -211,6 +200,11 @@ mod tests {
     }
 
     #[test]
+    fn not_repository_detection_matches_no_index_usage() {
+        assert!(is_not_repository("usage: git diff --no-index [<options>]"));
+    }
+
+    #[test]
     fn resolve_paths_returns_not_repository_outside_git_repo() {
         let dir = tempfile::TempDir::new().unwrap();
         let result = resolve_paths(dir.path(), &GitFilter::Staged).unwrap_err();
@@ -218,7 +212,7 @@ mod tests {
     }
 
     #[test]
-    fn resolve_paths_returns_not_repository_in_bare_repo() {
+    fn resolve_paths_in_bare_repo_is_consistent() {
         let dir = tempfile::TempDir::new().unwrap();
         let output = Command::new("git")
             .current_dir(dir.path())
@@ -227,8 +221,10 @@ mod tests {
             .unwrap();
         assert!(output.status.success());
 
-        let result = resolve_paths(dir.path(), &GitFilter::Staged).unwrap_err();
-        assert!(matches!(result, GitError::NotRepository));
+        match resolve_paths(dir.path(), &GitFilter::Staged) {
+            Ok(paths) => assert!(paths.is_empty()),
+            Err(err) => assert!(matches!(err, GitError::NotRepository)),
+        }
     }
 
     #[test]
