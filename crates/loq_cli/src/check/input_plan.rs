@@ -43,20 +43,18 @@ fn check_filter(args: &CheckArgs) -> Option<JsonFilter> {
 }
 
 fn resolve_git_paths(filter: &JsonFilter, cwd: &Path) -> Result<Vec<PathBuf>> {
-    let git_filter = git::GitFilter::from(filter);
+    let git_filter = to_git_filter(filter);
 
     git::resolve_paths(cwd, &git_filter)
         .map_err(|error| anyhow::anyhow!(git_error_message(filter, error)))
 }
 
-impl From<&JsonFilter> for git::GitFilter {
-    fn from(filter: &JsonFilter) -> Self {
-        match filter {
-            JsonFilter::Staged => Self::Staged,
-            JsonFilter::Diff { git_ref } => Self::Diff {
-                git_ref: git_ref.clone(),
-            },
-        }
+fn to_git_filter(filter: &JsonFilter) -> git::GitFilter {
+    match filter {
+        JsonFilter::Staged => git::GitFilter::Staged,
+        JsonFilter::Diff { git_ref } => git::GitFilter::Diff {
+            git_ref: git_ref.clone(),
+        },
     }
 }
 

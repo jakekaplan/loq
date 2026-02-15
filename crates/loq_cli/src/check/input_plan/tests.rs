@@ -91,6 +91,24 @@ fn collect_inputs_intersects_git_paths_with_selected_paths() {
 }
 
 #[test]
+fn collect_inputs_intersects_git_paths_with_absolute_selected_path() {
+    let mut empty_stdin: &[u8] = b"";
+    let result = collect_inputs(
+        vec![PathBuf::from("/repo/src")],
+        false,
+        &mut empty_stdin,
+        Path::new("/repo"),
+        Some(vec![
+            PathBuf::from("/repo/src/a.rs"),
+            PathBuf::from("/repo/lib/b.rs"),
+        ]),
+    )
+    .unwrap();
+
+    assert_eq!(result, vec![PathBuf::from("/repo/src/a.rs")]);
+}
+
+#[test]
 fn collect_inputs_git_intersection_can_be_empty() {
     let mut empty_stdin: &[u8] = b"";
     let result = collect_inputs(
@@ -127,6 +145,39 @@ fn git_error_message_for_io_error() {
         git::GitError::Io(error),
     );
     assert_eq!(message, "git failed: boom");
+}
+
+#[test]
+fn git_error_message_for_command_failure() {
+    let message = git_error_message(
+        &JsonFilter::Diff {
+            git_ref: "main".into(),
+        },
+        git::GitError::CommandFailed {
+            stderr: "bad revision".into(),
+        },
+    );
+
+    assert_eq!(message, "git failed: bad revision");
+}
+
+#[test]
+fn to_git_filter_maps_staged() {
+    let filter = to_git_filter(&JsonFilter::Staged);
+    assert_eq!(filter, git::GitFilter::Staged);
+}
+
+#[test]
+fn to_git_filter_maps_diff_ref() {
+    let filter = to_git_filter(&JsonFilter::Diff {
+        git_ref: "main".to_string(),
+    });
+    assert_eq!(
+        filter,
+        git::GitFilter::Diff {
+            git_ref: "main".to_string(),
+        }
+    );
 }
 
 #[test]
