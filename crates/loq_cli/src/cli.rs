@@ -45,9 +45,13 @@ pub enum OutputFormat {
 /// Arguments for the check command.
 #[derive(Args, Debug, Clone)]
 pub struct CheckArgs {
-    /// Paths to check (files, directories, or - for stdin).
-    #[arg(value_name = "PATH", allow_hyphen_values = true)]
+    /// Paths to check (files or directories).
+    #[arg(value_name = "PATH")]
     pub paths: Vec<PathBuf>,
+
+    /// Read additional paths from stdin (internal flag used for `loq check -`).
+    #[arg(long = "stdin", hide = true)]
+    pub stdin: bool,
 
     /// Disable file caching.
     #[arg(long = "no-cache")]

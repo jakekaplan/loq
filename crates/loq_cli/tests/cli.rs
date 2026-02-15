@@ -53,6 +53,19 @@ fn check_reads_stdin_list() {
 }
 
 #[test]
+fn check_allows_flags_after_paths() {
+    let temp = TempDir::new().unwrap();
+    write_file(&temp, "a.txt", "a\n");
+
+    cargo_bin_cmd!("loq")
+        .current_dir(temp.path())
+        .args(["check", "a.txt", "--output-format", "json"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("\"summary\""));
+}
+
+#[test]
 fn exit_code_error_on_violation() {
     let temp = TempDir::new().unwrap();
     write_file(&temp, "big.txt", &repeat_lines(501));
