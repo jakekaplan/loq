@@ -6,7 +6,7 @@ use loq_core::report::{Finding, FindingKind, SkipReason, Summary};
 use loq_fs::walk::WalkError;
 use termcolor::{Color, ColorSpec, WriteColor};
 
-pub use json::write_json;
+pub use json::{write_json, JsonFilter};
 
 fn fg(color: Color) -> ColorSpec {
     let mut spec = ColorSpec::new();

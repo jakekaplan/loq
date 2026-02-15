@@ -3,6 +3,7 @@ source: crates/loq_cli/tests/snapshots.rs
 expression: json
 ---
 {
+  "filter": null,
   "skip_warnings": [],
   "summary": {
     "files_checked": 2,

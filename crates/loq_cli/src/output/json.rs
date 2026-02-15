@@ -7,9 +7,26 @@ use loq_core::MatchBy;
 use loq_fs::walk::WalkError;
 use serde::Serialize;
 
+/// Active git-backed filter used by `loq check`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(tag = "type")]
+pub enum JsonFilter {
+    /// `loq check --staged`
+    #[serde(rename = "staged")]
+    Staged,
+    /// `loq check --diff <ref>`
+    #[serde(rename = "diff")]
+    Diff {
+        /// Ref value passed to `--diff`.
+        #[serde(rename = "ref")]
+        git_ref: String,
+    },
+}
+
 #[derive(Debug, Serialize)]
 struct JsonOutput {
     version: &'static str,
+    filter: Option<JsonFilter>,
     violations: Vec<JsonViolation>,
     skip_warnings: Vec<JsonSkipWarning>,
     walk_errors: Vec<String>,
@@ -47,6 +64,7 @@ pub fn write_json<W: Write>(
     writer: &mut W,
     report: &Report,
     walk_errors: &[WalkError],
+    filter: Option<&JsonFilter>,
 ) -> io::Result<()> {
     let summary = JsonSummary {
         files_checked: report.summary.total,
@@ -103,6 +121,7 @@ pub fn write_json<W: Write>(
 
     let output = JsonOutput {
         version: env!("CARGO_PKG_VERSION"),
+        filter: filter.cloned(),
         violations,
         skip_warnings,
         walk_errors,
@@ -125,10 +144,11 @@ mod tests {
         outcomes: Vec<FileOutcome>,
         walk_errors: Vec<walk::WalkError>,
         fix_guidance: Option<String>,
+        filter: Option<JsonFilter>,
     ) -> String {
         let report = build_report(&outcomes, fix_guidance);
         let mut buf = Vec::new();
-        write_json(&mut buf, &report, &walk_errors).unwrap();
+        write_json(&mut buf, &report, &walk_errors, filter.as_ref()).unwrap();
         String::from_utf8(buf).unwrap()
     }
 
@@ -163,7 +183,7 @@ mod tests {
             },
         ];
 
-        let json = json_output_string(outcomes, vec![], None);
+        let json = json_output_string(outcomes, vec![], None, None);
         let parsed: serde_json::Value = serde_json::from_str(&json).unwrap();
 
         assert_eq!(parsed["summary"]["files_checked"], 3);
@@ -181,7 +201,7 @@ mod tests {
             kind: OutcomeKind::Missing,
         }];
 
-        let json = json_output_string(outcomes, vec![], None);
+        let json = json_output_string(outcomes, vec![], None, None);
         let parsed: serde_json::Value = serde_json::from_str(&json).unwrap();
 
         assert_eq!(parsed["summary"]["skipped"], 1);
@@ -201,7 +221,7 @@ mod tests {
             },
         }];
 
-        let json = json_output_string(outcomes, vec![], None);
+        let json = json_output_string(outcomes, vec![], None, None);
         let parsed: serde_json::Value = serde_json::from_str(&json).unwrap();
 
         assert_eq!(parsed["summary"]["skipped"], 1);
@@ -219,7 +239,7 @@ mod tests {
             kind: OutcomeKind::Binary,
         }];
 
-        let json = json_output_string(outcomes, vec![], None);
+        let json = json_output_string(outcomes, vec![], None, None);
         let parsed: serde_json::Value = serde_json::from_str(&json).unwrap();
 
         assert_eq!(parsed["summary"]["skipped"], 1);
@@ -243,7 +263,7 @@ mod tests {
             },
         }];
 
-        let json = json_output_string(outcomes, vec![], None);
+        let json = json_output_string(outcomes, vec![], None, None);
         let parsed: serde_json::Value = serde_json::from_str(&json).unwrap();
 
         assert_eq!(parsed["violations"][0]["path"], "big.rs");
@@ -265,7 +285,7 @@ mod tests {
             },
         }];
 
-        let json = json_output_string(outcomes, vec![], None);
+        let json = json_output_string(outcomes, vec![], None, None);
         let parsed: serde_json::Value = serde_json::from_str(&json).unwrap();
 
         assert_eq!(parsed["violations"][0]["rule"], "default");
@@ -283,6 +303,7 @@ mod tests {
                     message: "path/to/error2".into(),
                 },
             ],
+            None,
             None,
         );
         let parsed: serde_json::Value = serde_json::from_str(&json).unwrap();
@@ -306,7 +327,7 @@ mod tests {
             },
         }];
 
-        let json = json_output_string(outcomes, vec![], Some("Split large files.".into()));
+        let json = json_output_string(outcomes, vec![], Some("Split large files.".into()), None);
         let parsed: serde_json::Value = serde_json::from_str(&json).unwrap();
 
         assert_eq!(parsed["fix_guidance"], "Split large files.");
@@ -325,7 +346,7 @@ mod tests {
             },
         }];
 
-        let json = json_output_string(outcomes, vec![], Some("Split large files.".into()));
+        let json = json_output_string(outcomes, vec![], Some("Split large files.".into()), None);
         let parsed: serde_json::Value = serde_json::from_str(&json).unwrap();
 
         assert!(parsed["fix_guidance"].is_null());
@@ -356,10 +377,34 @@ mod tests {
             },
         ];
 
-        let json = json_output_string(outcomes, vec![], None);
+        let json = json_output_string(outcomes, vec![], None, None);
         let parsed: serde_json::Value = serde_json::from_str(&json).unwrap();
 
         assert_eq!(parsed["violations"][0]["path"], "a.rs");
         assert_eq!(parsed["violations"][1]["path"], "z.rs");
+    }
+
+    #[test]
+    fn filter_is_null_without_git_filter() {
+        let json = json_output_string(vec![], vec![], None, None);
+        let parsed: serde_json::Value = serde_json::from_str(&json).unwrap();
+
+        assert!(parsed["filter"].is_null());
+    }
+
+    #[test]
+    fn filter_includes_diff_ref() {
+        let json = json_output_string(
+            vec![],
+            vec![],
+            None,
+            Some(JsonFilter::Diff {
+                git_ref: "main".to_string(),
+            }),
+        );
+        let parsed: serde_json::Value = serde_json::from_str(&json).unwrap();
+
+        assert_eq!(parsed["filter"]["type"], "diff");
+        assert_eq!(parsed["filter"]["ref"], "main");
     }
 }

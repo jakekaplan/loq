@@ -33,13 +33,19 @@ cargo install loq
 ### Usage
 ```bash
 # Check current directory for violations (default: 500 lines)
-loq check           
+loq check
 
-# Check specific paths               
-loq check src/ lib/     
-     
-# Check files from stdin      
-git diff --name-only | loq check - 
+# Check specific paths
+loq check src/ lib/
+
+# Check files from stdin
+git diff --name-only | loq check -
+
+# Check only staged files
+loq check --staged
+
+# Check only files changed vs a ref
+loq check --diff main
 ```
 
 ### Managing legacy files
@@ -61,6 +67,19 @@ loq tighten
 
 All three commands manage exact-path rules in `loq.toml`. `baseline` and
 `relax` can add new rules; `tighten` only updates or removes existing ones.
+
+## Git integration
+
+```bash
+# What am I about to commit?
+loq check --staged
+
+# What changed in this branch?
+loq check --diff main
+
+# Only changed files inside src/
+loq check src/ --diff main
+```
 
 ## Configuration
 
@@ -106,6 +125,8 @@ repos:
     rev: v0.1.0-alpha.7
     hooks:
       - id: loq
+        args: ["check", "--staged"]
+        pass_filenames: false
 ```
 
 ## Contributing

@@ -1,17 +1,17 @@
 //! Check command implementation.
 
 use std::io::{Read, Write};
-use std::path::{Path, PathBuf};
+use std::path::{Component, Path, PathBuf};
 
 use anyhow::{Context, Result};
 use loq_core::report::{build_report, FindingKind, Report};
-use loq_fs::{CheckOptions, CheckOutput, FsError};
+use loq_fs::{git, CheckOptions, CheckOutput, FsError};
 use termcolor::{Color, WriteColor};
 
 use crate::cli::{CheckArgs, OutputFormat};
 use crate::output::{
     print_error, write_block, write_finding, write_guidance, write_json, write_summary,
-    write_walk_errors,
+    write_walk_errors, JsonFilter,
 };
 use crate::Cli;
 use crate::ExitStatus;
@@ -38,7 +38,23 @@ pub fn run_check<R: Read, W1: WriteColor + Write, W2: WriteColor>(
     mode: OutputMode,
 ) -> ExitStatus {
     let cwd = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
-    let inputs = match collect_inputs(args.paths.clone(), args.stdin, stdin, &cwd) {
+    let filter = check_filter(args);
+    if args.stdin && filter.is_some() {
+        return print_error(
+            stderr,
+            "cannot combine '-' (stdin path list) with --staged/--diff",
+        );
+    }
+
+    let git_paths = match filter.as_ref() {
+        Some(filter) => match resolve_git_paths(filter, &cwd) {
+            Ok(paths) => Some(paths),
+            Err(err) => return print_error(stderr, &format!("{err:#}")),
+        },
+        None => None,
+    };
+
+    let inputs = match collect_inputs(args.paths.clone(), args.stdin, stdin, &cwd, git_paths) {
         Ok(paths) => paths,
         Err(err) => return print_error(stderr, &format!("{err:#}")),
     };
@@ -54,7 +70,43 @@ pub fn run_check<R: Read, W1: WriteColor + Write, W2: WriteColor>(
         Err(err) => return handle_fs_error(&err, stderr),
     };
 
-    handle_check_output(output, stdout, mode, args.output_format)
+    handle_check_output(output, stdout, mode, args.output_format, filter.as_ref())
+}
+
+fn check_filter(args: &CheckArgs) -> Option<JsonFilter> {
+    if args.staged {
+        Some(JsonFilter::Staged)
+    } else {
+        args.diff_ref
+            .clone()
+            .map(|git_ref| JsonFilter::Diff { git_ref })
+    }
+}
+
+fn resolve_git_paths(filter: &JsonFilter, cwd: &Path) -> Result<Vec<PathBuf>> {
+    let git_filter = match filter {
+        JsonFilter::Staged => git::GitFilter::Staged,
+        JsonFilter::Diff { git_ref } => git::GitFilter::Diff {
+            git_ref: git_ref.clone(),
+        },
+    };
+
+    git::resolve_paths(cwd, &git_filter)
+        .map_err(|error| anyhow::anyhow!(git_error_message(filter, error)))
+}
+
+fn git_error_message(filter: &JsonFilter, error: git::GitError) -> String {
+    let flag = match filter {
+        JsonFilter::Staged => "--staged",
+        JsonFilter::Diff { .. } => "--diff",
+    };
+
+    match error {
+        git::GitError::GitNotAvailable => format!("{flag} requires git, but git is not available"),
+        git::GitError::NotRepository => format!("{flag} requires a git repository"),
+        git::GitError::CommandFailed { stderr } => format!("git failed: {stderr}"),
+        git::GitError::Io(error) => format!("git failed: {error}"),
+    }
 }
 
 fn handle_fs_error<W: WriteColor>(err: &FsError, stderr: &mut W) -> ExitStatus {
@@ -68,6 +120,7 @@ fn handle_check_output<W: WriteColor + Write>(
     stdout: &mut W,
     mode: OutputMode,
     format: OutputFormat,
+    filter: Option<&JsonFilter>,
 ) -> ExitStatus {
     let CheckOutput {
         outcomes,
@@ -78,7 +131,7 @@ fn handle_check_output<W: WriteColor + Write>(
 
     match format {
         OutputFormat::Json => {
-            let _ = write_json(stdout, &report, &walk_errors);
+            let _ = write_json(stdout, &report, &walk_errors, filter);
         }
         OutputFormat::Text => {
             write_text_output(stdout, &report, &walk_errors, mode);
@@ -121,11 +174,19 @@ fn collect_inputs<R: Read>(
     use_stdin: bool,
     stdin: &mut R,
     cwd: &Path,
+    git_paths: Option<Vec<PathBuf>>,
 ) -> Result<Vec<PathBuf>> {
     if use_stdin {
         let mut stdin_paths =
             loq_fs::stdin::read_paths(stdin, cwd).context("failed to read stdin")?;
         paths.append(&mut stdin_paths);
+    }
+
+    if let Some(git_paths) = git_paths {
+        if paths.is_empty() {
+            return Ok(git_paths);
+        }
+        return Ok(intersect_paths(git_paths, &paths, cwd));
     }
 
     if paths.is_empty() && !use_stdin {
@@ -135,188 +196,49 @@ fn collect_inputs<R: Read>(
     Ok(paths)
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use std::io;
+fn intersect_paths(
+    git_paths: Vec<PathBuf>,
+    selected_paths: &[PathBuf],
+    cwd: &Path,
+) -> Vec<PathBuf> {
+    let prefixes: Vec<PathBuf> = selected_paths
+        .iter()
+        .map(|path| normalize_for_prefix(path, cwd))
+        .collect();
 
-    struct FailingReader;
+    git_paths
+        .into_iter()
+        .filter(|git_path| {
+            let git_path = normalize_for_prefix(git_path, cwd);
+            prefixes
+                .iter()
+                .any(|prefix| git_path == *prefix || git_path.starts_with(prefix))
+        })
+        .collect()
+}
 
-    impl Read for FailingReader {
-        fn read(&mut self, _buf: &mut [u8]) -> io::Result<usize> {
-            Err(io::Error::other("fail"))
+fn normalize_for_prefix(path: &Path, cwd: &Path) -> PathBuf {
+    let absolute = if path.is_absolute() {
+        path.to_path_buf()
+    } else {
+        cwd.join(path)
+    };
+    normalize_components(&absolute)
+}
+
+fn normalize_components(path: &Path) -> PathBuf {
+    let mut normalized = PathBuf::new();
+    for component in path.components() {
+        match component {
+            Component::CurDir => {}
+            Component::ParentDir => {
+                let _ = normalized.pop();
+            }
+            _ => normalized.push(component.as_os_str()),
         }
     }
-
-    #[test]
-    fn collect_inputs_reports_stdin_error() {
-        let err = collect_inputs(vec![], true, &mut FailingReader, Path::new(".")).unwrap_err();
-        assert!(err.to_string().contains("failed to read stdin"));
-    }
-
-    #[test]
-    fn collect_inputs_empty_defaults_to_cwd() {
-        let mut empty_stdin: &[u8] = b"";
-        let result = collect_inputs(vec![], false, &mut empty_stdin, Path::new("/repo")).unwrap();
-        assert_eq!(result, vec![PathBuf::from(".")]);
-    }
-
-    #[test]
-    fn collect_inputs_stdin_only_no_default() {
-        let mut empty_stdin: &[u8] = b"";
-        let result = collect_inputs(vec![], true, &mut empty_stdin, Path::new("/repo")).unwrap();
-        assert!(result.is_empty());
-    }
-
-    #[test]
-    fn collect_inputs_stdin_with_paths() {
-        let mut stdin: &[u8] = b"file1.rs\nfile2.rs\n";
-        let result = collect_inputs(vec![], true, &mut stdin, Path::new("/repo")).unwrap();
-        assert_eq!(result.len(), 2);
-        assert_eq!(result[0], PathBuf::from("/repo/file1.rs"));
-        assert_eq!(result[1], PathBuf::from("/repo/file2.rs"));
-    }
-
-    #[test]
-    fn collect_inputs_mixed_paths_and_stdin() {
-        let mut stdin: &[u8] = b"from_stdin.rs\n";
-        let result = collect_inputs(
-            vec![PathBuf::from("explicit.rs")],
-            true,
-            &mut stdin,
-            Path::new("/repo"),
-        )
-        .unwrap();
-        assert_eq!(result.len(), 2);
-        assert!(result.contains(&PathBuf::from("explicit.rs")));
-        assert!(result.contains(&PathBuf::from("/repo/from_stdin.rs")));
-    }
-
-    #[test]
-    fn handle_fs_error_returns_error_status() {
-        use termcolor::NoColor;
-        let mut stderr = NoColor::new(Vec::new());
-        let err = FsError::Io(std::io::Error::other("test error"));
-        let status = handle_fs_error(&err, &mut stderr);
-        assert_eq!(status, ExitStatus::Error);
-        let output = String::from_utf8(stderr.into_inner()).unwrap();
-        assert!(output.contains("error:"));
-    }
-
-    #[test]
-    fn handle_check_output_default_mode_skips_skip_warnings() {
-        use loq_core::report::{FileOutcome, OutcomeKind};
-        use loq_core::ConfigOrigin;
-        use termcolor::NoColor;
-
-        let mut stdout = NoColor::new(Vec::new());
-        let output = loq_fs::CheckOutput {
-            outcomes: vec![FileOutcome {
-                path: "missing.txt".into(),
-                display_path: "missing.txt".into(),
-                config_source: ConfigOrigin::BuiltIn,
-                kind: OutcomeKind::Missing,
-            }],
-            walk_errors: vec![],
-            fix_guidance: None,
-        };
-        let status =
-            handle_check_output(output, &mut stdout, OutputMode::Default, OutputFormat::Text);
-        assert_eq!(status, ExitStatus::Success);
-        let output_str = String::from_utf8(stdout.into_inner()).unwrap();
-        assert!(!output_str.contains("missing.txt") || output_str.contains("passed"));
-    }
-
-    #[test]
-    fn handle_check_output_verbose_mode_shows_skip_warnings() {
-        use loq_core::report::{FileOutcome, OutcomeKind};
-        use loq_core::ConfigOrigin;
-        use termcolor::NoColor;
-
-        let mut stdout = NoColor::new(Vec::new());
-        let output = loq_fs::CheckOutput {
-            outcomes: vec![FileOutcome {
-                path: "missing.txt".into(),
-                display_path: "missing.txt".into(),
-                config_source: ConfigOrigin::BuiltIn,
-                kind: OutcomeKind::Missing,
-            }],
-            walk_errors: vec![],
-            fix_guidance: None,
-        };
-        let status =
-            handle_check_output(output, &mut stdout, OutputMode::Verbose, OutputFormat::Text);
-        assert_eq!(status, ExitStatus::Success);
-        let output_str = String::from_utf8(stdout.into_inner()).unwrap();
-        assert!(output_str.contains("missing.txt"));
-    }
-
-    #[test]
-    fn handle_check_output_with_walk_errors() {
-        use loq_fs::walk::WalkError;
-        use termcolor::NoColor;
-
-        let mut stdout = NoColor::new(Vec::new());
-        let output = loq_fs::CheckOutput {
-            outcomes: vec![],
-            walk_errors: vec![WalkError {
-                message: "permission denied".into(),
-            }],
-            fix_guidance: None,
-        };
-        let _code =
-            handle_check_output(output, &mut stdout, OutputMode::Default, OutputFormat::Text);
-        let output_str = String::from_utf8(stdout.into_inner()).unwrap();
-        assert!(output_str.contains("skipped"));
-    }
-
-    #[test]
-    fn handle_check_output_json_format() {
-        use loq_core::report::{FileOutcome, OutcomeKind};
-        use loq_core::ConfigOrigin;
-        use loq_core::MatchBy;
-        use loq_fs::walk::WalkError;
-        use termcolor::NoColor;
-
-        let mut stdout = NoColor::new(Vec::new());
-        let output = loq_fs::CheckOutput {
-            outcomes: vec![
-                FileOutcome {
-                    path: "big.rs".into(),
-                    display_path: "big.rs".into(),
-                    config_source: ConfigOrigin::BuiltIn,
-                    kind: OutcomeKind::Violation {
-                        limit: 100,
-                        actual: 150,
-                        matched_by: MatchBy::Default,
-                    },
-                },
-                FileOutcome {
-                    path: "skipped.bin".into(),
-                    display_path: "skipped.bin".into(),
-                    config_source: ConfigOrigin::BuiltIn,
-                    kind: OutcomeKind::Binary,
-                },
-            ],
-            walk_errors: vec![WalkError {
-                message: "permission denied".into(),
-            }],
-            fix_guidance: Some("Split large files.".to_string()),
-        };
-        let status =
-            handle_check_output(output, &mut stdout, OutputMode::Default, OutputFormat::Json);
-        assert_eq!(status, ExitStatus::Failure);
-        let output_str = String::from_utf8(stdout.into_inner()).unwrap();
-        let parsed: serde_json::Value = serde_json::from_str(&output_str).unwrap();
-        assert_eq!(parsed["violations"][0]["path"], "big.rs");
-        assert_eq!(parsed["violations"][0]["lines"], 150);
-        assert_eq!(parsed["violations"][0]["max_lines"], 100);
-        assert_eq!(parsed["summary"]["violations"], 1);
-        assert_eq!(parsed["summary"]["skipped"], 1);
-        assert_eq!(parsed["summary"]["walk_errors"], 1);
-        assert_eq!(parsed["skip_warnings"][0]["path"], "skipped.bin");
-        assert_eq!(parsed["skip_warnings"][0]["reason"], "binary");
-        assert_eq!(parsed["walk_errors"][0], "permission denied");
-        assert_eq!(parsed["fix_guidance"], "Split large files.");
-    }
+    normalized
 }
+
+#[cfg(test)]
+mod tests;

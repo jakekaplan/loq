@@ -120,6 +120,8 @@ where
         paths: vec![],
         stdin: false,
         no_cache: false,
+        staged: false,
+        diff_ref: None,
         output_format: cli::OutputFormat::Text,
     });
     match cli.command.as_ref().unwrap_or(&default_check) {
@@ -136,9 +138,9 @@ mod tests {
     use super::*;
     use std::path::PathBuf;
 
-    fn check_command_details(cli: Cli) -> Option<(bool, Vec<PathBuf>)> {
+    fn check_command_details(cli: Cli) -> Option<(bool, bool, Option<String>, Vec<PathBuf>)> {
         if let Some(Command::Check(check)) = cli.command {
-            Some((check.stdin, check.paths))
+            Some((check.stdin, check.staged, check.diff_ref, check.paths))
         } else {
             None
         }
@@ -161,7 +163,10 @@ mod tests {
         let cli = Cli::parse_from(normalized);
 
         let details = check_command_details(cli);
-        assert_eq!(details, Some((true, vec![PathBuf::from("src")])));
+        assert_eq!(
+            details,
+            Some((true, false, None, vec![PathBuf::from("src")]))
+        );
     }
 
     #[test]
@@ -174,7 +179,10 @@ mod tests {
         let cli = Cli::parse_from(normalized);
 
         let details = check_command_details(cli);
-        assert_eq!(details, Some((false, vec![PathBuf::from("-")])));
+        assert_eq!(
+            details,
+            Some((false, false, None, vec![PathBuf::from("-")]))
+        );
     }
 
     #[test]
@@ -187,12 +195,37 @@ mod tests {
         let cli = Cli::parse_from(normalized);
 
         let details = check_command_details(cli);
-        assert_eq!(details, Some((true, Vec::new())));
+        assert_eq!(details, Some((true, false, None, Vec::new())));
     }
 
     #[test]
     fn check_command_details_returns_none_for_non_check_commands() {
         let cli = Cli::parse_from(["loq", "init"]);
         assert_eq!(check_command_details(cli), None);
+    }
+
+    #[test]
+    fn parse_staged_flag() {
+        let cli = Cli::parse_from(["loq", "check", "--staged"]);
+        assert_eq!(
+            check_command_details(cli),
+            Some((false, true, None, Vec::new()))
+        );
+    }
+
+    #[test]
+    fn parse_diff_flag() {
+        let cli = Cli::parse_from(["loq", "check", "--diff", "main"]);
+        assert_eq!(
+            check_command_details(cli),
+            Some((false, false, Some("main".to_string()), Vec::new()))
+        );
+    }
+
+    #[test]
+    fn staged_and_diff_conflict() {
+        let err = Cli::try_parse_from(["loq", "check", "--staged", "--diff", "main"])
+            .expect_err("flags should conflict");
+        assert!(err.to_string().contains("cannot be used with"));
     }
 }

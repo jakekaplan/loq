@@ -9,6 +9,7 @@
 mod cache;
 pub mod count;
 pub mod discover;
+pub mod git;
 pub mod stdin;
 pub mod walk;
 

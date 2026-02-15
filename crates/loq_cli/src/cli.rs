@@ -57,6 +57,14 @@ pub struct CheckArgs {
     #[arg(long = "no-cache")]
     pub no_cache: bool,
 
+    /// Check only files in the git staging area.
+    #[arg(long = "staged", conflicts_with = "diff_ref")]
+    pub staged: bool,
+
+    /// Check only files changed relative to REF.
+    #[arg(long = "diff", value_name = "REF", conflicts_with = "staged")]
+    pub diff_ref: Option<String>,
+
     /// Output format.
     #[arg(long = "output-format", value_enum, default_value_t = OutputFormat::Text)]
     pub output_format: OutputFormat,
