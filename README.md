@@ -38,8 +38,19 @@ loq check
 # Check specific paths               
 loq check src/ lib/     
      
-# Check files from stdin      
-git diff --name-only | loq check - 
+# Check staged files
+loq check --staged
+
+# Check files changed since a ref
+loq check --diff origin/main..HEAD
+
+# --staged and --diff are mutually exclusive
+
+# Scope git checks to a path (intersection)
+loq check src/ --staged
+
+# Check files from stdin
+git diff --name-only | loq check -
 ```
 
 ### Managing legacy files

@@ -119,6 +119,8 @@ where
     let default_check = Command::Check(cli::CheckArgs {
         paths: vec![],
         stdin: false,
+        staged: false,
+        diff: None,
         no_cache: false,
         output_format: cli::OutputFormat::Text,
     });

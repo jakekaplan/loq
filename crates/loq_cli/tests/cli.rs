@@ -1,3 +1,5 @@
+use std::process::Command;
+
 use assert_cmd::cargo::cargo_bin_cmd;
 use predicates::prelude::*;
 use tempfile::TempDir;
@@ -12,6 +14,27 @@ fn write_file(dir: &TempDir, path: &str, contents: &str) {
 
 fn repeat_lines(count: usize) -> String {
     "line\n".repeat(count)
+}
+
+fn run_git(dir: &TempDir, args: &[&str]) {
+    let output = Command::new("git")
+        .current_dir(dir.path())
+        .args(args)
+        .output()
+        .unwrap();
+
+    assert!(
+        output.status.success(),
+        "git {:?} failed: {}",
+        args,
+        String::from_utf8_lossy(&output.stderr)
+    );
+}
+
+fn init_git_repo(dir: &TempDir) {
+    run_git(dir, &["init"]);
+    run_git(dir, &["config", "user.name", "Loq Test"]);
+    run_git(dir, &["config", "user.email", "test@example.com"]);
 }
 
 #[test]
@@ -63,6 +86,187 @@ fn check_allows_flags_after_paths() {
         .assert()
         .success()
         .stdout(predicate::str::contains("\"summary\""));
+}
+
+#[test]
+fn check_staged_intersects_with_paths() {
+    let temp = TempDir::new().unwrap();
+    init_git_repo(&temp);
+
+    write_file(&temp, "loq.toml", "default_max_lines = 1\n");
+    write_file(&temp, "src/staged.txt", "ok\n");
+    write_file(&temp, "docs/staged.txt", "ok\n");
+    run_git(&temp, &["add", "."]);
+    run_git(&temp, &["commit", "-m", "initial"]);
+
+    write_file(&temp, "src/staged.txt", "a\nb\n");
+    write_file(&temp, "docs/staged.txt", "a\nb\n");
+    run_git(&temp, &["add", "src/staged.txt", "docs/staged.txt"]);
+
+    cargo_bin_cmd!("loq")
+        .current_dir(temp.path())
+        .args(["check", "src", "--staged"])
+        .assert()
+        .failure()
+        .stdout(predicate::str::contains("src/"))
+        .stdout(predicate::str::contains("staged.txt"))
+        .stdout(predicate::str::contains("docs/").not());
+}
+
+#[test]
+fn check_diff_since_ref_only_checks_changed_files() {
+    let temp = TempDir::new().unwrap();
+    init_git_repo(&temp);
+
+    write_file(&temp, "loq.toml", "default_max_lines = 1\n");
+    write_file(&temp, "changed.txt", "ok\n");
+    write_file(&temp, "unchanged.txt", "a\nb\n");
+    run_git(&temp, &["add", "."]);
+    run_git(&temp, &["commit", "-m", "initial"]);
+
+    write_file(&temp, "changed.txt", "a\nb\n");
+
+    cargo_bin_cmd!("loq")
+        .current_dir(temp.path())
+        .args(["check", "--diff", "HEAD"])
+        .assert()
+        .failure()
+        .stdout(predicate::str::contains("changed.txt"))
+        .stdout(predicate::str::contains("unchanged.txt").not());
+}
+
+#[test]
+fn check_staged_from_subdir_resolves_repo_relative_paths() {
+    let temp = TempDir::new().unwrap();
+    init_git_repo(&temp);
+
+    write_file(&temp, "loq.toml", "default_max_lines = 1\n");
+    write_file(&temp, "sub/changed.txt", "ok\n");
+    run_git(&temp, &["add", "."]);
+    run_git(&temp, &["commit", "-m", "initial"]);
+
+    write_file(&temp, "sub/changed.txt", "a\nb\n");
+    run_git(&temp, &["add", "sub/changed.txt"]);
+
+    cargo_bin_cmd!("loq")
+        .current_dir(temp.path().join("sub"))
+        .args(["check", "--staged"])
+        .assert()
+        .failure()
+        .stdout(predicate::str::contains("changed.txt"));
+}
+
+#[test]
+fn check_diff_from_subdir_resolves_repo_relative_paths() {
+    let temp = TempDir::new().unwrap();
+    init_git_repo(&temp);
+
+    write_file(&temp, "loq.toml", "default_max_lines = 1\n");
+    write_file(&temp, "sub/changed.txt", "ok\n");
+    run_git(&temp, &["add", "."]);
+    run_git(&temp, &["commit", "-m", "initial"]);
+
+    write_file(&temp, "sub/changed.txt", "a\nb\n");
+
+    cargo_bin_cmd!("loq")
+        .current_dir(temp.path().join("sub"))
+        .args(["check", "--diff", "HEAD"])
+        .assert()
+        .failure()
+        .stdout(predicate::str::contains("changed.txt"));
+}
+
+#[test]
+fn check_staged_parent_dir_scope_includes_matches() {
+    let temp = TempDir::new().unwrap();
+    init_git_repo(&temp);
+
+    write_file(&temp, "loq.toml", "default_max_lines = 1\n");
+    write_file(&temp, "src/changed.txt", "ok\n");
+    run_git(&temp, &["add", "."]);
+    run_git(&temp, &["commit", "-m", "initial"]);
+
+    write_file(&temp, "src/changed.txt", "a\nb\n");
+    run_git(&temp, &["add", "src/changed.txt"]);
+    std::fs::create_dir_all(temp.path().join("sub")).unwrap();
+
+    let assert = cargo_bin_cmd!("loq")
+        .current_dir(temp.path().join("sub"))
+        .args(["check", "../src", "--staged", "--output-format", "json"])
+        .assert()
+        .failure();
+
+    let stdout = String::from_utf8(assert.get_output().stdout.clone()).unwrap();
+    let parsed: serde_json::Value = serde_json::from_str(&stdout).unwrap();
+    assert_eq!(parsed["violations"][0]["path"], "../src/changed.txt");
+}
+
+#[test]
+fn check_staged_errors_when_not_in_git_repo() {
+    let temp = TempDir::new().unwrap();
+
+    cargo_bin_cmd!("loq")
+        .current_dir(temp.path())
+        .args(["check", "--staged"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains(
+            "--staged requires a git repository (run inside a repo)",
+        ));
+}
+
+#[test]
+fn check_diff_errors_when_not_in_git_repo() {
+    let temp = TempDir::new().unwrap();
+
+    cargo_bin_cmd!("loq")
+        .current_dir(temp.path())
+        .args(["check", "--diff", "main"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains(
+            "--diff requires a git repository (run inside a repo)",
+        ));
+}
+
+#[test]
+fn check_staged_handles_leading_space_filename() {
+    let temp = TempDir::new().unwrap();
+    init_git_repo(&temp);
+
+    write_file(&temp, "loq.toml", "default_max_lines = 1\n");
+    let odd_path = " odd name.txt";
+    write_file(&temp, odd_path, "ok\n");
+    run_git(&temp, &["add", "."]);
+    run_git(&temp, &["commit", "-m", "initial"]);
+
+    write_file(&temp, odd_path, "a\nb\n");
+    run_git(&temp, &["add", odd_path]);
+
+    let assert = cargo_bin_cmd!("loq")
+        .current_dir(temp.path())
+        .args(["check", "--staged", "--output-format", "json"])
+        .assert()
+        .failure();
+
+    let stdout = String::from_utf8(assert.get_output().stdout.clone()).unwrap();
+    let parsed: serde_json::Value = serde_json::from_str(&stdout).unwrap();
+    assert_eq!(parsed["violations"][0]["path"], odd_path);
+}
+
+#[test]
+fn check_staged_errors_when_git_unavailable() {
+    let temp = TempDir::new().unwrap();
+
+    cargo_bin_cmd!("loq")
+        .current_dir(temp.path())
+        .env("PATH", "")
+        .args(["check", "--staged"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains(
+            "--staged requires git, but git is not available",
+        ));
 }
 
 #[test]

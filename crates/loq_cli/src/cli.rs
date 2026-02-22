@@ -53,6 +53,14 @@ pub struct CheckArgs {
     #[arg(long = "stdin", hide = true)]
     pub stdin: bool,
 
+    /// Check only files currently staged in git.
+    #[arg(long = "staged", conflicts_with = "diff")]
+    pub staged: bool,
+
+    /// Check files changed since a git reference.
+    #[arg(long = "diff", value_name = "REF", conflicts_with = "staged")]
+    pub diff: Option<String>,
+
     /// Disable file caching.
     #[arg(long = "no-cache")]
     pub no_cache: bool,
