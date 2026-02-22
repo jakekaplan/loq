@@ -64,6 +64,14 @@ fn decode_git_path_preserves_leading_and_trailing_spaces() {
     );
 }
 
+#[cfg(windows)]
+#[test]
+fn normalize_path_lexical_keeps_drive_prefix() {
+    let input = PathBuf::from(r"C:\repo\sub\..\src");
+    let expected = PathBuf::from(r"C:\repo\src");
+    assert_eq!(normalize_path_lexical(&input), expected);
+}
+
 #[test]
 fn strip_line_endings_only_removes_newline_chars() {
     assert_eq!(strip_line_endings(b"/repo/path\n"), b"/repo/path");

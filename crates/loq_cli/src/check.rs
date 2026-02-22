@@ -304,7 +304,7 @@ fn normalize_path_lexical(path: &Path) -> PathBuf {
     use std::path::Component;
 
     let mut prefix: Option<OsString> = None;
-    let mut absolute = false;
+    let mut has_root = false;
     let mut parts: Vec<OsString> = Vec::new();
 
     for component in path.components() {
@@ -312,21 +312,21 @@ fn normalize_path_lexical(path: &Path) -> PathBuf {
             Component::Prefix(prefix_component) => {
                 prefix = Some(prefix_component.as_os_str().to_owned());
                 parts.clear();
-                absolute = false;
+                has_root = false;
             }
             Component::RootDir => {
-                absolute = true;
+                has_root = true;
             }
             Component::CurDir => {}
             Component::ParentDir => {
                 if let Some(last) = parts.pop() {
                     if last.as_os_str() == OsStr::new("..") {
                         parts.push(last);
-                        if !absolute {
+                        if !has_root {
                             parts.push(OsString::from(".."));
                         }
                     }
-                } else if !absolute {
+                } else if !has_root {
                     parts.push(OsString::from(".."));
                 }
             }
@@ -336,13 +336,18 @@ fn normalize_path_lexical(path: &Path) -> PathBuf {
         }
     }
 
-    let mut normalized = PathBuf::new();
-    if let Some(prefix) = prefix {
-        normalized.push(prefix);
-    }
-    if absolute {
-        normalized.push(std::path::MAIN_SEPARATOR.to_string());
-    }
+    let mut normalized = match (prefix, has_root) {
+        (Some(prefix), true) => {
+            let mut base = OsString::new();
+            base.push(prefix);
+            base.push(std::path::MAIN_SEPARATOR.to_string());
+            PathBuf::from(base)
+        }
+        (Some(prefix), false) => PathBuf::from(prefix),
+        (None, true) => PathBuf::from(std::path::MAIN_SEPARATOR.to_string()),
+        (None, false) => PathBuf::new(),
+    };
+
     for part in parts {
         normalized.push(part);
     }
