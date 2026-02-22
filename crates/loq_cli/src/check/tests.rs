@@ -1,5 +1,6 @@
 use super::*;
 use std::io;
+use std::process::Command as StdCommand;
 
 use tempfile::TempDir;
 
@@ -9,6 +10,26 @@ impl Read for FailingReader {
     fn read(&mut self, _buf: &mut [u8]) -> io::Result<usize> {
         Err(io::Error::other("fail"))
     }
+}
+
+fn exec_git(dir: &Path, args: &[&str]) {
+    let output = StdCommand::new("git")
+        .current_dir(dir)
+        .args(args)
+        .output()
+        .unwrap();
+    assert!(
+        output.status.success(),
+        "git {:?} failed: {}",
+        args,
+        String::from_utf8_lossy(&output.stderr)
+    );
+}
+
+fn init_test_repo(dir: &Path) {
+    exec_git(dir, &["init"]);
+    exec_git(dir, &["config", "user.name", "Test"]);
+    exec_git(dir, &["config", "user.email", "test@test.com"]);
 }
 
 #[test]
@@ -149,6 +170,258 @@ fn handle_check_output_verbose_mode_shows_skip_warnings() {
     assert_eq!(status, ExitStatus::Success);
     let output_str = String::from_utf8(stdout.into_inner()).unwrap();
     assert!(output_str.contains("missing.txt"));
+}
+
+// --- git_filter_from_args ---
+
+#[test]
+fn git_filter_from_args_staged() {
+    let args = CheckArgs {
+        paths: vec![],
+        stdin: false,
+        staged: true,
+        diff: None,
+        no_cache: false,
+        output_format: OutputFormat::Text,
+    };
+    assert_eq!(git_filter_from_args(&args), Some(GitFilter::Staged));
+}
+
+#[test]
+fn git_filter_from_args_diff() {
+    let args = CheckArgs {
+        paths: vec![],
+        stdin: false,
+        staged: false,
+        diff: Some("main".into()),
+        no_cache: false,
+        output_format: OutputFormat::Text,
+    };
+    assert_eq!(
+        git_filter_from_args(&args),
+        Some(GitFilter::Diff("main".into()))
+    );
+}
+
+#[test]
+fn git_filter_from_args_none() {
+    let args = CheckArgs {
+        paths: vec![],
+        stdin: false,
+        staged: false,
+        diff: None,
+        no_cache: false,
+        output_format: OutputFormat::Text,
+    };
+    assert_eq!(git_filter_from_args(&args), None);
+}
+
+// --- apply_git_filter ---
+
+#[test]
+fn apply_git_filter_none_passes_through() {
+    let paths = vec![PathBuf::from("a.rs")];
+    let result = apply_git_filter(paths.clone(), None, Path::new(".")).unwrap();
+    assert_eq!(result, paths);
+}
+
+#[test]
+fn apply_git_filter_empty_scope_returns_git_paths() {
+    let temp = TempDir::new().unwrap();
+    init_test_repo(temp.path());
+
+    std::fs::write(temp.path().join("file.txt"), "hello\n").unwrap();
+    exec_git(temp.path(), &["add", "file.txt"]);
+    exec_git(temp.path(), &["commit", "-m", "initial"]);
+
+    std::fs::write(temp.path().join("file.txt"), "changed\n").unwrap();
+    exec_git(temp.path(), &["add", "file.txt"]);
+
+    let filter = GitFilter::Staged;
+    let result = apply_git_filter(vec![], Some(&filter), temp.path()).unwrap();
+    assert!(!result.is_empty());
+    assert!(result.iter().any(|p| p.ends_with("file.txt")));
+}
+
+// --- run_git ---
+
+#[test]
+fn run_git_returns_output_on_success() {
+    let temp = TempDir::new().unwrap();
+    init_test_repo(temp.path());
+    let output = run_git(
+        &["rev-parse", "--is-inside-work-tree"],
+        temp.path(),
+        "unavailable",
+    )
+    .unwrap();
+    assert!(output.status.success());
+}
+
+// --- git_repo_root ---
+
+#[test]
+fn git_repo_root_returns_root() {
+    let temp = TempDir::new().unwrap();
+    init_test_repo(temp.path());
+    let sub = temp.path().join("sub");
+    std::fs::create_dir_all(&sub).unwrap();
+
+    let root = git_repo_root(&sub, "unavailable", "not a repo").unwrap();
+    assert_eq!(
+        std::fs::canonicalize(&root).unwrap(),
+        std::fs::canonicalize(temp.path()).unwrap()
+    );
+}
+
+#[test]
+fn git_repo_root_fails_outside_repo() {
+    let temp = TempDir::new().unwrap();
+    let err = git_repo_root(temp.path(), "unavailable", "not a repo").unwrap_err();
+    assert!(err.to_string().contains("not a repo"));
+}
+
+// --- list_git_paths ---
+
+#[test]
+fn list_git_paths_staged() {
+    let temp = TempDir::new().unwrap();
+    init_test_repo(temp.path());
+
+    std::fs::write(temp.path().join("a.txt"), "ok\n").unwrap();
+    exec_git(temp.path(), &["add", "."]);
+    exec_git(temp.path(), &["commit", "-m", "init"]);
+
+    std::fs::write(temp.path().join("a.txt"), "changed\n").unwrap();
+    exec_git(temp.path(), &["add", "a.txt"]);
+
+    let paths = list_git_paths(&GitFilter::Staged, temp.path()).unwrap();
+    assert!(paths.iter().any(|p| p.ends_with("a.txt")));
+}
+
+#[test]
+fn list_git_paths_diff() {
+    let temp = TempDir::new().unwrap();
+    init_test_repo(temp.path());
+
+    std::fs::write(temp.path().join("a.txt"), "ok\n").unwrap();
+    exec_git(temp.path(), &["add", "."]);
+    exec_git(temp.path(), &["commit", "-m", "init"]);
+
+    std::fs::write(temp.path().join("a.txt"), "changed\n").unwrap();
+
+    let paths = list_git_paths(&GitFilter::Diff("HEAD".into()), temp.path()).unwrap();
+    assert!(paths.iter().any(|p| p.ends_with("a.txt")));
+}
+
+#[test]
+fn list_git_paths_invalid_ref_fails() {
+    let temp = TempDir::new().unwrap();
+    init_test_repo(temp.path());
+
+    std::fs::write(temp.path().join("a.txt"), "ok\n").unwrap();
+    exec_git(temp.path(), &["add", "."]);
+    exec_git(temp.path(), &["commit", "-m", "init"]);
+
+    let err = list_git_paths(
+        &GitFilter::Diff("nonexistent_ref_abc123".into()),
+        temp.path(),
+    )
+    .unwrap_err();
+    assert!(err.to_string().contains("git diff failed"));
+}
+
+#[test]
+fn list_git_paths_deduplicates_and_sorts() {
+    let temp = TempDir::new().unwrap();
+    init_test_repo(temp.path());
+
+    std::fs::write(temp.path().join("b.txt"), "ok\n").unwrap();
+    std::fs::write(temp.path().join("a.txt"), "ok\n").unwrap();
+    exec_git(temp.path(), &["add", "."]);
+    exec_git(temp.path(), &["commit", "-m", "init"]);
+
+    std::fs::write(temp.path().join("b.txt"), "changed\n").unwrap();
+    std::fs::write(temp.path().join("a.txt"), "changed\n").unwrap();
+    exec_git(temp.path(), &["add", "."]);
+
+    let paths = list_git_paths(&GitFilter::Staged, temp.path()).unwrap();
+    let names: Vec<_> = paths.iter().filter_map(|p| p.file_name()).collect();
+    assert!(names.windows(2).all(|w| w[0] <= w[1]));
+}
+
+// --- normalize_path_lexical ---
+
+#[test]
+fn normalize_path_lexical_curdir() {
+    let result = normalize_path_lexical(Path::new("./foo/bar"));
+    assert_eq!(result, PathBuf::from("foo/bar"));
+}
+
+#[test]
+fn normalize_path_lexical_parent_relative() {
+    let result = normalize_path_lexical(Path::new("../../foo"));
+    assert_eq!(result, PathBuf::from("../../foo"));
+}
+
+#[test]
+fn normalize_path_lexical_double_parent_relative() {
+    let result = normalize_path_lexical(Path::new("a/../../b"));
+    assert_eq!(result, PathBuf::from("../b"));
+}
+
+#[test]
+fn normalize_path_lexical_empty_path() {
+    let result = normalize_path_lexical(Path::new(""));
+    assert_eq!(result, PathBuf::new());
+}
+
+#[test]
+fn normalize_path_lexical_parent_from_root_is_noop() {
+    let result = normalize_path_lexical(Path::new("/a/../../b"));
+    assert_eq!(result, PathBuf::from("/b"));
+}
+
+// --- normalize_scope_path ---
+
+#[test]
+fn normalize_scope_path_absolute_stays_absolute() {
+    let result = normalize_scope_path(Path::new("/some/abs/path"), Path::new("/cwd"));
+    assert_eq!(result, PathBuf::from("/some/abs/path"));
+}
+
+#[test]
+fn normalize_scope_path_relative_joins_cwd() {
+    let result = normalize_scope_path(Path::new("rel/path"), Path::new("/cwd"));
+    assert_eq!(result, PathBuf::from("/cwd/rel/path"));
+}
+
+// --- candidate_in_scope ---
+
+#[test]
+fn candidate_in_scope_file_match() {
+    let temp = TempDir::new().unwrap();
+    let file = temp.path().join("file.txt");
+    std::fs::write(&file, "content").unwrap();
+    assert!(candidate_in_scope(&file, &file));
+}
+
+#[test]
+fn candidate_in_scope_file_no_match() {
+    let temp = TempDir::new().unwrap();
+    let a = temp.path().join("a.txt");
+    let b = temp.path().join("b.txt");
+    std::fs::write(&a, "").unwrap();
+    std::fs::write(&b, "").unwrap();
+    assert!(!candidate_in_scope(&a, &b));
+}
+
+#[test]
+fn candidate_in_scope_dir_contains() {
+    let temp = TempDir::new().unwrap();
+    let file = temp.path().join("file.txt");
+    std::fs::write(&file, "content").unwrap();
+    assert!(candidate_in_scope(&file, temp.path()));
 }
 
 #[test]

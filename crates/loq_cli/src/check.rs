@@ -158,36 +158,63 @@ fn apply_git_filter(
     Ok(intersect_paths_with_scope(paths, git_paths, cwd))
 }
 
-fn list_git_paths(filter: &GitFilter, cwd: &Path) -> Result<Vec<PathBuf>> {
-    let unavailable_message = match filter {
-        GitFilter::Staged => "--staged requires git, but git is not available",
-        GitFilter::Diff(_) => "--diff requires git, but git is not available",
-    };
-    let not_repo_message = match filter {
-        GitFilter::Staged => "--staged requires a git repository (run inside a repo)",
-        GitFilter::Diff(_) => "--diff requires a git repository (run inside a repo)",
-    };
-    let repo_root = git_repo_root(cwd, unavailable_message, not_repo_message)?;
-
-    let mut command = Command::new("git");
-    command.arg("diff").arg("--name-only").arg("-z");
-
+const fn git_messages(filter: &GitFilter) -> (&'static str, &'static str) {
     match filter {
-        GitFilter::Staged => {
-            command.arg("--cached");
-        }
-        GitFilter::Diff(reference) => {
-            command.arg(reference);
-        }
+        GitFilter::Staged => (
+            "--staged requires git, but git is not available",
+            "--staged requires a git repository (run inside a repo)",
+        ),
+        GitFilter::Diff(_) => (
+            "--diff requires git, but git is not available",
+            "--diff requires a git repository (run inside a repo)",
+        ),
+    }
+}
+
+fn run_git(args: &[&str], cwd: &Path, unavailable_message: &str) -> Result<std::process::Output> {
+    Command::new("git")
+        .args(args)
+        .current_dir(cwd)
+        .output()
+        .map_err(|error| {
+            if error.kind() == std::io::ErrorKind::NotFound {
+                anyhow::anyhow!("{unavailable_message}")
+            } else {
+                anyhow::Error::new(error).context("failed to run git")
+            }
+        })
+}
+
+fn git_repo_root(cwd: &Path, unavailable_message: &str, not_repo_message: &str) -> Result<PathBuf> {
+    let check = run_git(
+        &["rev-parse", "--is-inside-work-tree"],
+        cwd,
+        unavailable_message,
+    )?;
+    if !check.status.success() || strip_line_endings(&check.stdout) != b"true" {
+        bail!("{not_repo_message}");
     }
 
-    let output = command.current_dir(cwd).output().map_err(|error| {
-        if error.kind() == std::io::ErrorKind::NotFound {
-            anyhow::anyhow!(unavailable_message)
-        } else {
-            anyhow::Error::new(error).context("failed to run git")
-        }
-    })?;
+    let output = run_git(&["rev-parse", "--show-toplevel"], cwd, unavailable_message)?;
+    let root = strip_line_endings(&output.stdout);
+    anyhow::ensure!(
+        output.status.success() && !root.is_empty(),
+        "failed to determine git repository root"
+    );
+
+    Ok(PathBuf::from(String::from_utf8_lossy(root).as_ref()))
+}
+
+fn list_git_paths(filter: &GitFilter, cwd: &Path) -> Result<Vec<PathBuf>> {
+    let (unavailable_message, not_repo_message) = git_messages(filter);
+    let repo_root = git_repo_root(cwd, unavailable_message, not_repo_message)?;
+
+    let diff_args: Vec<&str> = match filter {
+        GitFilter::Staged => vec!["diff", "--name-only", "-z", "--cached"],
+        GitFilter::Diff(reference) => vec!["diff", "--name-only", "-z", reference],
+    };
+
+    let output = run_git(&diff_args, cwd, unavailable_message)?;
 
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
@@ -202,86 +229,13 @@ fn list_git_paths(filter: &GitFilter, cwd: &Path) -> Result<Vec<PathBuf>> {
         .stdout
         .split(|byte| *byte == b'\0')
         .filter_map(decode_git_path)
-        .map(|path| {
-            if path.is_absolute() {
-                path
-            } else {
-                repo_root.join(path)
-            }
-        })
+        .map(|path| repo_root.join(path))
         .filter(|path| path.is_file())
         .collect::<Vec<_>>();
 
     paths.sort();
     paths.dedup();
     Ok(paths)
-}
-
-fn ensure_git_repo(
-    cwd: &Path,
-    unavailable_message: &'static str,
-    not_repo_message: &'static str,
-) -> Result<()> {
-    let output = Command::new("git")
-        .arg("rev-parse")
-        .arg("--is-inside-work-tree")
-        .current_dir(cwd)
-        .output()
-        .map_err(|error| {
-            if error.kind() == std::io::ErrorKind::NotFound {
-                anyhow::anyhow!(unavailable_message)
-            } else {
-                anyhow::Error::new(error).context("failed to run git")
-            }
-        })?;
-
-    if !output.status.success() {
-        bail!("{not_repo_message}");
-    }
-
-    let inside = strip_line_endings(&output.stdout);
-    if inside != b"true" {
-        bail!("{not_repo_message}");
-    }
-
-    Ok(())
-}
-
-fn git_repo_root(
-    cwd: &Path,
-    unavailable_message: &'static str,
-    not_repo_message: &'static str,
-) -> Result<PathBuf> {
-    ensure_git_repo(cwd, unavailable_message, not_repo_message)?;
-
-    let output = Command::new("git")
-        .arg("rev-parse")
-        .arg("--show-toplevel")
-        .current_dir(cwd)
-        .output()
-        .map_err(|error| {
-            if error.kind() == std::io::ErrorKind::NotFound {
-                anyhow::anyhow!(unavailable_message)
-            } else {
-                anyhow::Error::new(error).context("failed to run git")
-            }
-        })?;
-
-    if !output.status.success() {
-        let stderr = String::from_utf8_lossy(&output.stderr);
-        let message = stderr.trim();
-        if message.is_empty() {
-            bail!("git rev-parse failed with status {}", output.status);
-        }
-        bail!("git rev-parse failed: {message}");
-    }
-
-    let root = strip_line_endings(&output.stdout);
-    if root.is_empty() {
-        bail!("git rev-parse returned an empty repository root");
-    }
-
-    Ok(PathBuf::from(String::from_utf8_lossy(root).as_ref()))
 }
 
 fn strip_line_endings(bytes: &[u8]) -> &[u8] {
