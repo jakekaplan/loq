@@ -24,6 +24,7 @@ rayon = "1.10"
 pathdiff = "0.2"
 ignore = "0.4"
 clap = { version = "4", features = ["derive"] }
+dunce = ">=1.0.5"
 termcolor = "1"
 memchr = "2"
 rustc-hash = "2"

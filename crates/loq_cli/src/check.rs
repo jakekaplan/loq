@@ -38,7 +38,9 @@ pub fn run_check<R: Read, W1: WriteColor + Write, W2: WriteColor>(
     stderr: &mut W2,
     mode: OutputMode,
 ) -> ExitStatus {
-    let cwd = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
+    let cwd = std::env::current_dir()
+        .and_then(dunce::canonicalize)
+        .unwrap_or_else(|_| PathBuf::from("."));
     let git_filter = git_filter_from_args(args);
     let has_scope_inputs = !args.paths.is_empty() || args.stdin;
     let inputs = match collect_inputs(
@@ -202,7 +204,8 @@ fn git_repo_root(cwd: &Path, unavailable_message: &str, not_repo_message: &str) 
         "failed to determine git repository root"
     );
 
-    Ok(PathBuf::from(String::from_utf8_lossy(root).as_ref()))
+    let root_path = PathBuf::from(String::from_utf8_lossy(root).as_ref());
+    Ok(dunce::canonicalize(&root_path).unwrap_or(root_path))
 }
 
 fn list_git_paths(filter: &GitFilter, cwd: &Path) -> Result<Vec<PathBuf>> {
