@@ -38,15 +38,14 @@ loq check
 # Check specific paths               
 loq check src/ lib/     
      
-# Check staged files
+# Check only staged files
 loq check --staged
 
 # Check files changed since a ref
+loq check --diff HEAD
 loq check --diff origin/main..HEAD
 
-# --staged and --diff are mutually exclusive
-
-# Scope git checks to a path (intersection)
+# Scope to a path (only staged files under src/)
 loq check src/ --staged
 
 # Check files from stdin
