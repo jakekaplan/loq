@@ -279,6 +279,56 @@ fn path_from_git_bytes(bytes: &[u8]) -> PathBuf {
     }
 }
 
+#[cfg(not(windows))]
+fn normalize_path_lexical(path: &Path) -> PathBuf {
+    use std::ffi::{OsStr, OsString};
+    use std::path::Component;
+
+    let mut has_root = false;
+    let mut parts: Vec<OsString> = Vec::new();
+
+    for component in path.components() {
+        if matches!(&component, Component::RootDir) {
+            has_root = true;
+            continue;
+        }
+
+        if matches!(&component, Component::CurDir) {
+            continue;
+        }
+
+        if matches!(&component, Component::ParentDir) {
+            if let Some(last) = parts.pop() {
+                if last.as_os_str() == OsStr::new("..") {
+                    parts.push(last);
+                    if !has_root {
+                        parts.push(OsString::from(".."));
+                    }
+                }
+            } else if !has_root {
+                parts.push(OsString::from(".."));
+            }
+            continue;
+        }
+
+        if let Component::Normal(part) = component {
+            parts.push(part.to_owned());
+        }
+    }
+
+    let mut normalized = if has_root {
+        PathBuf::from(std::path::MAIN_SEPARATOR.to_string())
+    } else {
+        PathBuf::new()
+    };
+
+    for part in parts {
+        normalized.push(part);
+    }
+    normalized
+}
+
+#[cfg(windows)]
 fn normalize_path_lexical(path: &Path) -> PathBuf {
     use std::ffi::{OsStr, OsString};
     use std::path::Component;

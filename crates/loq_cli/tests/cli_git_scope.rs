@@ -3,6 +3,9 @@ mod common;
 use assert_cmd::cargo::cargo_bin_cmd;
 use tempfile::TempDir;
 
+#[cfg(unix)]
+use std::os::unix::fs::PermissionsExt;
+
 use common::{init_git_repo, run_git, write_file};
 
 fn json_output(stdout: &[u8]) -> serde_json::Value {
@@ -16,6 +19,46 @@ fn violation_paths(output: &serde_json::Value) -> Vec<String> {
         .iter()
         .map(|violation| violation["path"].as_str().unwrap().to_string())
         .collect()
+}
+
+#[cfg(unix)]
+fn write_fake_git_script(dir: &TempDir, body: &str) {
+    let git_path = dir.path().join("git");
+    std::fs::write(&git_path, format!("#!/bin/sh\n{body}\n")).unwrap();
+    let mut permissions = std::fs::metadata(&git_path).unwrap().permissions();
+    permissions.set_mode(0o755);
+    std::fs::set_permissions(&git_path, permissions).unwrap();
+}
+
+#[cfg(unix)]
+fn assert_spawn_error_from_git_diff(args: &[&str]) {
+    let temp = TempDir::new().unwrap();
+
+    let fake_git = TempDir::new().unwrap();
+    write_fake_git_script(
+        &fake_git,
+        r#"if [ "$1" = "rev-parse" ] && [ "$2" = "--is-inside-work-tree" ]; then
+  printf 'true\n'
+  exit 0
+fi
+if [ "$1" = "rev-parse" ] && [ "$2" = "--show-toplevel" ]; then
+  printf '%s\n' "$PWD"
+  git_path="$(command -v git)"
+  PATH="/bin:/usr/bin:$PATH" chmod 0644 "$git_path"
+  exit 0
+fi
+exit 1"#,
+    );
+
+    let assert = cargo_bin_cmd!("loq")
+        .current_dir(temp.path())
+        .env("PATH", fake_git.path())
+        .args(args)
+        .assert()
+        .failure();
+
+    let stderr = String::from_utf8(assert.get_output().stderr.clone()).unwrap();
+    assert!(stderr.contains("failed to run git"));
 }
 
 #[test]
@@ -264,4 +307,78 @@ fn check_diff_with_empty_stdin_scope_checks_nothing() {
     let output = json_output(&assert.get_output().stdout);
     assert_eq!(output["summary"]["files_checked"], 0);
     assert_eq!(output["summary"]["violations"], 0);
+}
+
+#[cfg(unix)]
+#[test]
+fn check_staged_reports_empty_repo_root_from_git() {
+    let temp = TempDir::new().unwrap();
+
+    let fake_git = TempDir::new().unwrap();
+    write_fake_git_script(
+        &fake_git,
+        r#"if [ "$1" = "rev-parse" ] && [ "$2" = "--is-inside-work-tree" ]; then
+  printf 'true\n'
+  exit 0
+fi
+if [ "$1" = "rev-parse" ] && [ "$2" = "--show-toplevel" ]; then
+  exit 0
+fi
+exit 1"#,
+    );
+
+    let assert = cargo_bin_cmd!("loq")
+        .current_dir(temp.path())
+        .env("PATH", fake_git.path())
+        .args(["check", "--staged"])
+        .assert()
+        .failure();
+
+    let stderr = String::from_utf8(assert.get_output().stderr.clone()).unwrap();
+    assert!(stderr.contains("failed to determine git repository root"));
+}
+
+#[cfg(unix)]
+#[test]
+fn check_staged_reports_spawn_error_from_git_diff() {
+    assert_spawn_error_from_git_diff(&["check", "--staged"]);
+}
+
+#[cfg(unix)]
+#[test]
+fn check_diff_reports_spawn_error_from_git_diff() {
+    assert_spawn_error_from_git_diff(&["check", "--diff", "HEAD"]);
+}
+
+#[cfg(unix)]
+#[test]
+fn check_staged_reports_git_diff_failure_without_stderr() {
+    let temp = TempDir::new().unwrap();
+
+    let fake_git = TempDir::new().unwrap();
+    write_fake_git_script(
+        &fake_git,
+        r#"if [ "$1" = "rev-parse" ] && [ "$2" = "--is-inside-work-tree" ]; then
+  printf 'true\n'
+  exit 0
+fi
+if [ "$1" = "rev-parse" ] && [ "$2" = "--show-toplevel" ]; then
+  printf '%s\n' "$PWD"
+  exit 0
+fi
+if [ "$1" = "diff" ]; then
+  exit 2
+fi
+exit 1"#,
+    );
+
+    let assert = cargo_bin_cmd!("loq")
+        .current_dir(temp.path())
+        .env("PATH", fake_git.path())
+        .args(["check", "--staged"])
+        .assert()
+        .failure();
+
+    let stderr = String::from_utf8(assert.get_output().stderr.clone()).unwrap();
+    assert!(stderr.contains("git diff failed with status"));
 }
