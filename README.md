@@ -45,9 +45,6 @@ loq check --staged
 loq check --diff HEAD
 loq check --diff origin/main..HEAD
 
-# Scope to a path (only staged files under src/)
-loq check src/ --staged
-
 # Check files from stdin
 git diff --name-only | loq check -
 ```

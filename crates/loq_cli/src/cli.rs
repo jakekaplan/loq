@@ -46,11 +46,11 @@ pub enum OutputFormat {
 #[derive(Args, Debug, Clone)]
 pub struct CheckArgs {
     /// Paths to check (files or directories).
-    #[arg(value_name = "PATH")]
+    #[arg(value_name = "PATH", conflicts_with_all = ["staged", "diff"])]
     pub paths: Vec<PathBuf>,
 
     /// Read additional paths from stdin (internal flag used for `loq check -`).
-    #[arg(long = "stdin", hide = true)]
+    #[arg(long = "stdin", hide = true, conflicts_with_all = ["staged", "diff"])]
     pub stdin: bool,
 
     /// Check only files currently staged in git.

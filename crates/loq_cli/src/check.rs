@@ -41,12 +41,13 @@ pub fn run_check<R: Read, W1: WriteColor + Write, W2: WriteColor>(
     let cwd = std::env::current_dir()
         .and_then(dunce::canonicalize)
         .unwrap_or_else(|_| PathBuf::from("."));
-    let git_filter = git_filter_from_args(args);
-    let has_scope_inputs = !args.paths.is_empty() || args.stdin;
-    let default_to_cwd = !has_scope_inputs && git_filter.is_none();
-    let inputs = match collect_inputs(args.paths.clone(), args.stdin, stdin, &cwd, default_to_cwd)
-        .and_then(|paths| apply_git_filter(paths, git_filter.as_ref(), &cwd, has_scope_inputs))
-    {
+
+    let inputs = match git_filter_from_args(args) {
+        Some(filter) => list_git_paths(&filter, &cwd),
+        None => collect_inputs(args.paths.clone(), args.stdin, stdin, &cwd),
+    };
+
+    let inputs = match inputs {
         Ok(paths) => paths,
         Err(err) => return print_error(stderr, &format!("{err:#}")),
     };
@@ -154,28 +155,6 @@ fn git_filter_from_args(args: &CheckArgs) -> Option<GitFilter> {
     }
 }
 
-fn apply_git_filter(
-    paths: Vec<PathBuf>,
-    filter: Option<&GitFilter>,
-    cwd: &Path,
-    scope_was_provided: bool,
-) -> Result<Vec<PathBuf>> {
-    let Some(filter) = filter else {
-        return Ok(paths);
-    };
-
-    let git_paths = list_git_paths(filter, cwd)?;
-    if paths.is_empty() {
-        return if scope_was_provided {
-            Ok(Vec::new())
-        } else {
-            Ok(git_paths)
-        };
-    }
-
-    Ok(intersect_paths_with_scope(paths, git_paths, cwd))
-}
-
 fn run_git(args: &[&str], cwd: &Path, unavailable_message: &str) -> Result<std::process::Output> {
     Command::new("git")
         .args(args)
@@ -191,21 +170,13 @@ fn run_git(args: &[&str], cwd: &Path, unavailable_message: &str) -> Result<std::
 }
 
 fn git_repo_root(cwd: &Path, unavailable_message: &str, not_repo_message: &str) -> Result<PathBuf> {
-    let check = run_git(
-        &["rev-parse", "--is-inside-work-tree"],
-        cwd,
-        unavailable_message,
-    )?;
-    if !check.status.success() || strip_line_endings(&check.stdout) != b"true" {
+    let output = run_git(&["rev-parse", "--show-toplevel"], cwd, unavailable_message)?;
+    if !output.status.success() {
         bail!("{not_repo_message}");
     }
 
-    let output = run_git(&["rev-parse", "--show-toplevel"], cwd, unavailable_message)?;
     let root = strip_line_endings(&output.stdout);
-    anyhow::ensure!(
-        output.status.success() && !root.is_empty(),
-        "failed to determine git repository root"
-    );
+    anyhow::ensure!(!root.is_empty(), "failed to determine git repository root");
 
     let root_path = path_from_git_bytes(root);
     Ok(dunce::canonicalize(&root_path).unwrap_or(root_path))
@@ -218,12 +189,12 @@ fn list_git_paths(filter: &GitFilter, cwd: &Path) -> Result<Vec<PathBuf>> {
 
     let output = match filter {
         GitFilter::Staged => run_git(
-            &["diff", "--name-only", "-z", "--cached"],
+            &["diff", "--name-only", "-z", "--cached", "--diff-filter=d"],
             cwd,
             unavailable_message,
         )?,
         GitFilter::Diff(reference) => run_git(
-            &["diff", "--name-only", "-z", reference],
+            &["diff", "--name-only", "-z", "--diff-filter=d", reference],
             cwd,
             unavailable_message,
         )?,
@@ -279,156 +250,11 @@ fn path_from_git_bytes(bytes: &[u8]) -> PathBuf {
     }
 }
 
-#[cfg(not(windows))]
-fn normalize_path_lexical(path: &Path) -> PathBuf {
-    use std::ffi::{OsStr, OsString};
-    use std::path::Component;
-
-    let mut has_root = false;
-    let mut parts: Vec<OsString> = Vec::new();
-
-    for component in path.components() {
-        if matches!(&component, Component::RootDir) {
-            has_root = true;
-            continue;
-        }
-
-        if matches!(&component, Component::CurDir) {
-            continue;
-        }
-
-        if matches!(&component, Component::ParentDir) {
-            if let Some(last) = parts.pop() {
-                if last.as_os_str() == OsStr::new("..") {
-                    parts.push(last);
-                    if !has_root {
-                        parts.push(OsString::from(".."));
-                    }
-                }
-            } else if !has_root {
-                parts.push(OsString::from(".."));
-            }
-            continue;
-        }
-
-        if let Component::Normal(part) = component {
-            parts.push(part.to_owned());
-        }
-    }
-
-    let mut normalized = if has_root {
-        PathBuf::from(std::path::MAIN_SEPARATOR.to_string())
-    } else {
-        PathBuf::new()
-    };
-
-    for part in parts {
-        normalized.push(part);
-    }
-    normalized
-}
-
-#[cfg(windows)]
-fn normalize_path_lexical(path: &Path) -> PathBuf {
-    use std::ffi::{OsStr, OsString};
-    use std::path::Component;
-
-    let mut prefix: Option<OsString> = None;
-    let mut has_root = false;
-    let mut parts: Vec<OsString> = Vec::new();
-
-    for component in path.components() {
-        match component {
-            Component::Prefix(prefix_component) => {
-                prefix = Some(prefix_component.as_os_str().to_owned());
-                parts.clear();
-                has_root = false;
-            }
-            Component::RootDir => {
-                has_root = true;
-            }
-            Component::CurDir => {}
-            Component::ParentDir => {
-                if let Some(last) = parts.pop() {
-                    if last.as_os_str() == OsStr::new("..") {
-                        parts.push(last);
-                        if !has_root {
-                            parts.push(OsString::from(".."));
-                        }
-                    }
-                } else if !has_root {
-                    parts.push(OsString::from(".."));
-                }
-            }
-            Component::Normal(part) => {
-                parts.push(part.to_owned());
-            }
-        }
-    }
-
-    let mut normalized = match (prefix, has_root) {
-        (Some(prefix), true) => {
-            let mut base = OsString::new();
-            base.push(prefix);
-            base.push(std::path::MAIN_SEPARATOR.to_string());
-            PathBuf::from(base)
-        }
-        (Some(prefix), false) => PathBuf::from(prefix),
-        (None, true) => PathBuf::from(std::path::MAIN_SEPARATOR.to_string()),
-        (None, false) => PathBuf::new(),
-    };
-
-    for part in parts {
-        normalized.push(part);
-    }
-    normalized
-}
-
-fn intersect_paths_with_scope(
-    scope_paths: Vec<PathBuf>,
-    candidate_paths: Vec<PathBuf>,
-    cwd: &Path,
-) -> Vec<PathBuf> {
-    let scope_paths = scope_paths
-        .into_iter()
-        .map(|path| normalize_scope_path(&path, cwd))
-        .collect::<Vec<_>>();
-
-    candidate_paths
-        .into_iter()
-        .filter_map(|candidate| {
-            let candidate = normalize_path_lexical(&candidate);
-            if scope_paths
-                .iter()
-                .any(|scope| candidate_in_scope(&candidate, scope))
-            {
-                Some(candidate)
-            } else {
-                None
-            }
-        })
-        .collect()
-}
-
-fn normalize_scope_path(path: &Path, cwd: &Path) -> PathBuf {
-    let absolute = if path.is_absolute() {
-        path.to_path_buf()
-    } else {
-        cwd.join(path)
-    };
-    normalize_path_lexical(&absolute)
-}
-
-fn candidate_in_scope(candidate: &Path, scope: &Path) -> bool {
-    candidate.starts_with(scope)
-}
-
 fn collect_inputs<R: Read>(
     mut paths: Vec<PathBuf>,
     use_stdin: bool,
     stdin: &mut R,
     cwd: &Path,
-    default_to_cwd: bool,
 ) -> Result<Vec<PathBuf>> {
     if use_stdin {
         let mut stdin_paths =
@@ -436,7 +262,7 @@ fn collect_inputs<R: Read>(
         paths.append(&mut stdin_paths);
     }
 
-    if paths.is_empty() && default_to_cwd {
+    if paths.is_empty() && !use_stdin {
         paths.push(PathBuf::from("."));
     }
 

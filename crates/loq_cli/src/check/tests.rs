@@ -31,29 +31,31 @@ fn init_test_repo(dir: &Path) {
     exec_git(dir, &["config", "user.name", "Test"]);
     exec_git(dir, &["config", "user.email", "test@test.com"]);
 }
+
 #[test]
 fn collect_inputs_reports_stdin_error() {
-    let err = collect_inputs(vec![], true, &mut FailingReader, Path::new("."), false).unwrap_err();
+    let err = collect_inputs(vec![], true, &mut FailingReader, Path::new(".")).unwrap_err();
     assert!(err.to_string().contains("failed to read stdin"));
 }
+
 #[test]
 fn collect_inputs_empty_defaults_to_cwd() {
     let mut empty_stdin: &[u8] = b"";
-    let result = collect_inputs(vec![], false, &mut empty_stdin, Path::new("/repo"), true).unwrap();
+    let result = collect_inputs(vec![], false, &mut empty_stdin, Path::new("/repo")).unwrap();
     assert_eq!(result, vec![PathBuf::from(".")]);
 }
 
 #[test]
 fn collect_inputs_stdin_only_no_default() {
     let mut empty_stdin: &[u8] = b"";
-    let result = collect_inputs(vec![], true, &mut empty_stdin, Path::new("/repo"), false).unwrap();
+    let result = collect_inputs(vec![], true, &mut empty_stdin, Path::new("/repo")).unwrap();
     assert!(result.is_empty());
 }
 
 #[test]
 fn collect_inputs_stdin_with_paths() {
     let mut stdin: &[u8] = b"file1.rs\nfile2.rs\n";
-    let result = collect_inputs(vec![], true, &mut stdin, Path::new("/repo"), false).unwrap();
+    let result = collect_inputs(vec![], true, &mut stdin, Path::new("/repo")).unwrap();
     assert_eq!(result.len(), 2);
     assert_eq!(result[0], PathBuf::from("/repo/file1.rs"));
     assert_eq!(result[1], PathBuf::from("/repo/file2.rs"));
@@ -67,7 +69,6 @@ fn collect_inputs_mixed_paths_and_stdin() {
         true,
         &mut stdin,
         Path::new("/repo"),
-        false,
     )
     .unwrap();
     assert_eq!(result.len(), 2);
@@ -91,34 +92,11 @@ fn decode_git_path_handles_non_utf8_bytes() {
     assert_eq!(decode_git_path(b"invalid-\xFF.txt"), Some(expected));
 }
 
-#[cfg(windows)]
-#[test]
-fn normalize_path_lexical_keeps_drive_prefix() {
-    let input = PathBuf::from(r"C:\repo\sub\..\src");
-    let expected = PathBuf::from(r"C:\repo\src");
-    assert_eq!(normalize_path_lexical(&input), expected);
-}
-
 #[test]
 fn strip_line_endings_only_removes_newline_chars() {
     assert_eq!(strip_line_endings(b"/repo/path\n"), b"/repo/path");
     assert_eq!(strip_line_endings(b"/repo/path\r\n"), b"/repo/path");
     assert_eq!(strip_line_endings(b"/repo/path "), b"/repo/path ");
-}
-
-#[test]
-fn intersect_paths_with_scope_normalizes_parent_dirs() {
-    let temp = TempDir::new().unwrap();
-    let cwd = temp.path().join("sub");
-    let src_dir = temp.path().join("src");
-    std::fs::create_dir_all(&cwd).unwrap();
-    std::fs::create_dir_all(&src_dir).unwrap();
-
-    let candidate = src_dir.join("file.rs");
-    let filtered =
-        intersect_paths_with_scope(vec![PathBuf::from("../src")], vec![candidate.clone()], &cwd);
-
-    assert_eq!(filtered, vec![candidate]);
 }
 
 #[test]
@@ -179,6 +157,73 @@ fn handle_check_output_verbose_mode_shows_skip_warnings() {
 }
 
 #[test]
+fn handle_check_output_with_walk_errors() {
+    use loq_fs::walk::WalkError;
+    use termcolor::NoColor;
+
+    let mut stdout = NoColor::new(Vec::new());
+    let output = loq_fs::CheckOutput {
+        outcomes: vec![],
+        walk_errors: vec![WalkError {
+            message: "permission denied".into(),
+        }],
+        fix_guidance: None,
+    };
+    let _code = handle_check_output(output, &mut stdout, OutputMode::Default, OutputFormat::Text);
+    let output_str = String::from_utf8(stdout.into_inner()).unwrap();
+    assert!(output_str.contains("skipped"));
+}
+
+#[test]
+fn handle_check_output_json_format() {
+    use loq_core::report::{FileOutcome, OutcomeKind};
+    use loq_core::ConfigOrigin;
+    use loq_core::MatchBy;
+    use loq_fs::walk::WalkError;
+    use termcolor::NoColor;
+
+    let mut stdout = NoColor::new(Vec::new());
+    let output = loq_fs::CheckOutput {
+        outcomes: vec![
+            FileOutcome {
+                path: "big.rs".into(),
+                display_path: "big.rs".into(),
+                config_source: ConfigOrigin::BuiltIn,
+                kind: OutcomeKind::Violation {
+                    limit: 100,
+                    actual: 150,
+                    matched_by: MatchBy::Default,
+                },
+            },
+            FileOutcome {
+                path: "skipped.bin".into(),
+                display_path: "skipped.bin".into(),
+                config_source: ConfigOrigin::BuiltIn,
+                kind: OutcomeKind::Binary,
+            },
+        ],
+        walk_errors: vec![WalkError {
+            message: "permission denied".into(),
+        }],
+        fix_guidance: Some("Split large files.".to_string()),
+    };
+    let status = handle_check_output(output, &mut stdout, OutputMode::Default, OutputFormat::Json);
+    assert_eq!(status, ExitStatus::Failure);
+    let output_str = String::from_utf8(stdout.into_inner()).unwrap();
+    let parsed: serde_json::Value = serde_json::from_str(&output_str).unwrap();
+    assert_eq!(parsed["violations"][0]["path"], "big.rs");
+    assert_eq!(parsed["violations"][0]["lines"], 150);
+    assert_eq!(parsed["violations"][0]["max_lines"], 100);
+    assert_eq!(parsed["summary"]["violations"], 1);
+    assert_eq!(parsed["summary"]["skipped"], 1);
+    assert_eq!(parsed["summary"]["walk_errors"], 1);
+    assert_eq!(parsed["skip_warnings"][0]["path"], "skipped.bin");
+    assert_eq!(parsed["skip_warnings"][0]["reason"], "binary");
+    assert_eq!(parsed["walk_errors"][0], "permission denied");
+    assert_eq!(parsed["fix_guidance"], "Split large files.");
+}
+
+#[test]
 fn git_filter_from_args_staged() {
     let args = CheckArgs {
         paths: vec![],
@@ -221,57 +266,10 @@ fn git_filter_from_args_none() {
 }
 
 #[test]
-fn apply_git_filter_none_passes_through() {
-    let paths = vec![PathBuf::from("a.rs")];
-    let result = apply_git_filter(paths.clone(), None, Path::new("."), true).unwrap();
-    assert_eq!(result, paths);
-}
-
-#[test]
-fn apply_git_filter_empty_scope_returns_git_paths() {
-    let temp = TempDir::new().unwrap();
-    init_test_repo(temp.path());
-
-    std::fs::write(temp.path().join("file.txt"), "hello\n").unwrap();
-    exec_git(temp.path(), &["add", "file.txt"]);
-    exec_git(temp.path(), &["commit", "-m", "initial"]);
-
-    std::fs::write(temp.path().join("file.txt"), "changed\n").unwrap();
-    exec_git(temp.path(), &["add", "file.txt"]);
-
-    let filter = GitFilter::Staged;
-    let result = apply_git_filter(vec![], Some(&filter), temp.path(), false).unwrap();
-    assert!(!result.is_empty());
-    assert!(result.iter().any(|p| p.ends_with("file.txt")));
-}
-
-#[test]
-fn apply_git_filter_explicit_empty_scope_returns_empty() {
-    let temp = TempDir::new().unwrap();
-    init_test_repo(temp.path());
-
-    std::fs::write(temp.path().join("file.txt"), "hello\n").unwrap();
-    exec_git(temp.path(), &["add", "file.txt"]);
-    exec_git(temp.path(), &["commit", "-m", "initial"]);
-
-    std::fs::write(temp.path().join("file.txt"), "changed\n").unwrap();
-    exec_git(temp.path(), &["add", "file.txt"]);
-
-    let filter = GitFilter::Staged;
-    let result = apply_git_filter(vec![], Some(&filter), temp.path(), true).unwrap();
-    assert!(result.is_empty());
-}
-
-#[test]
 fn run_git_returns_output_on_success() {
     let temp = TempDir::new().unwrap();
     init_test_repo(temp.path());
-    let output = run_git(
-        &["rev-parse", "--is-inside-work-tree"],
-        temp.path(),
-        "unavailable",
-    )
-    .unwrap();
+    let output = run_git(&["status", "--short"], temp.path(), "unavailable").unwrap();
     assert!(output.status.success());
 }
 
@@ -361,137 +359,4 @@ fn list_git_paths_deduplicates_and_sorts() {
     let paths = list_git_paths(&GitFilter::Staged, temp.path()).unwrap();
     let names: Vec<_> = paths.iter().filter_map(|p| p.file_name()).collect();
     assert!(names.windows(2).all(|w| w[0] <= w[1]));
-}
-
-#[test]
-fn normalize_path_lexical_curdir() {
-    let result = normalize_path_lexical(Path::new("./foo/bar"));
-    assert_eq!(result, PathBuf::from("foo/bar"));
-}
-
-#[test]
-fn normalize_path_lexical_parent_relative() {
-    let result = normalize_path_lexical(Path::new("../../foo"));
-    assert_eq!(result, PathBuf::from("../../foo"));
-}
-
-#[test]
-fn normalize_path_lexical_double_parent_relative() {
-    let result = normalize_path_lexical(Path::new("a/../../b"));
-    assert_eq!(result, PathBuf::from("../b"));
-}
-
-#[test]
-fn normalize_path_lexical_empty_path() {
-    let result = normalize_path_lexical(Path::new(""));
-    assert_eq!(result, PathBuf::new());
-}
-
-#[test]
-fn normalize_path_lexical_parent_from_root_is_noop() {
-    let result = normalize_path_lexical(Path::new("/a/../../b"));
-    assert_eq!(result, PathBuf::from("/b"));
-}
-
-#[test]
-fn normalize_scope_path_absolute_stays_absolute() {
-    let result = normalize_scope_path(Path::new("/some/abs/path"), Path::new("/cwd"));
-    assert_eq!(result, PathBuf::from("/some/abs/path"));
-}
-
-#[test]
-fn normalize_scope_path_relative_joins_cwd() {
-    let result = normalize_scope_path(Path::new("rel/path"), Path::new("/cwd"));
-    assert_eq!(result, PathBuf::from("/cwd/rel/path"));
-}
-
-#[test]
-fn candidate_in_scope_file_match() {
-    assert!(candidate_in_scope(
-        Path::new("repo/file.txt"),
-        Path::new("repo/file.txt"),
-    ));
-}
-
-#[test]
-fn candidate_in_scope_file_no_match() {
-    assert!(!candidate_in_scope(
-        Path::new("repo/a.txt"),
-        Path::new("repo/b.txt"),
-    ));
-}
-
-#[test]
-fn candidate_in_scope_dir_contains() {
-    assert!(candidate_in_scope(
-        Path::new("repo/dir/file.txt"),
-        Path::new("repo/dir"),
-    ));
-}
-
-#[test]
-fn handle_check_output_with_walk_errors() {
-    use loq_fs::walk::WalkError;
-    use termcolor::NoColor;
-
-    let mut stdout = NoColor::new(Vec::new());
-    let output = loq_fs::CheckOutput {
-        outcomes: vec![],
-        walk_errors: vec![WalkError {
-            message: "permission denied".into(),
-        }],
-        fix_guidance: None,
-    };
-    let _code = handle_check_output(output, &mut stdout, OutputMode::Default, OutputFormat::Text);
-    let output_str = String::from_utf8(stdout.into_inner()).unwrap();
-    assert!(output_str.contains("skipped"));
-}
-
-#[test]
-fn handle_check_output_json_format() {
-    use loq_core::report::{FileOutcome, OutcomeKind};
-    use loq_core::ConfigOrigin;
-    use loq_core::MatchBy;
-    use loq_fs::walk::WalkError;
-    use termcolor::NoColor;
-
-    let mut stdout = NoColor::new(Vec::new());
-    let output = loq_fs::CheckOutput {
-        outcomes: vec![
-            FileOutcome {
-                path: "big.rs".into(),
-                display_path: "big.rs".into(),
-                config_source: ConfigOrigin::BuiltIn,
-                kind: OutcomeKind::Violation {
-                    limit: 100,
-                    actual: 150,
-                    matched_by: MatchBy::Default,
-                },
-            },
-            FileOutcome {
-                path: "skipped.bin".into(),
-                display_path: "skipped.bin".into(),
-                config_source: ConfigOrigin::BuiltIn,
-                kind: OutcomeKind::Binary,
-            },
-        ],
-        walk_errors: vec![WalkError {
-            message: "permission denied".into(),
-        }],
-        fix_guidance: Some("Split large files.".to_string()),
-    };
-    let status = handle_check_output(output, &mut stdout, OutputMode::Default, OutputFormat::Json);
-    assert_eq!(status, ExitStatus::Failure);
-    let output_str = String::from_utf8(stdout.into_inner()).unwrap();
-    let parsed: serde_json::Value = serde_json::from_str(&output_str).unwrap();
-    assert_eq!(parsed["violations"][0]["path"], "big.rs");
-    assert_eq!(parsed["violations"][0]["lines"], 150);
-    assert_eq!(parsed["violations"][0]["max_lines"], 100);
-    assert_eq!(parsed["summary"]["violations"], 1);
-    assert_eq!(parsed["summary"]["skipped"], 1);
-    assert_eq!(parsed["summary"]["walk_errors"], 1);
-    assert_eq!(parsed["skip_warnings"][0]["path"], "skipped.bin");
-    assert_eq!(parsed["skip_warnings"][0]["reason"], "binary");
-    assert_eq!(parsed["walk_errors"][0], "permission denied");
-    assert_eq!(parsed["fix_guidance"], "Split large files.");
 }

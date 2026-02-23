@@ -49,6 +49,18 @@ fn check_reads_stdin_list() {
 }
 
 #[test]
+fn check_staged_rejects_stdin_scope() {
+    let temp = TempDir::new().unwrap();
+
+    cargo_bin_cmd!("loq")
+        .current_dir(temp.path())
+        .args(["check", "-", "--staged"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("cannot be used with '--staged'"));
+}
+
+#[test]
 fn check_stdin_preserves_leading_and_trailing_spaces() {
     let temp = TempDir::new().unwrap();
     let odd_path = " odd name.txt ";
@@ -81,28 +93,15 @@ fn check_allows_flags_after_paths() {
 }
 
 #[test]
-fn check_staged_intersects_with_paths() {
+fn check_staged_rejects_paths() {
     let temp = TempDir::new().unwrap();
-    init_git_repo(&temp);
-
-    write_file(&temp, "loq.toml", "default_max_lines = 1\n");
-    write_file(&temp, "src/staged.txt", "ok\n");
-    write_file(&temp, "docs/staged.txt", "ok\n");
-    run_git(&temp, &["add", "."]);
-    run_git(&temp, &["commit", "-m", "initial"]);
-
-    write_file(&temp, "src/staged.txt", "a\nb\n");
-    write_file(&temp, "docs/staged.txt", "a\nb\n");
-    run_git(&temp, &["add", "src/staged.txt", "docs/staged.txt"]);
 
     cargo_bin_cmd!("loq")
         .current_dir(temp.path())
         .args(["check", "src", "--staged"])
         .assert()
         .failure()
-        .stdout(predicate::str::contains("src/"))
-        .stdout(predicate::str::contains("staged.txt"))
-        .stdout(predicate::str::contains("docs/").not());
+        .stderr(predicate::str::contains("cannot be used with '--staged'"));
 }
 
 #[test]
@@ -169,28 +168,17 @@ fn check_diff_from_subdir_resolves_repo_relative_paths() {
 }
 
 #[test]
-fn check_staged_parent_dir_scope_includes_matches() {
+fn check_diff_rejects_paths() {
     let temp = TempDir::new().unwrap();
-    init_git_repo(&temp);
 
-    write_file(&temp, "loq.toml", "default_max_lines = 1\n");
-    write_file(&temp, "src/changed.txt", "ok\n");
-    run_git(&temp, &["add", "."]);
-    run_git(&temp, &["commit", "-m", "initial"]);
-
-    write_file(&temp, "src/changed.txt", "a\nb\n");
-    run_git(&temp, &["add", "src/changed.txt"]);
-    std::fs::create_dir_all(temp.path().join("sub")).unwrap();
-
-    let assert = cargo_bin_cmd!("loq")
-        .current_dir(temp.path().join("sub"))
-        .args(["check", "../src", "--staged", "--output-format", "json"])
+    cargo_bin_cmd!("loq")
+        .current_dir(temp.path())
+        .args(["check", "src", "--diff", "HEAD"])
         .assert()
-        .failure();
-
-    let stdout = String::from_utf8(assert.get_output().stdout.clone()).unwrap();
-    let parsed: serde_json::Value = serde_json::from_str(&stdout).unwrap();
-    assert_eq!(parsed["violations"][0]["path"], "../src/changed.txt");
+        .failure()
+        .stderr(predicate::str::contains(
+            "cannot be used with '--diff <REF>'",
+        ));
 }
 
 #[test]
