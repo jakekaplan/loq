@@ -1,40 +1,13 @@
-use std::process::Command;
+mod common;
 
 use assert_cmd::cargo::cargo_bin_cmd;
 use predicates::prelude::*;
 use tempfile::TempDir;
 
-fn write_file(dir: &TempDir, path: &str, contents: &str) {
-    let full = dir.path().join(path);
-    if let Some(parent) = full.parent() {
-        std::fs::create_dir_all(parent).unwrap();
-    }
-    std::fs::write(full, contents).unwrap();
-}
+use common::{init_git_repo, run_git, write_file};
 
 fn repeat_lines(count: usize) -> String {
     "line\n".repeat(count)
-}
-
-fn run_git(dir: &TempDir, args: &[&str]) {
-    let output = Command::new("git")
-        .current_dir(dir.path())
-        .args(args)
-        .output()
-        .unwrap();
-
-    assert!(
-        output.status.success(),
-        "git {:?} failed: {}",
-        args,
-        String::from_utf8_lossy(&output.stderr)
-    );
-}
-
-fn init_git_repo(dir: &TempDir) {
-    run_git(dir, &["init"]);
-    run_git(dir, &["config", "user.name", "Loq Test"]);
-    run_git(dir, &["config", "user.email", "test@example.com"]);
 }
 
 #[test]
@@ -73,6 +46,25 @@ fn check_reads_stdin_list() {
         .write_stdin("a.txt\n")
         .assert()
         .success();
+}
+
+#[test]
+fn check_stdin_preserves_leading_and_trailing_spaces() {
+    let temp = TempDir::new().unwrap();
+    let odd_path = " odd name.txt ";
+    write_file(&temp, odd_path, "a\n");
+
+    let assert = cargo_bin_cmd!("loq")
+        .current_dir(temp.path())
+        .args(["check", "-", "--output-format", "json"])
+        .write_stdin(format!("{odd_path}\n"))
+        .assert()
+        .success();
+
+    let stdout = String::from_utf8(assert.get_output().stdout.clone()).unwrap();
+    let parsed: serde_json::Value = serde_json::from_str(&stdout).unwrap();
+    assert_eq!(parsed["summary"]["passed"], 1);
+    assert_eq!(parsed["summary"]["skipped"], 0);
 }
 
 #[test]

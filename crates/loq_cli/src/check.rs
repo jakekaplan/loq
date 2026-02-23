@@ -43,14 +43,9 @@ pub fn run_check<R: Read, W1: WriteColor + Write, W2: WriteColor>(
         .unwrap_or_else(|_| PathBuf::from("."));
     let git_filter = git_filter_from_args(args);
     let has_scope_inputs = !args.paths.is_empty() || args.stdin;
-    let inputs = match collect_inputs(
-        args.paths.clone(),
-        args.stdin,
-        stdin,
-        &cwd,
-        !has_scope_inputs,
-    )
-    .and_then(|paths| apply_git_filter(paths, git_filter.as_ref(), &cwd))
+    let default_to_cwd = !has_scope_inputs && git_filter.is_none();
+    let inputs = match collect_inputs(args.paths.clone(), args.stdin, stdin, &cwd, default_to_cwd)
+        .and_then(|paths| apply_git_filter(paths, git_filter.as_ref(), &cwd, has_scope_inputs))
     {
         Ok(paths) => paths,
         Err(err) => return print_error(stderr, &format!("{err:#}")),
@@ -135,6 +130,22 @@ enum GitFilter {
     Diff(String),
 }
 
+impl GitFilter {
+    const fn unavailable_message(&self) -> &'static str {
+        match self {
+            Self::Staged => "--staged requires git, but git is not available",
+            Self::Diff(_) => "--diff requires git, but git is not available",
+        }
+    }
+
+    const fn not_repo_message(&self) -> &'static str {
+        match self {
+            Self::Staged => "--staged requires a git repository (run inside a repo)",
+            Self::Diff(_) => "--diff requires a git repository (run inside a repo)",
+        }
+    }
+}
+
 fn git_filter_from_args(args: &CheckArgs) -> Option<GitFilter> {
     if args.staged {
         Some(GitFilter::Staged)
@@ -147,6 +158,7 @@ fn apply_git_filter(
     paths: Vec<PathBuf>,
     filter: Option<&GitFilter>,
     cwd: &Path,
+    scope_was_provided: bool,
 ) -> Result<Vec<PathBuf>> {
     let Some(filter) = filter else {
         return Ok(paths);
@@ -154,23 +166,14 @@ fn apply_git_filter(
 
     let git_paths = list_git_paths(filter, cwd)?;
     if paths.is_empty() {
-        return Ok(git_paths);
+        return if scope_was_provided {
+            Ok(Vec::new())
+        } else {
+            Ok(git_paths)
+        };
     }
 
     Ok(intersect_paths_with_scope(paths, git_paths, cwd))
-}
-
-const fn git_messages(filter: &GitFilter) -> (&'static str, &'static str) {
-    match filter {
-        GitFilter::Staged => (
-            "--staged requires git, but git is not available",
-            "--staged requires a git repository (run inside a repo)",
-        ),
-        GitFilter::Diff(_) => (
-            "--diff requires git, but git is not available",
-            "--diff requires a git repository (run inside a repo)",
-        ),
-    }
 }
 
 fn run_git(args: &[&str], cwd: &Path, unavailable_message: &str) -> Result<std::process::Output> {
@@ -204,20 +207,27 @@ fn git_repo_root(cwd: &Path, unavailable_message: &str, not_repo_message: &str) 
         "failed to determine git repository root"
     );
 
-    let root_path = PathBuf::from(String::from_utf8_lossy(root).as_ref());
+    let root_path = path_from_git_bytes(root);
     Ok(dunce::canonicalize(&root_path).unwrap_or(root_path))
 }
 
 fn list_git_paths(filter: &GitFilter, cwd: &Path) -> Result<Vec<PathBuf>> {
-    let (unavailable_message, not_repo_message) = git_messages(filter);
+    let unavailable_message = filter.unavailable_message();
+    let not_repo_message = filter.not_repo_message();
     let repo_root = git_repo_root(cwd, unavailable_message, not_repo_message)?;
 
-    let diff_args: Vec<&str> = match filter {
-        GitFilter::Staged => vec!["diff", "--name-only", "-z", "--cached"],
-        GitFilter::Diff(reference) => vec!["diff", "--name-only", "-z", reference],
+    let output = match filter {
+        GitFilter::Staged => run_git(
+            &["diff", "--name-only", "-z", "--cached"],
+            cwd,
+            unavailable_message,
+        )?,
+        GitFilter::Diff(reference) => run_git(
+            &["diff", "--name-only", "-z", reference],
+            cwd,
+            unavailable_message,
+        )?,
     };
-
-    let output = run_git(&diff_args, cwd, unavailable_message)?;
 
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
@@ -253,7 +263,20 @@ fn decode_git_path(line: &[u8]) -> Option<PathBuf> {
     if line.is_empty() {
         return None;
     }
-    Some(PathBuf::from(String::from_utf8_lossy(line).as_ref()))
+    Some(path_from_git_bytes(line))
+}
+
+fn path_from_git_bytes(bytes: &[u8]) -> PathBuf {
+    #[cfg(unix)]
+    {
+        use std::ffi::OsStr;
+        use std::os::unix::ffi::OsStrExt;
+        PathBuf::from(OsStr::from_bytes(bytes))
+    }
+    #[cfg(not(unix))]
+    {
+        PathBuf::from(String::from_utf8_lossy(bytes).as_ref())
+    }
 }
 
 fn normalize_path_lexical(path: &Path) -> PathBuf {
@@ -347,11 +370,7 @@ fn normalize_scope_path(path: &Path, cwd: &Path) -> PathBuf {
 }
 
 fn candidate_in_scope(candidate: &Path, scope: &Path) -> bool {
-    if scope.is_dir() {
-        candidate.starts_with(scope)
-    } else {
-        candidate == scope
-    }
+    candidate.starts_with(scope)
 }
 
 fn collect_inputs<R: Read>(

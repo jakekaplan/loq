@@ -31,13 +31,11 @@ fn init_test_repo(dir: &Path) {
     exec_git(dir, &["config", "user.name", "Test"]);
     exec_git(dir, &["config", "user.email", "test@test.com"]);
 }
-
 #[test]
 fn collect_inputs_reports_stdin_error() {
     let err = collect_inputs(vec![], true, &mut FailingReader, Path::new("."), false).unwrap_err();
     assert!(err.to_string().contains("failed to read stdin"));
 }
-
 #[test]
 fn collect_inputs_empty_defaults_to_cwd() {
     let mut empty_stdin: &[u8] = b"";
@@ -83,6 +81,14 @@ fn decode_git_path_preserves_leading_and_trailing_spaces() {
         decode_git_path(b" leading/file.txt "),
         Some(PathBuf::from(" leading/file.txt "))
     );
+}
+
+#[cfg(unix)]
+#[test]
+fn decode_git_path_handles_non_utf8_bytes() {
+    use std::{ffi::OsStr, os::unix::ffi::OsStrExt};
+    let expected = PathBuf::from(OsStr::from_bytes(b"invalid-\xFF.txt"));
+    assert_eq!(decode_git_path(b"invalid-\xFF.txt"), Some(expected));
 }
 
 #[cfg(windows)]
@@ -172,8 +178,6 @@ fn handle_check_output_verbose_mode_shows_skip_warnings() {
     assert!(output_str.contains("missing.txt"));
 }
 
-// --- git_filter_from_args ---
-
 #[test]
 fn git_filter_from_args_staged() {
     let args = CheckArgs {
@@ -216,12 +220,10 @@ fn git_filter_from_args_none() {
     assert_eq!(git_filter_from_args(&args), None);
 }
 
-// --- apply_git_filter ---
-
 #[test]
 fn apply_git_filter_none_passes_through() {
     let paths = vec![PathBuf::from("a.rs")];
-    let result = apply_git_filter(paths.clone(), None, Path::new(".")).unwrap();
+    let result = apply_git_filter(paths.clone(), None, Path::new("."), true).unwrap();
     assert_eq!(result, paths);
 }
 
@@ -238,12 +240,27 @@ fn apply_git_filter_empty_scope_returns_git_paths() {
     exec_git(temp.path(), &["add", "file.txt"]);
 
     let filter = GitFilter::Staged;
-    let result = apply_git_filter(vec![], Some(&filter), temp.path()).unwrap();
+    let result = apply_git_filter(vec![], Some(&filter), temp.path(), false).unwrap();
     assert!(!result.is_empty());
     assert!(result.iter().any(|p| p.ends_with("file.txt")));
 }
 
-// --- run_git ---
+#[test]
+fn apply_git_filter_explicit_empty_scope_returns_empty() {
+    let temp = TempDir::new().unwrap();
+    init_test_repo(temp.path());
+
+    std::fs::write(temp.path().join("file.txt"), "hello\n").unwrap();
+    exec_git(temp.path(), &["add", "file.txt"]);
+    exec_git(temp.path(), &["commit", "-m", "initial"]);
+
+    std::fs::write(temp.path().join("file.txt"), "changed\n").unwrap();
+    exec_git(temp.path(), &["add", "file.txt"]);
+
+    let filter = GitFilter::Staged;
+    let result = apply_git_filter(vec![], Some(&filter), temp.path(), true).unwrap();
+    assert!(result.is_empty());
+}
 
 #[test]
 fn run_git_returns_output_on_success() {
@@ -257,8 +274,6 @@ fn run_git_returns_output_on_success() {
     .unwrap();
     assert!(output.status.success());
 }
-
-// --- git_repo_root ---
 
 #[test]
 fn git_repo_root_returns_root() {
@@ -280,8 +295,6 @@ fn git_repo_root_fails_outside_repo() {
     let err = git_repo_root(temp.path(), "unavailable", "not a repo").unwrap_err();
     assert!(err.to_string().contains("not a repo"));
 }
-
-// --- list_git_paths ---
 
 #[test]
 fn list_git_paths_staged() {
@@ -350,8 +363,6 @@ fn list_git_paths_deduplicates_and_sorts() {
     assert!(names.windows(2).all(|w| w[0] <= w[1]));
 }
 
-// --- normalize_path_lexical ---
-
 #[test]
 fn normalize_path_lexical_curdir() {
     let result = normalize_path_lexical(Path::new("./foo/bar"));
@@ -382,8 +393,6 @@ fn normalize_path_lexical_parent_from_root_is_noop() {
     assert_eq!(result, PathBuf::from("/b"));
 }
 
-// --- normalize_scope_path ---
-
 #[test]
 fn normalize_scope_path_absolute_stays_absolute() {
     let result = normalize_scope_path(Path::new("/some/abs/path"), Path::new("/cwd"));
@@ -396,32 +405,28 @@ fn normalize_scope_path_relative_joins_cwd() {
     assert_eq!(result, PathBuf::from("/cwd/rel/path"));
 }
 
-// --- candidate_in_scope ---
-
 #[test]
 fn candidate_in_scope_file_match() {
-    let temp = TempDir::new().unwrap();
-    let file = temp.path().join("file.txt");
-    std::fs::write(&file, "content").unwrap();
-    assert!(candidate_in_scope(&file, &file));
+    assert!(candidate_in_scope(
+        Path::new("repo/file.txt"),
+        Path::new("repo/file.txt"),
+    ));
 }
 
 #[test]
 fn candidate_in_scope_file_no_match() {
-    let temp = TempDir::new().unwrap();
-    let a = temp.path().join("a.txt");
-    let b = temp.path().join("b.txt");
-    std::fs::write(&a, "").unwrap();
-    std::fs::write(&b, "").unwrap();
-    assert!(!candidate_in_scope(&a, &b));
+    assert!(!candidate_in_scope(
+        Path::new("repo/a.txt"),
+        Path::new("repo/b.txt"),
+    ));
 }
 
 #[test]
 fn candidate_in_scope_dir_contains() {
-    let temp = TempDir::new().unwrap();
-    let file = temp.path().join("file.txt");
-    std::fs::write(&file, "content").unwrap();
-    assert!(candidate_in_scope(&file, temp.path()));
+    assert!(candidate_in_scope(
+        Path::new("repo/dir/file.txt"),
+        Path::new("repo/dir"),
+    ));
 }
 
 #[test]

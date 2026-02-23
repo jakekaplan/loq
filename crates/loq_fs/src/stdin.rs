@@ -12,8 +12,9 @@ use std::path::{Path, PathBuf};
 /// Reads file paths from a reader (typically stdin).
 ///
 /// Paths are separated by newlines. Relative paths are resolved against `cwd`.
-/// Empty lines are skipped. Uses streaming line-by-line reading to avoid
-/// loading the entire input into memory at once.
+/// Empty lines are skipped. Leading/trailing spaces are preserved so filenames
+/// containing spaces are handled correctly. Uses streaming line-by-line reading
+/// to avoid loading the entire input into memory at once.
 ///
 /// # Errors
 ///
@@ -24,11 +25,11 @@ pub fn read_paths(reader: &mut dyn Read, cwd: &Path) -> IoResult<Vec<PathBuf>> {
 
     for line_result in buf_reader.lines() {
         let line = line_result?;
-        let trimmed = line.trim();
-        if trimmed.is_empty() {
+        if line.is_empty() {
             continue;
         }
-        let path = PathBuf::from(trimmed);
+
+        let path = PathBuf::from(line);
         let path = if path.is_absolute() {
             path
         } else {
@@ -63,5 +64,14 @@ mod tests {
         assert_eq!(paths.len(), 2);
         assert_eq!(paths[0], PathBuf::from("/absolute/path.rs"));
         assert_eq!(paths[1], PathBuf::from("/repo/relative.rs"));
+    }
+
+    #[test]
+    fn preserves_leading_and_trailing_spaces() {
+        let input = b" spaced.txt \n";
+        let cwd = Path::new("/repo");
+        let mut reader: &[u8] = input;
+        let paths = read_paths(&mut reader, cwd).unwrap();
+        assert_eq!(paths, vec![PathBuf::from("/repo/ spaced.txt ")]);
     }
 }
