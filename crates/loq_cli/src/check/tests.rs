@@ -77,6 +77,22 @@ fn collect_inputs_mixed_paths_and_stdin() {
 }
 
 #[test]
+fn resolve_check_inputs_without_git_filter_uses_collect_inputs_behavior() {
+    let args = CheckArgs {
+        paths: vec![],
+        stdin: false,
+        staged: false,
+        diff: None,
+        no_cache: false,
+        output_format: OutputFormat::Text,
+    };
+    let mut empty_stdin: &[u8] = b"";
+
+    let result = resolve_check_inputs(&args, &mut empty_stdin, Path::new("/repo")).unwrap();
+    assert_eq!(result, vec![PathBuf::from(".")]);
+}
+
+#[test]
 fn decode_git_path_preserves_leading_and_trailing_spaces() {
     assert_eq!(
         decode_git_path(b" leading/file.txt "),
@@ -223,46 +239,28 @@ fn handle_check_output_json_format() {
     assert_eq!(parsed["fix_guidance"], "Split large files.");
 }
 
-#[test]
-fn git_filter_from_args_staged() {
-    let args = CheckArgs {
+fn check_args(staged: bool, diff: Option<&str>) -> CheckArgs {
+    CheckArgs {
         paths: vec![],
         stdin: false,
-        staged: true,
-        diff: None,
+        staged,
+        diff: diff.map(str::to_owned),
         no_cache: false,
         output_format: OutputFormat::Text,
-    };
-    assert_eq!(git_filter_from_args(&args), Some(GitFilter::Staged));
+    }
 }
 
 #[test]
-fn git_filter_from_args_diff() {
-    let args = CheckArgs {
-        paths: vec![],
-        stdin: false,
-        staged: false,
-        diff: Some("main".into()),
-        no_cache: false,
-        output_format: OutputFormat::Text,
-    };
+fn git_filter_from_args_respects_staged_and_diff() {
     assert_eq!(
-        git_filter_from_args(&args),
+        git_filter_from_args(&check_args(true, None)),
+        Some(GitFilter::Staged)
+    );
+    assert_eq!(
+        git_filter_from_args(&check_args(false, Some("main"))),
         Some(GitFilter::Diff("main".into()))
     );
-}
-
-#[test]
-fn git_filter_from_args_none() {
-    let args = CheckArgs {
-        paths: vec![],
-        stdin: false,
-        staged: false,
-        diff: None,
-        no_cache: false,
-        output_format: OutputFormat::Text,
-    };
-    assert_eq!(git_filter_from_args(&args), None);
+    assert_eq!(git_filter_from_args(&check_args(false, None)), None);
 }
 
 #[test]

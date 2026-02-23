@@ -1,14 +1,12 @@
 mod common;
 
 use assert_cmd::cargo::cargo_bin_cmd;
-use std::path::Path;
-use std::process::Command as StdCommand;
 use tempfile::TempDir;
 
 #[cfg(unix)]
 use std::os::unix::fs::PermissionsExt;
 
-use common::{init_git_repo, run_git, write_file};
+use common::{git_head, init_git_repo, run_git, run_git_in_dir, write_file};
 
 fn json_output(stdout: &[u8]) -> serde_json::Value {
     serde_json::from_slice(stdout).unwrap()
@@ -21,39 +19,6 @@ fn violation_paths(output: &serde_json::Value) -> Vec<String> {
         .iter()
         .map(|violation| violation["path"].as_str().unwrap().to_string())
         .collect()
-}
-
-fn run_git_in_dir(dir: &Path, args: &[&str]) {
-    let output = StdCommand::new("git")
-        .current_dir(dir)
-        .args(args)
-        .output()
-        .unwrap();
-
-    assert!(
-        output.status.success(),
-        "git {:?} failed in {}: {}",
-        args,
-        dir.display(),
-        String::from_utf8_lossy(&output.stderr)
-    );
-}
-
-fn git_head(dir: &Path) -> String {
-    let output = StdCommand::new("git")
-        .current_dir(dir)
-        .args(["rev-parse", "HEAD"])
-        .output()
-        .unwrap();
-
-    assert!(
-        output.status.success(),
-        "git rev-parse HEAD failed in {}: {}",
-        dir.display(),
-        String::from_utf8_lossy(&output.stderr)
-    );
-
-    String::from_utf8(output.stdout).unwrap().trim().to_owned()
 }
 
 #[cfg(unix)]

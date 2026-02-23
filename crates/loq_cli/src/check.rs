@@ -42,12 +42,7 @@ pub fn run_check<R: Read, W1: WriteColor + Write, W2: WriteColor>(
         .and_then(dunce::canonicalize)
         .unwrap_or_else(|_| PathBuf::from("."));
 
-    let inputs = match git_filter_from_args(args) {
-        Some(filter) => list_git_paths(&filter, &cwd),
-        None => collect_inputs(args.paths.clone(), args.stdin, stdin, &cwd),
-    };
-
-    let inputs = match inputs {
+    let inputs = match resolve_check_inputs(args, stdin, &cwd) {
         Ok(paths) => paths,
         Err(err) => return print_error(stderr, &format!("{err:#}")),
     };
@@ -152,6 +147,17 @@ fn git_filter_from_args(args: &CheckArgs) -> Option<GitFilter> {
         Some(GitFilter::Staged)
     } else {
         args.diff.clone().map(GitFilter::Diff)
+    }
+}
+
+fn resolve_check_inputs<R: Read>(
+    args: &CheckArgs,
+    stdin: &mut R,
+    cwd: &Path,
+) -> Result<Vec<PathBuf>> {
+    match git_filter_from_args(args) {
+        Some(filter) => list_git_paths(&filter, cwd),
+        None => collect_inputs(args.paths.clone(), args.stdin, stdin, cwd),
     }
 }
 
