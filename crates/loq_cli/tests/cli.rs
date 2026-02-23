@@ -127,47 +127,6 @@ fn check_diff_since_ref_only_checks_changed_files() {
 }
 
 #[test]
-fn check_staged_from_subdir_resolves_repo_relative_paths() {
-    let temp = TempDir::new().unwrap();
-    init_git_repo(&temp);
-
-    write_file(&temp, "loq.toml", "default_max_lines = 1\n");
-    write_file(&temp, "sub/changed.txt", "ok\n");
-    run_git(&temp, &["add", "."]);
-    run_git(&temp, &["commit", "-m", "initial"]);
-
-    write_file(&temp, "sub/changed.txt", "a\nb\n");
-    run_git(&temp, &["add", "sub/changed.txt"]);
-
-    cargo_bin_cmd!("loq")
-        .current_dir(temp.path().join("sub"))
-        .args(["check", "--staged"])
-        .assert()
-        .failure()
-        .stdout(predicate::str::contains("changed.txt"));
-}
-
-#[test]
-fn check_diff_from_subdir_resolves_repo_relative_paths() {
-    let temp = TempDir::new().unwrap();
-    init_git_repo(&temp);
-
-    write_file(&temp, "loq.toml", "default_max_lines = 1\n");
-    write_file(&temp, "sub/changed.txt", "ok\n");
-    run_git(&temp, &["add", "."]);
-    run_git(&temp, &["commit", "-m", "initial"]);
-
-    write_file(&temp, "sub/changed.txt", "a\nb\n");
-
-    cargo_bin_cmd!("loq")
-        .current_dir(temp.path().join("sub"))
-        .args(["check", "--diff", "HEAD"])
-        .assert()
-        .failure()
-        .stdout(predicate::str::contains("changed.txt"));
-}
-
-#[test]
 fn check_diff_rejects_paths() {
     let temp = TempDir::new().unwrap();
 

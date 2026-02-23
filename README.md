@@ -47,6 +47,9 @@ loq check --diff origin/main..HEAD
 
 # Check files from stdin
 git diff --name-only | loq check -
+
+# Note: --staged/--diff are repo-wide modes
+# (can't be combined with PATH args or stdin scope)
 ```
 
 ### Managing legacy files
