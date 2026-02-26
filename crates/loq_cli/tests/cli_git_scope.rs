@@ -21,6 +21,19 @@ fn violation_paths(output: &serde_json::Value) -> Vec<String> {
         .collect()
 }
 
+fn setup_repo_with_sub_and_other_files() -> TempDir {
+    let temp = TempDir::new().unwrap();
+    init_git_repo(&temp);
+
+    write_file(&temp, "loq.toml", "default_max_lines = 1\n");
+    write_file(&temp, "sub/inside.txt", "ok\n");
+    write_file(&temp, "other/outside.txt", "ok\n");
+    run_git(&temp, &["add", "."]);
+    run_git(&temp, &["commit", "-m", "initial"]);
+
+    temp
+}
+
 #[cfg(unix)]
 fn write_fake_git_script(dir: &TempDir, body: &str) {
     let git_path = dir.path().join("git");
@@ -59,14 +72,7 @@ exit 1"#,
 
 #[test]
 fn check_staged_from_subdir_without_scope_checks_repo_wide() {
-    let temp = TempDir::new().unwrap();
-    init_git_repo(&temp);
-
-    write_file(&temp, "loq.toml", "default_max_lines = 1\n");
-    write_file(&temp, "sub/inside.txt", "ok\n");
-    write_file(&temp, "other/outside.txt", "ok\n");
-    run_git(&temp, &["add", "."]);
-    run_git(&temp, &["commit", "-m", "initial"]);
+    let temp = setup_repo_with_sub_and_other_files();
 
     write_file(&temp, "sub/inside.txt", "a\nb\n");
     write_file(&temp, "other/outside.txt", "a\nb\n");
@@ -86,14 +92,7 @@ fn check_staged_from_subdir_without_scope_checks_repo_wide() {
 
 #[test]
 fn check_diff_from_subdir_without_scope_checks_repo_wide() {
-    let temp = TempDir::new().unwrap();
-    init_git_repo(&temp);
-
-    write_file(&temp, "loq.toml", "default_max_lines = 1\n");
-    write_file(&temp, "sub/inside.txt", "ok\n");
-    write_file(&temp, "other/outside.txt", "ok\n");
-    run_git(&temp, &["add", "."]);
-    run_git(&temp, &["commit", "-m", "initial"]);
+    let temp = setup_repo_with_sub_and_other_files();
 
     write_file(&temp, "sub/inside.txt", "a\nb\n");
     write_file(&temp, "other/outside.txt", "a\nb\n");
@@ -112,14 +111,7 @@ fn check_diff_from_subdir_without_scope_checks_repo_wide() {
 
 #[test]
 fn check_staged_from_subdir_with_no_staged_files_succeeds() {
-    let temp = TempDir::new().unwrap();
-    init_git_repo(&temp);
-
-    write_file(&temp, "loq.toml", "default_max_lines = 1\n");
-    write_file(&temp, "sub/inside.txt", "ok\n");
-    write_file(&temp, "other/outside.txt", "ok\n");
-    run_git(&temp, &["add", "."]);
-    run_git(&temp, &["commit", "-m", "initial"]);
+    let temp = setup_repo_with_sub_and_other_files();
 
     write_file(&temp, "other/outside.txt", "a\nb\n");
 
