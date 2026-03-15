@@ -113,7 +113,7 @@ loq check --output-format json
 ```yaml
 repos:
   - repo: https://github.com/jakekaplan/loq
-    rev: v0.1.0-alpha.7
+    rev: v0.1.0
     hooks:
       - id: loq
 ```
