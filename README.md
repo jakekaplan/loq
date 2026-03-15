@@ -38,9 +38,19 @@ loq check
 # Check specific paths               
 loq check src/ lib/     
      
-# Check files from stdin      
-git diff --name-only | loq check - 
+# Check only staged files
+loq check --staged
+
+# Check files changed since a ref
+loq check --diff HEAD
+loq check --diff origin/main..HEAD
+
+# Check files from stdin
+git diff --name-only | loq check -
 ```
+
+`--staged` and `--diff` are repo-wide modes. They cannot be combined with
+`PATH` args or stdin scope (`loq check -`).
 
 ### Managing legacy files
 

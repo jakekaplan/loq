@@ -18,6 +18,7 @@ path = "src/main.rs"
 loq_core = { path = "../loq_core", version = "0.1.0-alpha.7" }
 loq_fs = { path = "../loq_fs", version = "0.1.0-alpha.7" }
 anyhow.workspace = true
+dunce.workspace = true
 clap.workspace = true
 globset.workspace = true
 serde.workspace = true
