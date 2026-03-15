@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1771174341884,
+  "lastUpdate": 1773588863833,
   "repoUrl": "https://github.com/jakekaplan/loq",
   "entries": {
     "Benchmark": [
@@ -1246,6 +1246,54 @@ window.BENCHMARK_DATA = {
           {
             "name": "ruff",
             "value": 0.0009381282400000001,
+            "range": "± 0",
+            "unit": "seconds"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "40362401+jakekaplan@users.noreply.github.com",
+            "name": "Jake Kaplan",
+            "username": "jakekaplan"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "c21667f5a7489cced11e9d8f81950ee74fb5078a",
+          "message": "Merge pull request #52 from jakekaplan/feat/git-aware-check\n\nfeat: add git-aware check filters",
+          "timestamp": "2026-03-15T11:33:14-04:00",
+          "tree_id": "37e6d343c62b7c7b2147a1ab159b0c83487c309e",
+          "url": "https://github.com/jakekaplan/loq/commit/c21667f5a7489cced11e9d8f81950ee74fb5078a"
+        },
+        "date": 1773588863580,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "cpython",
+            "value": 0.0009546513799999999,
+            "range": "± 0",
+            "unit": "seconds"
+          },
+          {
+            "name": "airflow",
+            "value": 0.0009395660800000001,
+            "range": "± 0",
+            "unit": "seconds"
+          },
+          {
+            "name": "prefect",
+            "value": 0.0009420879800000001,
+            "range": "± 0",
+            "unit": "seconds"
+          },
+          {
+            "name": "ruff",
+            "value": 0.0009477657800000001,
             "range": "± 0",
             "unit": "seconds"
           }
