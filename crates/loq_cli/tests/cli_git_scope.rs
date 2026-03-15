@@ -91,8 +91,49 @@ fn check_staged_from_subdir_without_scope_checks_repo_wide() {
 }
 
 #[test]
+fn check_staged_from_subdir_with_diff_relative_enabled_checks_repo_wide() {
+    let temp = setup_repo_with_sub_and_other_files();
+    run_git(&temp, &["config", "diff.relative", "true"]);
+
+    write_file(&temp, "sub/inside.txt", "a\nb\n");
+    write_file(&temp, "other/outside.txt", "a\nb\n");
+    run_git(&temp, &["add", "sub/inside.txt", "other/outside.txt"]);
+
+    let assert = cargo_bin_cmd!("loq")
+        .current_dir(temp.path().join("sub"))
+        .args(["check", "--staged", "--output-format", "json"])
+        .assert()
+        .failure();
+
+    let output = json_output(&assert.get_output().stdout);
+    let paths = violation_paths(&output);
+    assert!(paths.iter().any(|path| path == "inside.txt"));
+    assert!(paths.iter().any(|path| path == "../other/outside.txt"));
+}
+
+#[test]
 fn check_diff_from_subdir_without_scope_checks_repo_wide() {
     let temp = setup_repo_with_sub_and_other_files();
+
+    write_file(&temp, "sub/inside.txt", "a\nb\n");
+    write_file(&temp, "other/outside.txt", "a\nb\n");
+
+    let assert = cargo_bin_cmd!("loq")
+        .current_dir(temp.path().join("sub"))
+        .args(["check", "--diff", "HEAD", "--output-format", "json"])
+        .assert()
+        .failure();
+
+    let output = json_output(&assert.get_output().stdout);
+    let paths = violation_paths(&output);
+    assert!(paths.iter().any(|path| path == "inside.txt"));
+    assert!(paths.iter().any(|path| path == "../other/outside.txt"));
+}
+
+#[test]
+fn check_diff_from_subdir_with_diff_relative_enabled_checks_repo_wide() {
+    let temp = setup_repo_with_sub_and_other_files();
+    run_git(&temp, &["config", "diff.relative", "true"]);
 
     write_file(&temp, "sub/inside.txt", "a\nb\n");
     write_file(&temp, "other/outside.txt", "a\nb\n");
@@ -224,6 +265,33 @@ exit 1"#,
 
     let stderr = String::from_utf8(assert.get_output().stderr.clone()).unwrap();
     assert!(stderr.contains("failed to determine git repository root"));
+}
+
+#[cfg(unix)]
+#[test]
+fn check_staged_preserves_rev_parse_stderr_for_non_repo_failures() {
+    let temp = TempDir::new().unwrap();
+
+    let fake_git = TempDir::new().unwrap();
+    write_fake_git_script(
+        &fake_git,
+        r#"if [ "$1" = "rev-parse" ] && [ "$2" = "--show-toplevel" ]; then
+  echo 'fatal: detected dubious ownership in repository at /tmp/repro' >&2
+  exit 128
+fi
+exit 1"#,
+    );
+
+    let assert = cargo_bin_cmd!("loq")
+        .current_dir(temp.path())
+        .env("PATH", fake_git.path())
+        .args(["check", "--staged"])
+        .assert()
+        .failure();
+
+    let stderr = String::from_utf8(assert.get_output().stderr.clone()).unwrap();
+    assert!(stderr.contains("git rev-parse failed: fatal: detected dubious ownership"));
+    assert!(!stderr.contains("requires a git repository"));
 }
 
 #[cfg(unix)]

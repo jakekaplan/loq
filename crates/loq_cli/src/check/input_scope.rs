@@ -2,7 +2,7 @@ use std::io::Read;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-use anyhow::{bail, Context, Result};
+use anyhow::{anyhow, bail, Context, Result};
 
 use crate::cli::CheckArgs;
 
@@ -61,17 +61,32 @@ fn run_git(args: &[&str], cwd: &Path, unavailable_message: &str) -> Result<std::
         .output()
         .map_err(|error| {
             if error.kind() == std::io::ErrorKind::NotFound {
-                anyhow::anyhow!("{unavailable_message}")
+                anyhow!("{unavailable_message}")
             } else {
                 anyhow::Error::new(error).context("failed to run git")
             }
         })
 }
 
+fn git_command_error(prefix: &str, output: &std::process::Output) -> anyhow::Error {
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    let message = stderr.trim();
+    if message.is_empty() {
+        anyhow!("{prefix} failed with status {}", output.status)
+    } else {
+        anyhow!("{prefix} failed: {message}")
+    }
+}
+
 fn git_repo_root(cwd: &Path, unavailable_message: &str, not_repo_message: &str) -> Result<PathBuf> {
     let output = run_git(&["rev-parse", "--show-toplevel"], cwd, unavailable_message)?;
     if !output.status.success() {
-        bail!("{not_repo_message}");
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        let message = stderr.trim();
+        if message.contains("not a git repository") {
+            bail!("{not_repo_message}");
+        }
+        return Err(git_command_error("git rev-parse", &output));
     }
 
     let root = strip_line_endings(&output.stdout);
@@ -88,24 +103,35 @@ fn list_git_paths(filter: &GitFilter, cwd: &Path) -> Result<Vec<PathBuf>> {
 
     let output = match filter {
         GitFilter::Staged => run_git(
-            &["diff", "--name-only", "-z", "--cached", "--diff-filter=d"],
-            cwd,
+            &[
+                "-c",
+                "diff.relative=false",
+                "diff",
+                "--name-only",
+                "-z",
+                "--cached",
+                "--diff-filter=d",
+            ],
+            &repo_root,
             &unavailable_message,
         )?,
         GitFilter::Diff(reference) => run_git(
-            &["diff", "--name-only", "-z", "--diff-filter=d", reference],
-            cwd,
+            &[
+                "-c",
+                "diff.relative=false",
+                "diff",
+                "--name-only",
+                "-z",
+                "--diff-filter=d",
+                reference,
+            ],
+            &repo_root,
             &unavailable_message,
         )?,
     };
 
     if !output.status.success() {
-        let stderr = String::from_utf8_lossy(&output.stderr);
-        let message = stderr.trim();
-        if message.is_empty() {
-            bail!("git diff failed with status {}", output.status);
-        }
-        bail!("git diff failed: {message}");
+        return Err(git_command_error("git diff", &output));
     }
 
     let mut paths = output
