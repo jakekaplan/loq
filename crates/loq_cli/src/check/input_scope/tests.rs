@@ -103,7 +103,8 @@ fn resolve_check_inputs_without_git_filter_uses_collect_inputs_behavior() {
     let mut empty_stdin: &[u8] = b"";
 
     let result = resolve_check_inputs(&args, &mut empty_stdin, Path::new("/repo")).unwrap();
-    assert_eq!(result, vec![PathBuf::from(".")]);
+    assert_eq!(result.paths, vec![PathBuf::from(".")]);
+    assert_eq!(result.config_path, None);
 }
 
 #[test]
@@ -199,7 +200,7 @@ fn list_git_paths_staged() {
     std::fs::write(temp.path().join("a.txt"), "changed\n").unwrap();
     exec_git(temp.path(), &["add", "a.txt"]);
 
-    let paths = list_git_paths(&GitFilter::Staged, temp.path()).unwrap();
+    let paths = list_git_paths(&GitFilter::Staged, temp.path(), "unavailable").unwrap();
     assert!(paths.iter().any(|path| path.ends_with("a.txt")));
 }
 
@@ -214,7 +215,8 @@ fn list_git_paths_diff() {
 
     std::fs::write(temp.path().join("a.txt"), "changed\n").unwrap();
 
-    let paths = list_git_paths(&GitFilter::Diff("HEAD".into()), temp.path()).unwrap();
+    let paths =
+        list_git_paths(&GitFilter::Diff("HEAD".into()), temp.path(), "unavailable").unwrap();
     assert!(paths.iter().any(|path| path.ends_with("a.txt")));
 }
 
@@ -247,6 +249,31 @@ fn git_diff_args_match_expected_flags() {
 }
 
 #[test]
+fn resolve_git_inputs_uses_repo_root_config() {
+    let temp = TempDir::new().unwrap();
+    init_test_repo(temp.path());
+    let sub = temp.path().join("sub");
+    std::fs::create_dir_all(&sub).unwrap();
+    std::fs::write(temp.path().join("loq.toml"), "default_max_lines = 2\n").unwrap();
+    std::fs::write(sub.join("loq.toml"), "default_max_lines = 1\n").unwrap();
+    std::fs::write(temp.path().join("outside.txt"), "ok\n").unwrap();
+    exec_git(temp.path(), &["add", "."]);
+    exec_git(temp.path(), &["commit", "-m", "init"]);
+
+    std::fs::write(temp.path().join("outside.txt"), "changed\n").unwrap();
+    exec_git(temp.path(), &["add", "outside.txt"]);
+
+    let resolved = resolve_git_inputs(&GitFilter::Staged, &sub).unwrap();
+    let expected_config = std::fs::canonicalize(temp.path().join("loq.toml"))
+        .unwrap_or_else(|_| temp.path().join("loq.toml"));
+    assert_eq!(resolved.config_path, Some(expected_config));
+    assert!(resolved
+        .paths
+        .iter()
+        .any(|path| path.ends_with("outside.txt")));
+}
+
+#[test]
 fn list_git_paths_invalid_ref_fails() {
     let temp = TempDir::new().unwrap();
     init_test_repo(temp.path());
@@ -258,6 +285,7 @@ fn list_git_paths_invalid_ref_fails() {
     let err = list_git_paths(
         &GitFilter::Diff("nonexistent_ref_abc123".into()),
         temp.path(),
+        "unavailable",
     )
     .unwrap_err();
     assert!(err.to_string().contains("git diff failed"));
@@ -277,7 +305,7 @@ fn list_git_paths_deduplicates_and_sorts() {
     std::fs::write(temp.path().join("a.txt"), "changed\n").unwrap();
     exec_git(temp.path(), &["add", "."]);
 
-    let paths = list_git_paths(&GitFilter::Staged, temp.path()).unwrap();
+    let paths = list_git_paths(&GitFilter::Staged, temp.path(), "unavailable").unwrap();
     let names: Vec<_> = paths.iter().filter_map(|path| path.file_name()).collect();
     assert!(names.windows(2).all(|window| window[0] <= window[1]));
 }

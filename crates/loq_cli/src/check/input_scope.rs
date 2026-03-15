@@ -43,14 +43,22 @@ fn git_filter_from_args(args: &CheckArgs) -> Option<GitFilter> {
     }
 }
 
+pub(super) struct ResolvedCheckInputs {
+    pub paths: Vec<PathBuf>,
+    pub config_path: Option<PathBuf>,
+}
+
 pub(super) fn resolve_check_inputs<R: Read>(
     args: &CheckArgs,
     stdin: &mut R,
     cwd: &Path,
-) -> Result<Vec<PathBuf>> {
+) -> Result<ResolvedCheckInputs> {
     match git_filter_from_args(args) {
-        Some(filter) => list_git_paths(&filter, cwd),
-        None => collect_inputs(args.paths.clone(), args.stdin, stdin, cwd),
+        Some(filter) => resolve_git_inputs(&filter, cwd),
+        None => Ok(ResolvedCheckInputs {
+            paths: collect_inputs(args.paths.clone(), args.stdin, stdin, cwd)?,
+            config_path: None,
+        }),
     }
 }
 
@@ -117,12 +125,23 @@ fn git_diff_args(filter: &GitFilter) -> Vec<&str> {
     args
 }
 
-fn list_git_paths(filter: &GitFilter, cwd: &Path) -> Result<Vec<PathBuf>> {
+fn resolve_git_inputs(filter: &GitFilter, cwd: &Path) -> Result<ResolvedCheckInputs> {
     let unavailable_message = filter.unavailable_message();
     let not_repo_message = filter.not_repo_message();
     let repo_root = git_repo_root(cwd, &unavailable_message, &not_repo_message)?;
+    let paths = list_git_paths(filter, &repo_root, &unavailable_message)?;
+    let config_path = loq_fs::discover::find_config(&repo_root);
+
+    Ok(ResolvedCheckInputs { paths, config_path })
+}
+
+fn list_git_paths(
+    filter: &GitFilter,
+    repo_root: &Path,
+    unavailable_message: &str,
+) -> Result<Vec<PathBuf>> {
     let diff_args = git_diff_args(filter);
-    let output = run_git(&diff_args, &repo_root, &unavailable_message)?;
+    let output = run_git(&diff_args, repo_root, unavailable_message)?;
 
     if !output.status.success() {
         return Err(git_command_error("git diff", &output));

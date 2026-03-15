@@ -40,6 +40,19 @@ fn enable_relative_diff_paths(temp: &TempDir) {
     run_git(temp, &["config", "diff.relative", "true"]);
 }
 
+fn setup_repo_with_root_and_sub_configs() -> TempDir {
+    let temp = TempDir::new().unwrap();
+    init_git_repo(&temp);
+
+    write_file(&temp, "loq.toml", "default_max_lines = 2\n");
+    write_file(&temp, "sub/loq.toml", "default_max_lines = 1\n");
+    write_file(&temp, "other/outside.txt", "ok\n");
+    run_git(&temp, &["add", "."]);
+    run_git(&temp, &["commit", "-m", "initial"]);
+
+    temp
+}
+
 #[cfg(unix)]
 fn write_fake_git_script(dir: &TempDir, body: &str) {
     let git_path = dir.path().join("git");
@@ -140,6 +153,41 @@ fn check_staged_from_subdir_with_no_staged_files_succeeds() {
 
     let output = json_output(&assert.get_output().stdout);
     assert_eq!(output["summary"]["files_checked"], 0);
+    assert_eq!(output["summary"]["violations"], 0);
+}
+
+#[test]
+fn check_staged_from_subdir_uses_repo_root_config() {
+    let temp = setup_repo_with_root_and_sub_configs();
+    write_file(&temp, "other/outside.txt", "a\nb\n");
+    run_git(&temp, &["add", "other/outside.txt"]);
+
+    let assert = cargo_bin_cmd!("loq")
+        .current_dir(temp.path().join("sub"))
+        .args(["check", "--staged", "--output-format", "json"])
+        .assert()
+        .success();
+
+    let output = json_output(&assert.get_output().stdout);
+    assert_eq!(output["summary"]["files_checked"], 1);
+    assert_eq!(output["summary"]["passed"], 1);
+    assert_eq!(output["summary"]["violations"], 0);
+}
+
+#[test]
+fn check_diff_from_subdir_uses_repo_root_config() {
+    let temp = setup_repo_with_root_and_sub_configs();
+    write_file(&temp, "other/outside.txt", "a\nb\n");
+
+    let assert = cargo_bin_cmd!("loq")
+        .current_dir(temp.path().join("sub"))
+        .args(["check", "--diff", "HEAD", "--output-format", "json"])
+        .assert()
+        .success();
+
+    let output = json_output(&assert.get_output().stdout);
+    assert_eq!(output["summary"]["files_checked"], 1);
+    assert_eq!(output["summary"]["passed"], 1);
     assert_eq!(output["summary"]["violations"], 0);
 }
 

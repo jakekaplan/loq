@@ -43,18 +43,18 @@ pub fn run_check<R: Read, W1: WriteColor + Write, W2: WriteColor>(
         .and_then(dunce::canonicalize)
         .unwrap_or_else(|_| PathBuf::from("."));
 
-    let inputs = match resolve_check_inputs(args, stdin, &cwd) {
-        Ok(paths) => paths,
+    let resolved = match resolve_check_inputs(args, stdin, &cwd) {
+        Ok(resolved) => resolved,
         Err(err) => return print_error(stderr, &format!("{err:#}")),
     };
 
     let options = CheckOptions {
-        config_path: None,
+        config_path: resolved.config_path,
         cwd: cwd.clone(),
         use_cache: !args.no_cache,
     };
 
-    let output = match loq_fs::run_check(inputs, options) {
+    let output = match loq_fs::run_check(resolved.paths, options) {
         Ok(output) => output,
         Err(err) => return handle_fs_error(&err, stderr),
     };
