@@ -131,6 +131,19 @@ fn strip_line_endings_only_removes_newline_chars() {
 }
 
 #[test]
+fn has_git_dir_ancestor_detects_repo_markers() {
+    let temp = TempDir::new().unwrap();
+    let repo_root = temp.path().join("repo");
+    let nested = repo_root.join("nested/deep");
+
+    std::fs::create_dir_all(&nested).unwrap();
+    std::fs::write(repo_root.join(".git"), "gitdir: /tmp/worktree\n").unwrap();
+
+    assert!(has_git_dir_ancestor(&nested));
+    assert!(!has_git_dir_ancestor(temp.path()));
+}
+
+#[test]
 fn git_filter_from_args_respects_staged_and_diff() {
     assert_eq!(
         git_filter_from_args(&check_args(true, None)),
@@ -203,6 +216,34 @@ fn list_git_paths_diff() {
 
     let paths = list_git_paths(&GitFilter::Diff("HEAD".into()), temp.path()).unwrap();
     assert!(paths.iter().any(|path| path.ends_with("a.txt")));
+}
+
+#[test]
+fn git_diff_args_match_expected_flags() {
+    assert_eq!(
+        git_diff_args(&GitFilter::Staged),
+        vec![
+            "-c",
+            "diff.relative=false",
+            "diff",
+            "--name-only",
+            "-z",
+            "--diff-filter=d",
+            "--cached",
+        ]
+    );
+    assert_eq!(
+        git_diff_args(&GitFilter::Diff("HEAD~1..HEAD".into())),
+        vec![
+            "-c",
+            "diff.relative=false",
+            "diff",
+            "--name-only",
+            "-z",
+            "--diff-filter=d",
+            "HEAD~1..HEAD",
+        ]
+    );
 }
 
 #[test]

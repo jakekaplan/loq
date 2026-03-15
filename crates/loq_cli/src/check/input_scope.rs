@@ -78,12 +78,15 @@ fn git_command_error(prefix: &str, output: &std::process::Output) -> anyhow::Err
     }
 }
 
+fn has_git_dir_ancestor(path: &Path) -> bool {
+    path.ancestors()
+        .any(|ancestor| ancestor.join(".git").exists())
+}
+
 fn git_repo_root(cwd: &Path, unavailable_message: &str, not_repo_message: &str) -> Result<PathBuf> {
     let output = run_git(&["rev-parse", "--show-toplevel"], cwd, unavailable_message)?;
     if !output.status.success() {
-        let stderr = String::from_utf8_lossy(&output.stderr);
-        let message = stderr.trim();
-        if message.contains("not a git repository") {
+        if !has_git_dir_ancestor(cwd) {
             bail!("{not_repo_message}");
         }
         return Err(git_command_error("git rev-parse", &output));
@@ -96,39 +99,30 @@ fn git_repo_root(cwd: &Path, unavailable_message: &str, not_repo_message: &str) 
     Ok(dunce::canonicalize(&root_path).unwrap_or(root_path))
 }
 
+fn git_diff_args(filter: &GitFilter) -> Vec<&str> {
+    let mut args = vec![
+        "-c",
+        "diff.relative=false",
+        "diff",
+        "--name-only",
+        "-z",
+        "--diff-filter=d",
+    ];
+
+    match filter {
+        GitFilter::Staged => args.push("--cached"),
+        GitFilter::Diff(reference) => args.push(reference),
+    }
+
+    args
+}
+
 fn list_git_paths(filter: &GitFilter, cwd: &Path) -> Result<Vec<PathBuf>> {
     let unavailable_message = filter.unavailable_message();
     let not_repo_message = filter.not_repo_message();
     let repo_root = git_repo_root(cwd, &unavailable_message, &not_repo_message)?;
-
-    let output = match filter {
-        GitFilter::Staged => run_git(
-            &[
-                "-c",
-                "diff.relative=false",
-                "diff",
-                "--name-only",
-                "-z",
-                "--cached",
-                "--diff-filter=d",
-            ],
-            &repo_root,
-            &unavailable_message,
-        )?,
-        GitFilter::Diff(reference) => run_git(
-            &[
-                "-c",
-                "diff.relative=false",
-                "diff",
-                "--name-only",
-                "-z",
-                "--diff-filter=d",
-                reference,
-            ],
-            &repo_root,
-            &unavailable_message,
-        )?,
-    };
+    let diff_args = git_diff_args(filter);
+    let output = run_git(&diff_args, &repo_root, &unavailable_message)?;
 
     if !output.status.success() {
         return Err(git_command_error("git diff", &output));

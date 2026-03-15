@@ -4,10 +4,9 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use assert_cmd::cargo::cargo_bin_cmd;
-use serde_json::Value;
 use tempfile::TempDir;
 
-use common::{init_git_repo, run_git, write_file};
+use common::{init_git_repo, json_output, run_git, violation_paths, write_file};
 
 fn fixture_path(name: &str) -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
@@ -31,17 +30,8 @@ fn copy_dir_all(src: &Path, dst: &Path) {
     }
 }
 
-fn json_output(stdout: &[u8]) -> Value {
-    serde_json::from_slice(stdout).unwrap()
-}
-
-fn violation_paths(output: &Value) -> Vec<String> {
-    let mut paths = output["violations"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .map(|violation| violation["path"].as_str().unwrap().to_string())
-        .collect::<Vec<_>>();
+fn sorted_violation_paths(output: &serde_json::Value) -> Vec<String> {
+    let mut paths = violation_paths(output);
     paths.sort();
     paths
 }
@@ -70,7 +60,7 @@ fn default_check_still_walks_current_directory() {
 
     let output = json_output(&assert.get_output().stdout);
     assert_eq!(
-        violation_paths(&output),
+        sorted_violation_paths(&output),
         vec!["docs/guide.txt", "src/other.txt"]
     );
     assert_eq!(output["summary"]["files_checked"], 4);
@@ -90,7 +80,7 @@ fn explicit_path_scope_still_only_checks_requested_tree() {
         .failure();
 
     let output = json_output(&assert.get_output().stdout);
-    assert_eq!(violation_paths(&output), vec!["src/other.txt"]);
+    assert_eq!(sorted_violation_paths(&output), vec!["src/other.txt"]);
     assert_eq!(output["summary"]["files_checked"], 2);
 }
 
@@ -109,7 +99,7 @@ fn stdin_scope_still_uses_only_listed_paths() {
         .failure();
 
     let output = json_output(&assert.get_output().stdout);
-    assert_eq!(violation_paths(&output), vec!["guide.txt"]);
+    assert_eq!(sorted_violation_paths(&output), vec!["guide.txt"]);
     assert_eq!(output["summary"]["files_checked"], 1);
 }
 
@@ -129,7 +119,7 @@ fn staged_scope_from_subdir_checks_repo_wide() {
 
     let output = json_output(&assert.get_output().stdout);
     assert_eq!(
-        violation_paths(&output),
+        sorted_violation_paths(&output),
         vec!["../../src/other.txt", "notes.txt"]
     );
     assert_eq!(output["summary"]["files_checked"], 2);
@@ -149,7 +139,7 @@ fn diff_head_ignores_untracked_files_and_only_checks_tracked_changes() {
         .failure();
 
     let output = json_output(&assert.get_output().stdout);
-    assert_eq!(violation_paths(&output), vec!["src/other.txt"]);
+    assert_eq!(sorted_violation_paths(&output), vec!["src/other.txt"]);
     assert_eq!(output["summary"]["files_checked"], 1);
 }
 
@@ -172,6 +162,6 @@ fn diff_range_accepts_commit_ranges_like_main_dot_dot_head() {
         .failure();
 
     let output = json_output(&assert.get_output().stdout);
-    assert_eq!(violation_paths(&output), vec!["src/other.txt"]);
+    assert_eq!(sorted_violation_paths(&output), vec!["src/other.txt"]);
     assert_eq!(output["summary"]["files_checked"], 1);
 }

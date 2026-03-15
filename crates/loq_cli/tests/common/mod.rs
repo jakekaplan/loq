@@ -1,6 +1,7 @@
 use std::path::Path;
 use std::process::Command;
 
+use serde_json::Value;
 use tempfile::TempDir;
 
 pub fn write_file(dir: &TempDir, path: &str, contents: &str) {
@@ -53,4 +54,19 @@ pub fn init_git_repo(dir: &TempDir) {
     run_git(dir, &["init"]);
     run_git(dir, &["config", "user.name", "Loq Test"]);
     run_git(dir, &["config", "user.email", "test@example.com"]);
+}
+
+#[allow(dead_code)]
+pub fn json_output(stdout: &[u8]) -> Value {
+    serde_json::from_slice(stdout).unwrap()
+}
+
+#[allow(dead_code)]
+pub fn violation_paths(output: &Value) -> Vec<String> {
+    output["violations"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|violation| violation["path"].as_str().unwrap().to_string())
+        .collect()
 }

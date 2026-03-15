@@ -6,20 +6,9 @@ use tempfile::TempDir;
 #[cfg(unix)]
 use std::os::unix::fs::PermissionsExt;
 
-use common::{git_head, init_git_repo, run_git, run_git_in_dir, write_file};
-
-fn json_output(stdout: &[u8]) -> serde_json::Value {
-    serde_json::from_slice(stdout).unwrap()
-}
-
-fn violation_paths(output: &serde_json::Value) -> Vec<String> {
-    output["violations"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .map(|violation| violation["path"].as_str().unwrap().to_string())
-        .collect()
-}
+use common::{
+    git_head, init_git_repo, json_output, run_git, run_git_in_dir, violation_paths, write_file,
+};
 
 fn setup_repo_with_sub_and_other_files() -> TempDir {
     let temp = TempDir::new().unwrap();
@@ -32,6 +21,23 @@ fn setup_repo_with_sub_and_other_files() -> TempDir {
     run_git(&temp, &["commit", "-m", "initial"]);
 
     temp
+}
+
+fn assert_repo_wide_paths_from_subdir(temp: &TempDir, args: &[&str]) {
+    let assert = cargo_bin_cmd!("loq")
+        .current_dir(temp.path().join("sub"))
+        .args(args)
+        .assert()
+        .failure();
+
+    let output = json_output(&assert.get_output().stdout);
+    let paths = violation_paths(&output);
+    assert!(paths.iter().any(|path| path == "inside.txt"));
+    assert!(paths.iter().any(|path| path == "../other/outside.txt"));
+}
+
+fn enable_relative_diff_paths(temp: &TempDir) {
+    run_git(temp, &["config", "diff.relative", "true"]);
 }
 
 #[cfg(unix)]
@@ -78,37 +84,19 @@ fn check_staged_from_subdir_without_scope_checks_repo_wide() {
     write_file(&temp, "other/outside.txt", "a\nb\n");
     run_git(&temp, &["add", "sub/inside.txt", "other/outside.txt"]);
 
-    let assert = cargo_bin_cmd!("loq")
-        .current_dir(temp.path().join("sub"))
-        .args(["check", "--staged", "--output-format", "json"])
-        .assert()
-        .failure();
-
-    let output = json_output(&assert.get_output().stdout);
-    let paths = violation_paths(&output);
-    assert!(paths.iter().any(|path| path == "inside.txt"));
-    assert!(paths.iter().any(|path| path == "../other/outside.txt"));
+    assert_repo_wide_paths_from_subdir(&temp, &["check", "--staged", "--output-format", "json"]);
 }
 
 #[test]
 fn check_staged_from_subdir_with_diff_relative_enabled_checks_repo_wide() {
     let temp = setup_repo_with_sub_and_other_files();
-    run_git(&temp, &["config", "diff.relative", "true"]);
+    enable_relative_diff_paths(&temp);
 
     write_file(&temp, "sub/inside.txt", "a\nb\n");
     write_file(&temp, "other/outside.txt", "a\nb\n");
     run_git(&temp, &["add", "sub/inside.txt", "other/outside.txt"]);
 
-    let assert = cargo_bin_cmd!("loq")
-        .current_dir(temp.path().join("sub"))
-        .args(["check", "--staged", "--output-format", "json"])
-        .assert()
-        .failure();
-
-    let output = json_output(&assert.get_output().stdout);
-    let paths = violation_paths(&output);
-    assert!(paths.iter().any(|path| path == "inside.txt"));
-    assert!(paths.iter().any(|path| path == "../other/outside.txt"));
+    assert_repo_wide_paths_from_subdir(&temp, &["check", "--staged", "--output-format", "json"]);
 }
 
 #[test]
@@ -118,36 +106,24 @@ fn check_diff_from_subdir_without_scope_checks_repo_wide() {
     write_file(&temp, "sub/inside.txt", "a\nb\n");
     write_file(&temp, "other/outside.txt", "a\nb\n");
 
-    let assert = cargo_bin_cmd!("loq")
-        .current_dir(temp.path().join("sub"))
-        .args(["check", "--diff", "HEAD", "--output-format", "json"])
-        .assert()
-        .failure();
-
-    let output = json_output(&assert.get_output().stdout);
-    let paths = violation_paths(&output);
-    assert!(paths.iter().any(|path| path == "inside.txt"));
-    assert!(paths.iter().any(|path| path == "../other/outside.txt"));
+    assert_repo_wide_paths_from_subdir(
+        &temp,
+        &["check", "--diff", "HEAD", "--output-format", "json"],
+    );
 }
 
 #[test]
 fn check_diff_from_subdir_with_diff_relative_enabled_checks_repo_wide() {
     let temp = setup_repo_with_sub_and_other_files();
-    run_git(&temp, &["config", "diff.relative", "true"]);
+    enable_relative_diff_paths(&temp);
 
     write_file(&temp, "sub/inside.txt", "a\nb\n");
     write_file(&temp, "other/outside.txt", "a\nb\n");
 
-    let assert = cargo_bin_cmd!("loq")
-        .current_dir(temp.path().join("sub"))
-        .args(["check", "--diff", "HEAD", "--output-format", "json"])
-        .assert()
-        .failure();
-
-    let output = json_output(&assert.get_output().stdout);
-    let paths = violation_paths(&output);
-    assert!(paths.iter().any(|path| path == "inside.txt"));
-    assert!(paths.iter().any(|path| path == "../other/outside.txt"));
+    assert_repo_wide_paths_from_subdir(
+        &temp,
+        &["check", "--diff", "HEAD", "--output-format", "json"],
+    );
 }
 
 #[test]
@@ -271,6 +247,7 @@ exit 1"#,
 #[test]
 fn check_staged_preserves_rev_parse_stderr_for_non_repo_failures() {
     let temp = TempDir::new().unwrap();
+    std::fs::write(temp.path().join(".git"), "gitdir: /tmp/protected\n").unwrap();
 
     let fake_git = TempDir::new().unwrap();
     write_fake_git_script(
