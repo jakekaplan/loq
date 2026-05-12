@@ -8,7 +8,7 @@ use loq_core::config::DEFAULT_RESPECT_GITIGNORE;
 use loq_fs::CheckOptions;
 use toml_edit::{DocumentMut, Item};
 
-use crate::config_edit::{extract_paths, is_exact_path};
+use crate::exact_limits::{extract_paths, is_exact_path};
 
 /// Find all files that violate the given threshold.
 pub(crate) fn scan_violations_with_threshold(

@@ -9,9 +9,8 @@ use termcolor::WriteColor;
 use toml_edit::DocumentMut;
 
 use crate::cli::RelaxArgs;
-use crate::config_edit::{
-    add_rule, collect_exact_path_rules, load_doc_or_default, persist_doc, update_rule_max_lines,
-};
+use crate::config_edit::{load_doc_or_default, persist_doc};
+use crate::exact_limits::{self, ExactLimits};
 use crate::output::{
     change_style, max_formatted_width, print_error, write_change_row, ChangeKind, ChangeRow,
 };
@@ -73,7 +72,7 @@ fn run_relax_inner(args: &RelaxArgs) -> Result<RelaxReport> {
 
     let (mut doc, config_exists_for_write) = load_doc_or_default(&config_path)?;
 
-    let existing_rules = collect_exact_path_rules(&doc);
+    let existing_rules = ExactLimits::collect(&doc);
     let changes = apply_relax_changes(&mut doc, &violations, &existing_rules, args.extra);
 
     persist_doc(&cwd, &config_path, &doc, config_exists_for_write)?;
@@ -94,7 +93,7 @@ fn collect_violations(outcomes: &[loq_core::FileOutcome]) -> HashMap<String, usi
 fn apply_relax_changes(
     doc: &mut DocumentMut,
     violations: &HashMap<String, usize>,
-    existing_rules: &HashMap<String, (usize, usize)>,
+    existing_rules: &ExactLimits,
     buffer: usize,
 ) -> Vec<ChangeRow> {
     let mut paths: Vec<_> = violations.iter().collect();
@@ -103,11 +102,7 @@ fn apply_relax_changes(
     let mut changes = Vec::new();
     for (path, &actual) in paths {
         let new_limit = actual.saturating_add(buffer);
-        if let Some((_current_limit, idx)) = existing_rules.get(path) {
-            update_rule_max_lines(doc, *idx, new_limit);
-        } else {
-            add_rule(doc, path, new_limit);
-        }
+        exact_limits::set_limit(doc, existing_rules, path, new_limit);
         changes.push(ChangeRow {
             path: path.clone(),
             from: Some(actual),
@@ -212,7 +207,7 @@ max_lines = 10
         violations.insert("src/a.rs".to_string(), 12);
         violations.insert("src/b.rs".to_string(), 20);
 
-        let existing_rules = collect_exact_path_rules(&doc);
+        let existing_rules = ExactLimits::collect(&doc);
         let changes = apply_relax_changes(&mut doc, &violations, &existing_rules, 5);
         assert_eq!(changes.len(), 2);
 

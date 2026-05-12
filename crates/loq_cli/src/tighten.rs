@@ -9,10 +9,8 @@ use toml_edit::DocumentMut;
 
 use crate::baseline_shared::scan_violations_with_threshold;
 use crate::cli::TightenArgs;
-use crate::config_edit::{
-    collect_exact_path_rules, load_doc_or_default, persist_doc, remove_rule, threshold_from_doc,
-    update_rule_max_lines,
-};
+use crate::config_edit::{load_doc_or_default, persist_doc, threshold_from_doc};
+use crate::exact_limits::{self, ExactLimit, ExactLimits};
 use crate::output::{
     change_style, max_formatted_width, print_error, write_change_row, ChangeKind, ChangeRow,
 };
@@ -55,7 +53,7 @@ fn run_tighten_inner(args: &TightenArgs) -> Result<TightenReport> {
     let threshold = threshold_from_doc(&doc, args.threshold);
 
     let violations = scan_violations_with_threshold(&cwd, &doc, threshold, "tighten check failed")?;
-    let existing_rules = collect_exact_path_rules(&doc);
+    let existing_rules = ExactLimits::collect(&doc);
     let report = apply_tighten_changes(&mut doc, &violations, &existing_rules);
 
     persist_doc(&cwd, &config_path, &doc, config_exists)?;
@@ -66,34 +64,29 @@ fn run_tighten_inner(args: &TightenArgs) -> Result<TightenReport> {
 fn apply_tighten_changes(
     doc: &mut DocumentMut,
     violations: &HashMap<String, usize>,
-    existing_rules: &HashMap<String, (usize, usize)>,
+    existing_rules: &ExactLimits,
 ) -> TightenReport {
     let mut changes = Vec::new();
-    let mut removed = 0;
+    let mut limits_to_remove: Vec<ExactLimit> = Vec::new();
 
-    let mut indices_to_remove: Vec<usize> = Vec::new();
-
-    for (path, (current_limit, idx)) in existing_rules {
+    for (path, limit) in existing_rules.iter() {
         if let Some(&actual) = violations.get(path) {
-            if actual < *current_limit {
-                update_rule_max_lines(doc, *idx, actual);
+            if actual < limit.max_lines {
+                exact_limits::update_limit(doc, limit, actual);
                 changes.push(ChangeRow {
-                    path: path.clone(),
-                    from: Some(*current_limit),
+                    path: path.to_string(),
+                    from: Some(limit.max_lines),
                     to: Some(actual),
                     kind: ChangeKind::Adjusted,
                 });
             }
         } else {
-            indices_to_remove.push(*idx);
-            removed += 1;
+            limits_to_remove.push(limit);
         }
     }
 
-    indices_to_remove.sort_by(|a, b| b.cmp(a));
-    for idx in indices_to_remove {
-        remove_rule(doc, idx);
-    }
+    let removed = limits_to_remove.len();
+    exact_limits::remove_limits(doc, limits_to_remove);
 
     TightenReport { changes, removed }
 }
