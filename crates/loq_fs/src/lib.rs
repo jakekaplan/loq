@@ -9,6 +9,7 @@
 mod cache;
 pub mod count;
 pub mod discover;
+mod inspection;
 pub mod path_identity;
 pub mod stdin;
 pub mod walk;
@@ -16,12 +17,13 @@ pub mod walk;
 pub use path_identity::PathIdentity;
 
 use std::path::{Path, PathBuf};
-use std::sync::Mutex;
 
 use loq_core::config::{compile_config, CompiledConfig, ConfigOrigin, LoqConfig};
 use loq_core::decide::{decide, Decision};
 use loq_core::report::{FileOutcome, OutcomeKind};
 use rayon::prelude::*;
+
+use inspection::Inspector;
 use thiserror::Error;
 
 /// Filesystem operation errors.
@@ -112,7 +114,7 @@ pub fn run_check(paths: Vec<PathBuf>, options: CheckOptions) -> Result<CheckOutp
     } else {
         cache::Cache::empty()
     };
-    let file_cache = Mutex::new(file_cache);
+    let inspector = Inspector::new(file_cache);
 
     // Step 3: Canonicalize cwd once (instead of per-file)
     let cwd_abs = options
@@ -134,11 +136,11 @@ pub fn run_check(paths: Vec<PathBuf>, options: CheckOptions) -> Result<CheckOutp
     file_list.dedup();
 
     // Step 5: Check all files in parallel
-    let outcomes = check_group(&file_list, &compiled, &cwd_abs, &file_cache);
+    let outcomes = check_group(&file_list, &compiled, &cwd_abs, &inspector);
 
     // Step 6: Save cache (if enabled) - cache lives at config root
     if options.use_cache {
-        if let Ok(cache) = file_cache.into_inner() {
+        if let Some(cache) = inspector.into_cache() {
             cache.save(&compiled.root_dir);
         }
     }
@@ -154,11 +156,11 @@ fn check_group(
     paths: &[PathBuf],
     compiled: &CompiledConfig,
     cwd_abs: &Path,
-    file_cache: &Mutex<cache::Cache>,
+    inspector: &Inspector,
 ) -> Vec<FileOutcome> {
     paths
         .par_iter()
-        .map(|path| check_file(path, compiled, cwd_abs, file_cache))
+        .map(|path| check_file(path, compiled, cwd_abs, inspector))
         .collect()
 }
 
@@ -166,7 +168,7 @@ fn check_file(
     path: &Path,
     compiled: &CompiledConfig,
     cwd_abs: &Path,
-    file_cache: &Mutex<cache::Cache>,
+    inspector: &Inspector,
 ) -> FileOutcome {
     let identity = PathIdentity::new(path, cwd_abs, &compiled.root_dir);
     let config_source = compiled.origin.clone();
@@ -182,110 +184,11 @@ fn check_file(
     let kind = match decide(compiled, &identity.match_key) {
         Decision::SkipNoLimit => OutcomeKind::NoLimit,
         Decision::Check { limit, matched_by } => {
-            check_file_lines(path, &identity.cache_key, limit, matched_by, file_cache)
+            inspector.inspect(path, &identity.cache_key, limit, matched_by)
         }
     };
 
     make_outcome(kind)
-}
-
-fn check_file_lines(
-    path: &Path,
-    cache_key: &str,
-    limit: usize,
-    matched_by: loq_core::MatchBy,
-    file_cache: &Mutex<cache::Cache>,
-) -> OutcomeKind {
-    // Get file mtime for cache lookup
-    let mtime = std::fs::metadata(path).and_then(|m| m.modified()).ok();
-
-    // Try cache first (using relative path as key for consistency across directories)
-    if let Some(outcome) = try_cached_outcome(cache_key, mtime, file_cache, limit, &matched_by) {
-        return outcome;
-    }
-
-    // Cache miss - read file
-    match count::inspect_file(path) {
-        Ok(count::FileInspection::Binary) => {
-            cache_result(file_cache, cache_key, mtime, cache::CachedResult::Binary);
-            OutcomeKind::Binary
-        }
-        Ok(count::FileInspection::Text { lines }) => {
-            cache_result(
-                file_cache,
-                cache_key,
-                mtime,
-                cache::CachedResult::Text(lines),
-            );
-            outcome_for_lines(lines, limit, matched_by)
-        }
-        // Missing/Unreadable can't be cached (no mtime available)
-        Err(count::CountError::Missing) => OutcomeKind::Missing,
-        Err(count::CountError::Unreadable(error)) => OutcomeKind::Unreadable {
-            error: error.to_string(),
-        },
-    }
-}
-
-fn try_cached_outcome(
-    cache_key: &str,
-    mtime: Option<std::time::SystemTime>,
-    file_cache: &Mutex<cache::Cache>,
-    limit: usize,
-    matched_by: &loq_core::MatchBy,
-) -> Option<OutcomeKind> {
-    if let Some(mt) = mtime {
-        if let Ok(cache) = file_cache.lock() {
-            if let Some(result) = cache.get(cache_key, mt) {
-                return Some(cached_result_to_outcome(result, limit, matched_by.clone()));
-            }
-        }
-    }
-    None
-}
-
-fn cache_result(
-    file_cache: &Mutex<cache::Cache>,
-    cache_key: &str,
-    mtime: Option<std::time::SystemTime>,
-    result: cache::CachedResult,
-) {
-    if let Some(mt) = mtime {
-        if let Ok(mut cache) = file_cache.lock() {
-            cache.insert(cache_key.to_string(), mt, result);
-        }
-    }
-}
-
-fn cached_result_to_outcome(
-    result: cache::CachedResult,
-    limit: usize,
-    matched_by: loq_core::MatchBy,
-) -> OutcomeKind {
-    match result {
-        cache::CachedResult::Text(lines) => outcome_for_lines(lines, limit, matched_by),
-        cache::CachedResult::Binary => OutcomeKind::Binary,
-    }
-}
-
-const fn outcome_for_lines(
-    lines: usize,
-    limit: usize,
-    matched_by: loq_core::MatchBy,
-) -> OutcomeKind {
-    if lines > limit {
-        OutcomeKind::Violation {
-            limit,
-            actual: lines,
-            matched_by,
-        }
-    } else {
-        OutcomeKind::Pass {
-            limit,
-            actual: lines,
-            matched_by,
-        }
-    }
 }
 
 #[cfg(test)]

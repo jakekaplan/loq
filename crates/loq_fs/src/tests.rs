@@ -89,14 +89,14 @@ fn binary_and_unreadable_are_reported() {
         None,
     )
     .unwrap();
-    let file_cache = Mutex::new(cache::Cache::empty());
+    let inspector = inspection::Inspector::new(cache::Cache::empty());
 
     let binary = temp.path().join("binary.txt");
     std::fs::write(&binary, b"\0binary").unwrap();
-    let binary_outcome = check_file(&binary, &compiled, temp.path(), &file_cache);
+    let binary_outcome = check_file(&binary, &compiled, temp.path(), &inspector);
     assert!(matches!(binary_outcome.kind, OutcomeKind::Binary));
 
-    let dir_outcome = check_file(temp.path(), &compiled, temp.path(), &file_cache);
+    let dir_outcome = check_file(temp.path(), &compiled, temp.path(), &inspector);
     assert!(matches!(dir_outcome.kind, OutcomeKind::Unreadable { .. }));
 }
 
