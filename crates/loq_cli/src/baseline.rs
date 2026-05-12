@@ -9,10 +9,8 @@ use toml_edit::DocumentMut;
 
 use crate::baseline_shared::scan_violations_with_threshold;
 use crate::cli::BaselineArgs;
-use crate::config_edit::{
-    add_rule, collect_exact_path_rules, load_doc_or_default, persist_doc, remove_rule,
-    threshold_from_doc, update_rule_max_lines,
-};
+use crate::config_edit::{load_doc_or_default, persist_doc, threshold_from_doc};
+use crate::exact_limits::{self, ExactLimit, ExactLimits};
 use crate::output::{
     change_style, max_formatted_width, print_error, write_change_row, ChangeKind, ChangeRow,
 };
@@ -61,7 +59,7 @@ fn run_baseline_inner(args: &BaselineArgs) -> Result<BaselineReport> {
         scan_violations_with_threshold(&cwd, &doc, threshold, "baseline check failed")?;
 
     // Step 4: Collect existing exact-path rules (baseline candidates)
-    let existing_rules = collect_exact_path_rules(&doc);
+    let existing_rules = ExactLimits::collect(&doc);
 
     // Step 5: Compute changes
     let report = apply_baseline_changes(&mut doc, &violations, &existing_rules);
@@ -76,53 +74,43 @@ fn run_baseline_inner(args: &BaselineArgs) -> Result<BaselineReport> {
 fn apply_baseline_changes(
     doc: &mut DocumentMut,
     violations: &HashMap<String, usize>,
-    existing_rules: &HashMap<String, (usize, usize)>,
+    existing_rules: &ExactLimits,
 ) -> BaselineReport {
     let mut changes = Vec::new();
+    let mut limits_to_remove: Vec<ExactLimit> = Vec::new();
 
-    // Track which indices to remove (in reverse order to maintain correctness)
-    let mut indices_to_remove: Vec<usize> = Vec::new();
-
-    // Process existing exact-path rules
-    for (path, (current_limit, idx)) in existing_rules {
+    for (path, limit) in existing_rules.iter() {
         if let Some(&actual) = violations.get(path) {
-            // File still violates - reset to current size if it changed
-            if actual != *current_limit {
-                update_rule_max_lines(doc, *idx, actual);
+            if actual != limit.max_lines {
+                exact_limits::update_limit(doc, limit, actual);
                 changes.push(ChangeRow {
-                    path: path.clone(),
-                    from: Some(*current_limit),
+                    path: path.to_string(),
+                    from: Some(limit.max_lines),
                     to: Some(actual),
                     kind: ChangeKind::Updated,
                 });
             }
         } else {
-            // File is now compliant (under threshold) - remove the rule
-            indices_to_remove.push(*idx);
+            limits_to_remove.push(limit);
             changes.push(ChangeRow {
-                path: path.clone(),
-                from: Some(*current_limit),
+                path: path.to_string(),
+                from: Some(limit.max_lines),
                 to: None,
                 kind: ChangeKind::Removed,
             });
         }
     }
 
-    // Remove rules in reverse order to maintain index validity
-    indices_to_remove.sort_by(|a, b| b.cmp(a));
-    for idx in indices_to_remove {
-        remove_rule(doc, idx);
-    }
+    exact_limits::remove_limits(doc, limits_to_remove);
 
-    // Add new rules for violations not already covered (sorted for deterministic output)
     let mut new_violations: Vec<_> = violations
         .iter()
-        .filter(|(path, _)| !existing_rules.contains_key(*path))
+        .filter(|(path, _)| !existing_rules.contains_path(path))
         .collect();
     new_violations.sort_by_key(|(path, _)| *path);
 
     for (path, &actual) in new_violations {
-        add_rule(doc, path, actual);
+        exact_limits::set_limit(doc, existing_rules, path, actual);
         changes.push(ChangeRow {
             path: (*path).clone(),
             from: None,
