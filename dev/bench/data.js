@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1773589796125,
+  "lastUpdate": 1778613539331,
   "repoUrl": "https://github.com/jakekaplan/loq",
   "entries": {
     "Benchmark": [
@@ -1343,6 +1343,54 @@ window.BENCHMARK_DATA = {
             "name": "ruff",
             "value": 0.0007655121,
             "range": "± 0.0001",
+            "unit": "seconds"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "40362401+jakekaplan@users.noreply.github.com",
+            "name": "Jake Kaplan",
+            "username": "jakekaplan"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "0f9b7e183f2ba3b9b1db2f1b195b7e32532c19ab",
+          "message": "Merge pull request #55 from jakekaplan/refactor/path-identity\n\nCentralize path identity",
+          "timestamp": "2026-05-12T15:17:50-04:00",
+          "tree_id": "725f1c57a920043738b995061a5898e9dd57c943",
+          "url": "https://github.com/jakekaplan/loq/commit/0f9b7e183f2ba3b9b1db2f1b195b7e32532c19ab"
+        },
+        "date": 1778613539028,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "cpython",
+            "value": 0.0009277522199999999,
+            "range": "± 0.0001",
+            "unit": "seconds"
+          },
+          {
+            "name": "airflow",
+            "value": 0.0009153302200000001,
+            "range": "± 0",
+            "unit": "seconds"
+          },
+          {
+            "name": "prefect",
+            "value": 0.0009080002199999999,
+            "range": "± 0",
+            "unit": "seconds"
+          },
+          {
+            "name": "ruff",
+            "value": 0.00090529332,
+            "range": "± 0",
             "unit": "seconds"
           }
         ]
