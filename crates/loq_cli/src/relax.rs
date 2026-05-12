@@ -98,7 +98,7 @@ fn apply_relax_changes(
     buffer: usize,
 ) -> Vec<ChangeRow> {
     let mut paths: Vec<_> = violations.iter().collect();
-    paths.sort_by(|(a, _), (b, _)| a.cmp(b));
+    paths.sort_by_key(|(path, _)| *path);
 
     let mut changes = Vec::new();
     for (path, &actual) in paths {

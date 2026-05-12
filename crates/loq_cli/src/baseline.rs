@@ -119,7 +119,7 @@ fn apply_baseline_changes(
         .iter()
         .filter(|(path, _)| !existing_rules.contains_key(*path))
         .collect();
-    new_violations.sort_by(|(a, _), (b, _)| a.cmp(b));
+    new_violations.sort_by_key(|(path, _)| *path);
 
     for (path, &actual) in new_violations {
         add_rule(doc, path, actual);
