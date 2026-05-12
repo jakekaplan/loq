@@ -16,7 +16,6 @@ use crate::output::{
     change_style, max_formatted_width, print_error, write_change_row, ChangeKind, ChangeRow,
 };
 use crate::ExitStatus;
-use loq_fs::normalize_display_path;
 
 struct RelaxReport {
     changes: Vec<ChangeRow>,
@@ -86,8 +85,7 @@ fn collect_violations(outcomes: &[loq_core::FileOutcome]) -> HashMap<String, usi
     let mut violations = HashMap::new();
     for outcome in outcomes {
         if let loq_core::OutcomeKind::Violation { actual, .. } = outcome.kind {
-            let path = normalize_display_path(&outcome.display_path);
-            violations.insert(path, actual);
+            violations.insert(outcome.match_key.clone(), actual);
         }
     }
     violations
@@ -100,7 +98,7 @@ fn apply_relax_changes(
     buffer: usize,
 ) -> Vec<ChangeRow> {
     let mut paths: Vec<_> = violations.iter().collect();
-    paths.sort_by(|(a, _), (b, _)| a.cmp(b));
+    paths.sort_by_key(|(path, _)| *path);
 
     let mut changes = Vec::new();
     for (path, &actual) in paths {
@@ -169,11 +167,12 @@ mod tests {
     use toml_edit::Item;
 
     #[test]
-    fn collect_violations_filters_and_normalizes() {
+    fn collect_violations_uses_match_key() {
         let outcomes = vec![
             loq_core::FileOutcome {
                 path: PathBuf::from("/tmp/a"),
                 display_path: "./src/a.rs".into(),
+                match_key: "src/a.rs".into(),
                 config_source: ConfigOrigin::BuiltIn,
                 kind: OutcomeKind::Violation {
                     limit: 10,
@@ -184,6 +183,7 @@ mod tests {
             loq_core::FileOutcome {
                 path: PathBuf::from("/tmp/b"),
                 display_path: "src/b.rs".into(),
+                match_key: "src/b.rs".into(),
                 config_source: ConfigOrigin::BuiltIn,
                 kind: OutcomeKind::Pass {
                     limit: 10,

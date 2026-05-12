@@ -12,6 +12,8 @@ pub struct FileOutcome {
     pub path: std::path::PathBuf,
     /// Path relative to working directory for display.
     pub display_path: String,
+    /// Path relative to config root for rule matching and managed exact-path rules.
+    pub match_key: String,
     /// Which config was used for this file.
     pub config_source: ConfigOrigin,
     /// What happened when checking the file.
@@ -251,6 +253,7 @@ mod tests {
             FileOutcome {
                 path: "a".into(),
                 display_path: "a".into(),
+                match_key: "a".into(),
                 config_source: ConfigOrigin::BuiltIn,
                 kind: OutcomeKind::Pass {
                     limit: 10,
@@ -261,6 +264,7 @@ mod tests {
             FileOutcome {
                 path: "b".into(),
                 display_path: "b".into(),
+                match_key: "b".into(),
                 config_source: ConfigOrigin::BuiltIn,
                 kind: OutcomeKind::Violation {
                     limit: 10,
@@ -271,6 +275,7 @@ mod tests {
             FileOutcome {
                 path: "c".into(),
                 display_path: "c".into(),
+                match_key: "c".into(),
                 config_source: ConfigOrigin::BuiltIn,
                 kind: OutcomeKind::Violation {
                     limit: 10,
@@ -281,18 +286,21 @@ mod tests {
             FileOutcome {
                 path: "d".into(),
                 display_path: "d".into(),
+                match_key: "d".into(),
                 config_source: ConfigOrigin::BuiltIn,
                 kind: OutcomeKind::Missing,
             },
             FileOutcome {
                 path: "e".into(),
                 display_path: "e".into(),
+                match_key: "e".into(),
                 config_source: ConfigOrigin::BuiltIn,
                 kind: OutcomeKind::Binary,
             },
             FileOutcome {
                 path: "f".into(),
                 display_path: "f".into(),
+                match_key: "f".into(),
                 config_source: ConfigOrigin::BuiltIn,
                 kind: OutcomeKind::Unreadable {
                     error: "denied".into(),
@@ -349,6 +357,7 @@ mod tests {
         let outcomes = vec![FileOutcome {
             path: "nolimit.js".into(),
             display_path: "nolimit.js".into(),
+            match_key: "nolimit.js".into(),
             config_source: ConfigOrigin::BuiltIn,
             kind: OutcomeKind::NoLimit,
         }];
@@ -366,6 +375,7 @@ mod tests {
         let outcomes = vec![FileOutcome {
             path: "big.rs".into(),
             display_path: "big.rs".into(),
+            match_key: "big.rs".into(),
             config_source: ConfigOrigin::BuiltIn,
             kind: OutcomeKind::Violation {
                 limit: 100,
@@ -388,6 +398,7 @@ mod tests {
         let outcomes = vec![FileOutcome {
             path: "small.rs".into(),
             display_path: "small.rs".into(),
+            match_key: "small.rs".into(),
             config_source: ConfigOrigin::BuiltIn,
             kind: OutcomeKind::Pass {
                 limit: 100,

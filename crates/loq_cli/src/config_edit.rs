@@ -5,7 +5,7 @@ use std::path::Path;
 
 use anyhow::{Context, Result};
 use loq_core::config::{DEFAULT_MAX_LINES, DEFAULT_RESPECT_GITIGNORE};
-use loq_fs::normalize_display_path;
+use loq_fs::path_identity::normalize_key;
 use toml_edit::{DocumentMut, Item, Table};
 
 use crate::init::add_to_gitignore;
@@ -93,7 +93,7 @@ pub(crate) fn collect_exact_path_rules(doc: &DocumentMut) -> HashMap<String, (us
                 if paths.len() == 1 && is_exact_path(&paths[0]) {
                     if let Some(max_lines) = rule.get("max_lines").and_then(Item::as_integer) {
                         let unescaped = unescape_glob(&paths[0]);
-                        let normalized = normalize_display_path(&unescaped);
+                        let normalized = normalize_key(&unescaped);
                         rules.insert(normalized, (max_lines as usize, idx));
                     }
                 }
@@ -256,9 +256,9 @@ mod tests {
     }
 
     #[test]
-    fn normalize_display_path_strips_dot_slash() {
-        assert_eq!(normalize_display_path("./src/main.rs"), "src/main.rs");
-        assert_eq!(normalize_display_path("src/main.rs"), "src/main.rs");
+    fn normalize_key_strips_dot_slash() {
+        assert_eq!(normalize_key("./src/main.rs"), "src/main.rs");
+        assert_eq!(normalize_key("src/main.rs"), "src/main.rs");
     }
 
     #[test]

@@ -9,8 +9,11 @@
 mod cache;
 pub mod count;
 pub mod discover;
+pub mod path_identity;
 pub mod stdin;
 pub mod walk;
+
+pub use path_identity::PathIdentity;
 
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
@@ -121,6 +124,7 @@ pub fn run_check(paths: Vec<PathBuf>, options: CheckOptions) -> Result<CheckOutp
     let walk_options = walk::WalkOptions {
         respect_gitignore: compiled.respect_gitignore,
         exclude: compiled.exclude_patterns(),
+        cwd: &cwd_abs,
         root_dir: &compiled.root_dir,
     };
     let walk_result = walk::expand_paths(&paths, &walk_options);
@@ -146,23 +150,6 @@ pub fn run_check(paths: Vec<PathBuf>, options: CheckOptions) -> Result<CheckOutp
     })
 }
 
-/// Normalizes a path string for display and matching.
-///
-/// - Converts backslashes to forward slashes (Windows)
-/// - Strips leading `./` prefix (walker returns `./foo` when started from `.`)
-#[must_use]
-pub fn normalize_display_path(path: &str) -> String {
-    #[cfg(windows)]
-    {
-        let path = path.replace('\\', "/");
-        path.strip_prefix("./").unwrap_or(&path).to_string()
-    }
-    #[cfg(not(windows))]
-    {
-        path.strip_prefix("./").unwrap_or(path).to_string()
-    }
-}
-
 fn check_group(
     paths: &[PathBuf],
     compiled: &CompiledConfig,
@@ -181,28 +168,21 @@ fn check_file(
     cwd_abs: &Path,
     file_cache: &Mutex<cache::Cache>,
 ) -> FileOutcome {
-    // Canonicalize to get absolute path for consistent matching.
-    // Falls back to joining with cwd for non-existent files.
-    let abs_path = path.canonicalize().unwrap_or_else(|_| cwd_abs.join(path));
-
-    let display_path = normalize_path(
-        &pathdiff::diff_paths(&abs_path, cwd_abs).unwrap_or_else(|| abs_path.clone()),
-    );
+    let identity = PathIdentity::new(path, cwd_abs, &compiled.root_dir);
     let config_source = compiled.origin.clone();
 
     let make_outcome = |kind| FileOutcome {
-        path: abs_path.clone(),
-        display_path: display_path.clone(),
+        path: identity.absolute.clone(),
+        display_path: identity.display.clone(),
+        match_key: identity.match_key.clone(),
         config_source: config_source.clone(),
         kind,
     };
 
-    let relative_path = relative_path_for_match(&abs_path, &compiled.root_dir);
-
-    let kind = match decide(compiled, &relative_path) {
+    let kind = match decide(compiled, &identity.match_key) {
         Decision::SkipNoLimit => OutcomeKind::NoLimit,
         Decision::Check { limit, matched_by } => {
-            check_file_lines(path, &relative_path, limit, matched_by, file_cache)
+            check_file_lines(path, &identity.cache_key, limit, matched_by, file_cache)
         }
     };
 
@@ -306,77 +286,6 @@ const fn outcome_for_lines(
             matched_by,
         }
     }
-}
-
-/// Computes a path relative to root, normalized to forward slashes.
-///
-/// Falls back to the original path if it cannot be made relative.
-pub(crate) fn relative_path_for_match(path: &Path, root: &Path) -> String {
-    let relative = {
-        #[cfg(windows)]
-        {
-            relative_path_windows(path, root).unwrap_or_else(|| path.to_path_buf())
-        }
-        #[cfg(not(windows))]
-        {
-            pathdiff::diff_paths(path, root).unwrap_or_else(|| path.to_path_buf())
-        }
-    };
-    normalize_path(&relative)
-}
-
-#[cfg(windows)]
-fn relative_path_windows(path: &Path, root: &Path) -> Option<PathBuf> {
-    if let (Ok(path), Ok(root)) = (path.canonicalize(), root.canonicalize()) {
-        let path = strip_verbatim_prefix(&path);
-        let root = strip_verbatim_prefix(&root);
-        if let Ok(relative) = path.strip_prefix(&root) {
-            return Some(relative.to_path_buf());
-        }
-        if let Some(relative) = pathdiff::diff_paths(&path, &root) {
-            return Some(relative);
-        }
-    }
-
-    let stripped_path = strip_verbatim_prefix(path);
-    let stripped_root = strip_verbatim_prefix(root);
-    if let Ok(relative) = stripped_path.strip_prefix(&stripped_root) {
-        return Some(relative.to_path_buf());
-    }
-
-    pathdiff::diff_paths(&stripped_path, &stripped_root)
-}
-
-/// Strip Windows verbatim prefixes (\\?\ / \\?\UNC\) for consistent diffing.
-#[cfg(windows)]
-fn strip_verbatim_prefix(path: &Path) -> PathBuf {
-    let s = path.to_string_lossy();
-    if let Some(rest) = s.strip_prefix(r"\\?\UNC\") {
-        let mut out = String::from(r"\\");
-        out.push_str(rest);
-        PathBuf::from(out)
-    } else if let Some(rest) = s.strip_prefix(r"\\?\") {
-        PathBuf::from(rest)
-    } else {
-        path.to_path_buf()
-    }
-}
-
-/// Normalizes a path for pattern matching.
-///
-/// - Converts backslashes to forward slashes (Windows)
-/// - Strips leading `./` prefix (walker returns `./foo` when started from `.`)
-#[cfg(windows)]
-fn normalize_path(path: &Path) -> String {
-    normalize_display_path(path.to_string_lossy().as_ref())
-}
-
-/// Normalizes a path for pattern matching.
-///
-/// Strips leading `./` prefix (walker returns `./foo` when started from `.`).
-#[cfg(not(windows))]
-fn normalize_path(path: &Path) -> String {
-    normalize_display_path(path.to_string_lossy().as_ref())
 }
 
 #[cfg(test)]
