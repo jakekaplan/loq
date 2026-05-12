@@ -24,6 +24,7 @@ fn handle_check_output_default_mode_skips_skip_warnings() {
         outcomes: vec![FileOutcome {
             path: "missing.txt".into(),
             display_path: "missing.txt".into(),
+            match_key: "missing.txt".into(),
             config_source: ConfigOrigin::BuiltIn,
             kind: OutcomeKind::Missing,
         }],
@@ -49,6 +50,7 @@ fn handle_check_output_verbose_mode_shows_skip_warnings() {
         outcomes: vec![FileOutcome {
             path: "missing.txt".into(),
             display_path: "missing.txt".into(),
+            match_key: "missing.txt".into(),
             config_source: ConfigOrigin::BuiltIn,
             kind: OutcomeKind::Missing,
         }],
@@ -96,6 +98,7 @@ fn handle_check_output_json_format() {
             FileOutcome {
                 path: "big.rs".into(),
                 display_path: "big.rs".into(),
+                match_key: "big.rs".into(),
                 config_source: ConfigOrigin::BuiltIn,
                 kind: OutcomeKind::Violation {
                     limit: 100,
@@ -106,6 +109,7 @@ fn handle_check_output_json_format() {
             FileOutcome {
                 path: "skipped.bin".into(),
                 display_path: "skipped.bin".into(),
+                match_key: "skipped.bin".into(),
                 config_source: ConfigOrigin::BuiltIn,
                 kind: OutcomeKind::Binary,
             },

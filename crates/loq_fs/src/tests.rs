@@ -302,6 +302,36 @@ fn explicit_files_bypass_gitignore_even_with_negation() {
 }
 
 #[test]
+fn subdir_check_uses_config_root_match_key() {
+    let temp = TempDir::new().unwrap();
+    write_file(
+        &temp,
+        "loq.toml",
+        "default_max_lines = 500\n[[rules]]\npath = \"src/big.rs\"\nmax_lines = 1\n",
+    );
+    let file = write_file(&temp, "src/big.rs", "a\nb\n");
+    let cwd = temp.path().join("subdir");
+    std::fs::create_dir(&cwd).unwrap();
+
+    let output = run_check(
+        vec![file],
+        CheckOptions {
+            config_path: Some(temp.path().join("loq.toml")),
+            cwd,
+            use_cache: false,
+        },
+    )
+    .unwrap();
+
+    assert_eq!(output.outcomes[0].display_path, "../src/big.rs");
+    assert_eq!(output.outcomes[0].match_key, "src/big.rs");
+    match &output.outcomes[0].kind {
+        OutcomeKind::Violation { limit, .. } => assert_eq!(*limit, 1),
+        other => panic!("expected Violation, got {other:?}"),
+    }
+}
+
+#[test]
 fn missing_config_file_returns_error() {
     let temp = TempDir::new().unwrap();
     let file = write_file(&temp, "test.txt", "content\n");
@@ -363,22 +393,13 @@ fn exclude_pattern_with_globstar() {
 }
 
 #[test]
-fn normalize_path_strips_leading_dot_slash() {
-    // Verify normalize_path strips "./" prefix - key fix for exclude patterns
-    assert_eq!(normalize_path(Path::new("./foo/bar")), "foo/bar");
+fn normalize_key_strips_leading_dot_slash() {
+    // Verify normalize_key strips "./" prefix - key fix for exclude patterns
+    assert_eq!(path_identity::normalize_key("./foo/bar"), "foo/bar");
     assert_eq!(
-        normalize_path(Path::new("./.git/logs/HEAD")),
+        path_identity::normalize_key("./.git/logs/HEAD"),
         ".git/logs/HEAD"
     );
-    assert_eq!(normalize_path(Path::new("foo/bar")), "foo/bar");
-    assert_eq!(normalize_path(Path::new(".")), ".");
-}
-
-#[cfg(windows)]
-#[test]
-fn relative_path_handles_verbatim_root() {
-    let path = Path::new(r"C:\repo\project\generated\big.txt");
-    let root = Path::new(r"\\?\C:\repo\project");
-    let relative = relative_path_for_match(path, root);
-    assert_eq!(relative, "generated/big.txt");
+    assert_eq!(path_identity::normalize_key("foo/bar"), "foo/bar");
+    assert_eq!(path_identity::normalize_key("."), ".");
 }

@@ -138,12 +138,14 @@ mod tests {
             FileOutcome {
                 path: "a.rs".into(),
                 display_path: "a.rs".into(),
+                match_key: "a.rs".into(),
                 config_source: ConfigOrigin::BuiltIn,
                 kind: OutcomeKind::NoLimit,
             },
             FileOutcome {
                 path: "b.rs".into(),
                 display_path: "b.rs".into(),
+                match_key: "b.rs".into(),
                 config_source: ConfigOrigin::BuiltIn,
                 kind: OutcomeKind::Pass {
                     limit: 100,
@@ -154,6 +156,7 @@ mod tests {
             FileOutcome {
                 path: "c.rs".into(),
                 display_path: "c.rs".into(),
+                match_key: "c.rs".into(),
                 config_source: ConfigOrigin::BuiltIn,
                 kind: OutcomeKind::Violation {
                     limit: 100,
@@ -177,6 +180,7 @@ mod tests {
         let outcomes = vec![FileOutcome {
             path: "missing.rs".into(),
             display_path: "missing.rs".into(),
+            match_key: "missing.rs".into(),
             config_source: ConfigOrigin::BuiltIn,
             kind: OutcomeKind::Missing,
         }];
@@ -195,6 +199,7 @@ mod tests {
         let outcomes = vec![FileOutcome {
             path: "locked.rs".into(),
             display_path: "locked.rs".into(),
+            match_key: "locked.rs".into(),
             config_source: ConfigOrigin::BuiltIn,
             kind: OutcomeKind::Unreadable {
                 error: "permission denied".into(),
@@ -215,6 +220,7 @@ mod tests {
         let outcomes = vec![FileOutcome {
             path: "image.png".into(),
             display_path: "image.png".into(),
+            match_key: "image.png".into(),
             config_source: ConfigOrigin::BuiltIn,
             kind: OutcomeKind::Binary,
         }];
@@ -233,6 +239,7 @@ mod tests {
         let outcomes = vec![FileOutcome {
             path: "big.rs".into(),
             display_path: "big.rs".into(),
+            match_key: "big.rs".into(),
             config_source: ConfigOrigin::BuiltIn,
             kind: OutcomeKind::Violation {
                 limit: 100,
@@ -257,6 +264,7 @@ mod tests {
         let outcomes = vec![FileOutcome {
             path: "big.rs".into(),
             display_path: "big.rs".into(),
+            match_key: "big.rs".into(),
             config_source: ConfigOrigin::BuiltIn,
             kind: OutcomeKind::Violation {
                 limit: 100,
@@ -298,6 +306,7 @@ mod tests {
         let outcomes = vec![FileOutcome {
             path: "big.rs".into(),
             display_path: "big.rs".into(),
+            match_key: "big.rs".into(),
             config_source: ConfigOrigin::BuiltIn,
             kind: OutcomeKind::Violation {
                 limit: 100,
@@ -317,6 +326,7 @@ mod tests {
         let outcomes = vec![FileOutcome {
             path: "small.rs".into(),
             display_path: "small.rs".into(),
+            match_key: "small.rs".into(),
             config_source: ConfigOrigin::BuiltIn,
             kind: OutcomeKind::Pass {
                 limit: 100,
@@ -337,6 +347,7 @@ mod tests {
             FileOutcome {
                 path: "z.rs".into(),
                 display_path: "z.rs".into(),
+                match_key: "z.rs".into(),
                 config_source: ConfigOrigin::BuiltIn,
                 kind: OutcomeKind::Violation {
                     limit: 100,
@@ -347,6 +358,7 @@ mod tests {
             FileOutcome {
                 path: "a.rs".into(),
                 display_path: "a.rs".into(),
+                match_key: "a.rs".into(),
                 config_source: ConfigOrigin::BuiltIn,
                 kind: OutcomeKind::Violation {
                     limit: 100,

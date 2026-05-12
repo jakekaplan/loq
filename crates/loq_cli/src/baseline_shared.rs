@@ -9,7 +9,6 @@ use loq_fs::CheckOptions;
 use toml_edit::{DocumentMut, Item};
 
 use crate::config_edit::{extract_paths, is_exact_path};
-use loq_fs::normalize_display_path;
 
 /// Find all files that violate the given threshold.
 pub(crate) fn scan_violations_with_threshold(
@@ -42,8 +41,7 @@ pub(crate) fn scan_violations_with_threshold(
         }
 
         if let loq_core::OutcomeKind::Violation { actual, .. } = outcome.kind {
-            let path = normalize_display_path(&outcome.display_path);
-            violations.insert(path, actual);
+            violations.insert(outcome.match_key, actual);
         }
     }
 

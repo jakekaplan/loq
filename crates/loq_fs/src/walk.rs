@@ -11,7 +11,7 @@ use ignore::WalkBuilder;
 use loq_core::PatternList;
 use thiserror::Error;
 
-use crate::relative_path_for_match;
+use crate::PathIdentity;
 
 /// Files/directories that are always excluded regardless of configuration.
 const HARDCODED_EXCLUDES: &[&str] = &[".loq_cache", "loq.toml"];
@@ -45,7 +45,9 @@ pub struct WalkOptions<'a> {
     pub respect_gitignore: bool,
     /// Exclude patterns from config.
     pub exclude: &'a PatternList,
-    /// Root directory for relative path matching.
+    /// Canonical working directory for resolving relative paths.
+    pub cwd: &'a Path,
+    /// Canonical root directory for relative path matching.
     pub root_dir: &'a Path,
 }
 
@@ -92,11 +94,8 @@ pub fn expand_paths(paths: &[PathBuf], options: &WalkOptions) -> WalkResult {
 ///
 /// Explicit paths bypass gitignore (following ruff's model: if you name a file, you want it checked).
 fn should_skip_explicit_path(path: &Path, options: &WalkOptions) -> bool {
-    is_hardcoded_exclude(path)
-        || options
-            .exclude
-            .matches(&relative_path_for_match(path, options.root_dir))
-            .is_some()
+    let identity = PathIdentity::new(path, options.cwd, options.root_dir);
+    is_hardcoded_exclude(path) || options.exclude.matches(&identity.match_key).is_some()
 }
 
 fn walk_directory(path: &PathBuf, options: &WalkOptions) -> WalkResult {
@@ -153,8 +152,8 @@ fn walk_directory(path: &PathBuf, options: &WalkOptions) -> WalkResult {
     let paths: Vec<PathBuf> = path_rx
         .into_iter()
         .filter(|p| {
-            let relative_path = relative_path_for_match(p, options.root_dir);
-            options.exclude.matches(&relative_path).is_none()
+            let identity = PathIdentity::new(p, options.cwd, options.root_dir);
+            options.exclude.matches(&identity.match_key).is_none()
         })
         .collect();
 
