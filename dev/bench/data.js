@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1778613539331,
+  "lastUpdate": 1778616916410,
   "repoUrl": "https://github.com/jakekaplan/loq",
   "entries": {
     "Benchmark": [
@@ -1390,6 +1390,54 @@ window.BENCHMARK_DATA = {
           {
             "name": "ruff",
             "value": 0.00090529332,
+            "range": "± 0",
+            "unit": "seconds"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "40362401+jakekaplan@users.noreply.github.com",
+            "name": "Jake Kaplan",
+            "username": "jakekaplan"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "f3d2d966c94cfb8f2a79d6377b2cf960df01525d",
+          "message": "Merge pull request #56 from jakekaplan/refactor/exact-limits\n\nCentralize exact-path limit editing",
+          "timestamp": "2026-05-12T16:14:12-04:00",
+          "tree_id": "d7a495a8272759550f3987490af80c762f00c99e",
+          "url": "https://github.com/jakekaplan/loq/commit/f3d2d966c94cfb8f2a79d6377b2cf960df01525d"
+        },
+        "date": 1778616915491,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "cpython",
+            "value": 0.0007196639400000002,
+            "range": "± 0",
+            "unit": "seconds"
+          },
+          {
+            "name": "airflow",
+            "value": 0.0006881343400000001,
+            "range": "± 0",
+            "unit": "seconds"
+          },
+          {
+            "name": "prefect",
+            "value": 0.0007209241400000002,
+            "range": "± 0.0001",
+            "unit": "seconds"
+          },
+          {
+            "name": "ruff",
+            "value": 0.0006944438400000002,
             "range": "± 0",
             "unit": "seconds"
           }
