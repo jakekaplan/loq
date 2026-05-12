@@ -50,7 +50,7 @@ fn expands_directory() {
         cwd: &root,
         root_dir: &root,
     };
-    let result = expand_paths(&[root.clone()], &options);
+    let result = expand_paths(std::slice::from_ref(&root), &options);
     assert_eq!(result.paths.len(), 2);
 }
 
@@ -146,7 +146,7 @@ fn exclude_pattern_filters_walked_files() {
         cwd: &root,
         root_dir: &root,
     };
-    let result = expand_paths(&[root.clone()], &options);
+    let result = expand_paths(std::slice::from_ref(&root), &options);
     assert_eq!(result.paths.len(), 1);
     assert!(result.paths.iter().any(|p| p.ends_with("keep.rs")));
     assert!(!result.paths.iter().any(|p| p.ends_with("skip.txt")));
@@ -200,7 +200,7 @@ fn walk_errors_are_reported_for_unreadable_dirs() {
         cwd: &root,
         root_dir: &root,
     };
-    let result = expand_paths(&[root.clone()], &options);
+    let result = expand_paths(std::slice::from_ref(&root), &options);
 
     assert!(
         !result.errors.is_empty(),
@@ -225,7 +225,7 @@ fn exclude_dotdir_pattern_without_leading_globstar() {
         cwd: &root,
         root_dir: &root,
     };
-    let result = expand_paths(&[root.clone()], &options);
+    let result = expand_paths(std::slice::from_ref(&root), &options);
     assert_eq!(result.paths.len(), 1, "got: {:?}", result.paths);
     assert!(result.paths.iter().any(|p| p.ends_with("keep.rs")));
     assert!(!result
@@ -251,7 +251,7 @@ fn symlink_to_file_not_followed_by_default() {
         cwd: &root,
         root_dir: &root,
     };
-    let result = expand_paths(&[root.clone()], &options);
+    let result = expand_paths(std::slice::from_ref(&root), &options);
 
     // Real file is included
     assert!(result.paths.iter().any(|p| p.ends_with("real.txt")));
@@ -279,7 +279,7 @@ fn symlink_to_parent_dir_does_not_loop() {
         root_dir: &root,
     };
     // This should complete without hanging (ignore crate doesn't follow dir symlinks)
-    let result = expand_paths(&[root.clone()], &options);
+    let result = expand_paths(std::slice::from_ref(&root), &options);
 
     // Should find the file but not loop infinitely
     assert!(result.paths.iter().any(|p| p.ends_with("file.txt")));
@@ -301,7 +301,7 @@ fn hardcoded_excludes_filter_loq_cache_dir() {
         cwd: &root,
         root_dir: &root,
     };
-    let result = expand_paths(&[root.clone()], &options);
+    let result = expand_paths(std::slice::from_ref(&root), &options);
     assert_eq!(result.paths.len(), 1);
     assert!(result.paths.iter().any(|p| p.ends_with("keep.rs")));
     assert!(!result
@@ -324,7 +324,7 @@ fn hardcoded_excludes_filter_loq_toml() {
         cwd: &root,
         root_dir: &root,
     };
-    let result = expand_paths(&[root.clone()], &options);
+    let result = expand_paths(std::slice::from_ref(&root), &options);
     assert_eq!(result.paths.len(), 1);
     assert!(result.paths.iter().any(|p| p.ends_with("keep.rs")));
     assert!(!result.paths.iter().any(|p| p.ends_with("loq.toml")));
