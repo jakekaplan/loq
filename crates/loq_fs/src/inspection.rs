@@ -118,6 +118,8 @@ const fn outcome_for_lines(lines: usize, limit: usize, matched_by: MatchBy) -> O
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::panic::AssertUnwindSafe;
+    use std::time::SystemTime;
     use tempfile::NamedTempFile;
 
     #[test]
@@ -128,13 +130,14 @@ mod tests {
 
         let outcome = inspector.inspect(file.path(), "a.rs", 1, MatchBy::Default);
 
-        match outcome {
-            OutcomeKind::Violation { actual, limit, .. } => {
-                assert_eq!(actual, 2);
-                assert_eq!(limit, 1);
+        assert!(matches!(
+            outcome,
+            OutcomeKind::Violation {
+                actual: 2,
+                limit: 1,
+                ..
             }
-            other => panic!("expected violation, got {other:?}"),
-        }
+        ));
     }
 
     #[test]
@@ -155,5 +158,28 @@ mod tests {
         let outcome = inspector.inspect(Path::new("missing.rs"), "missing.rs", 1, MatchBy::Default);
 
         assert!(matches!(outcome, OutcomeKind::Missing));
+    }
+
+    #[test]
+    fn cache_result_ignores_missing_mtime() {
+        let inspector = Inspector::new(Cache::empty());
+
+        inspector.cache_result("a.rs", None, CachedResult::Text(1));
+
+        let cache = inspector.into_cache().unwrap();
+        assert!(cache.get("a.rs", SystemTime::UNIX_EPOCH).is_none());
+    }
+
+    #[test]
+    fn cache_result_ignores_poisoned_cache_lock() {
+        let inspector = Inspector::new(Cache::empty());
+        let result = std::panic::catch_unwind(AssertUnwindSafe(|| {
+            let _guard = inspector.cache.lock().unwrap();
+            panic!("poison cache");
+        }));
+
+        assert!(result.is_err());
+        inspector.cache_result("a.rs", Some(SystemTime::UNIX_EPOCH), CachedResult::Text(1));
+        assert!(inspector.into_cache().is_none());
     }
 }
