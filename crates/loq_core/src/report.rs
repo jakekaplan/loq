@@ -4,6 +4,7 @@
 
 use crate::config::ConfigOrigin;
 use crate::decide::MatchBy;
+use crate::Limit;
 
 /// The result of checking a single file.
 #[derive(Debug, Clone)]
@@ -36,8 +37,8 @@ pub enum OutcomeKind {
     Binary,
     /// File exceeds its line limit.
     Violation {
-        /// The configured limit.
-        limit: usize,
+        /// The configured budget.
+        limit: Limit,
         /// Actual line count.
         actual: usize,
         /// How the limit was determined.
@@ -45,8 +46,8 @@ pub enum OutcomeKind {
     },
     /// File is within its line limit.
     Pass {
-        /// The configured limit.
-        limit: usize,
+        /// The configured budget.
+        limit: Limit,
         /// Actual line count.
         actual: usize,
         /// How the limit was determined.
@@ -70,8 +71,8 @@ pub enum SkipReason {
 pub enum FindingKind {
     /// File exceeded its line limit.
     Violation {
-        /// The configured limit.
-        limit: usize,
+        /// The configured budget.
+        limit: Limit,
         /// Actual line count.
         actual: usize,
         /// How many lines over the limit.
@@ -196,11 +197,11 @@ fn push_skip_warning(findings: &mut Vec<Finding>, outcome: &FileOutcome, reason:
 fn push_violation(
     findings: &mut Vec<Finding>,
     outcome: &FileOutcome,
-    limit: usize,
+    limit: Limit,
     actual: usize,
     matched_by: MatchBy,
 ) {
-    let over_by = actual.saturating_sub(limit);
+    let over_by = actual.saturating_sub(limit.max);
     findings.push(Finding {
         path: outcome.display_path.clone(),
         config_source: outcome.config_source.clone(),
@@ -246,6 +247,7 @@ const fn finding_rank(kind: &FindingKind) -> u8 {
 mod tests {
     use super::*;
     use crate::config::ConfigOrigin;
+    use crate::Limit;
 
     #[test]
     fn summary_counts_each_file_once() {
@@ -256,7 +258,7 @@ mod tests {
                 match_key: "a".into(),
                 config_source: ConfigOrigin::BuiltIn,
                 kind: OutcomeKind::Pass {
-                    limit: 10,
+                    limit: Limit::lines(10),
                     actual: 5,
                     matched_by: MatchBy::Default,
                 },
@@ -267,7 +269,7 @@ mod tests {
                 match_key: "b".into(),
                 config_source: ConfigOrigin::BuiltIn,
                 kind: OutcomeKind::Violation {
-                    limit: 10,
+                    limit: Limit::lines(10),
                     actual: 20,
                     matched_by: MatchBy::Default,
                 },
@@ -278,7 +280,7 @@ mod tests {
                 match_key: "c".into(),
                 config_source: ConfigOrigin::BuiltIn,
                 kind: OutcomeKind::Violation {
-                    limit: 10,
+                    limit: Limit::lines(10),
                     actual: 12,
                     matched_by: MatchBy::Default,
                 },
@@ -321,7 +323,7 @@ mod tests {
                 path: "b".into(),
                 config_source: ConfigOrigin::BuiltIn,
                 kind: FindingKind::Violation {
-                    limit: 10,
+                    limit: Limit::lines(10),
                     actual: 12,
                     over_by: 2,
                     matched_by: MatchBy::Default,
@@ -331,7 +333,7 @@ mod tests {
                 path: "a".into(),
                 config_source: ConfigOrigin::BuiltIn,
                 kind: FindingKind::Violation {
-                    limit: 10,
+                    limit: Limit::lines(10),
                     actual: 20,
                     over_by: 10,
                     matched_by: MatchBy::Default,
@@ -378,7 +380,7 @@ mod tests {
             match_key: "big.rs".into(),
             config_source: ConfigOrigin::BuiltIn,
             kind: OutcomeKind::Violation {
-                limit: 100,
+                limit: Limit::lines(100),
                 actual: 150,
                 matched_by: MatchBy::Default,
             },
@@ -401,7 +403,7 @@ mod tests {
             match_key: "small.rs".into(),
             config_source: ConfigOrigin::BuiltIn,
             kind: OutcomeKind::Pass {
-                limit: 100,
+                limit: Limit::lines(100),
                 actual: 50,
                 matched_by: MatchBy::Default,
             },

@@ -7,6 +7,7 @@
 //! at the walk layer, not here.
 
 use crate::config::CompiledConfig;
+use crate::Limit;
 
 /// How a file's limit was determined.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -25,8 +26,8 @@ pub enum MatchBy {
 pub enum Decision {
     /// File should be checked against a limit.
     Check {
-        /// Maximum allowed lines.
-        limit: usize,
+        /// Maximum allowed budget.
+        limit: Limit,
         /// How the limit was determined.
         matched_by: MatchBy,
     },
@@ -42,7 +43,7 @@ pub fn decide(config: &CompiledConfig, path: &str) -> Decision {
     for rule in config.rules().iter().rev() {
         if let Some(pattern) = rule.matches(path) {
             return Decision::Check {
-                limit: rule.max_lines,
+                limit: rule.limit,
                 matched_by: MatchBy::Rule {
                     pattern: pattern.to_string(),
                 },
@@ -50,9 +51,9 @@ pub fn decide(config: &CompiledConfig, path: &str) -> Decision {
         }
     }
 
-    if let Some(default_max) = config.default_max_lines {
+    if let Some(default_limit) = config.default_limit {
         Decision::Check {
-            limit: default_max,
+            limit: default_limit,
             matched_by: MatchBy::Default,
         }
     } else {
@@ -79,11 +80,13 @@ mod tests {
             rules: vec![
                 Rule {
                     path: vec!["**/*.rs".to_string()],
-                    max_lines: 100,
+                    max_lines: Some(100),
+                    max_tokens: None,
                 },
                 Rule {
                     path: vec!["**/*.rs".to_string()],
-                    max_lines: 200,
+                    max_lines: Some(200),
+                    max_tokens: None,
                 },
             ],
             fix_guidance: None,
@@ -91,7 +94,7 @@ mod tests {
         let decision = decide(&compiled(config), "src/main.rs");
         match decision {
             Decision::Check { limit, .. } => {
-                assert_eq!(limit, 200);
+                assert_eq!(limit, Limit::lines(200));
             }
             Decision::SkipNoLimit => panic!("expected check"),
         }
@@ -109,7 +112,7 @@ mod tests {
         let decision = decide(&compiled(config), "src/file.txt");
         match decision {
             Decision::Check { limit, matched_by } => {
-                assert_eq!(limit, 123);
+                assert_eq!(limit, Limit::lines(123));
                 assert_eq!(matched_by, MatchBy::Default);
             }
             Decision::SkipNoLimit => panic!("expected default"),
@@ -137,7 +140,8 @@ mod tests {
             exclude: vec![],
             rules: vec![Rule {
                 path: vec!["src/a.rs".to_string(), "src/b.rs".to_string()],
-                max_lines: 100,
+                max_lines: Some(100),
+                max_tokens: None,
             }],
             fix_guidance: None,
         };
@@ -147,7 +151,7 @@ mod tests {
         let decision_a = decide(&compiled, "src/a.rs");
         match decision_a {
             Decision::Check { limit, matched_by } => {
-                assert_eq!(limit, 100);
+                assert_eq!(limit, Limit::lines(100));
                 assert_eq!(
                     matched_by,
                     MatchBy::Rule {
@@ -176,7 +180,7 @@ mod tests {
         let decision_c = decide(&compiled, "src/c.rs");
         match decision_c {
             Decision::Check { limit, matched_by } => {
-                assert_eq!(limit, 500);
+                assert_eq!(limit, Limit::lines(500));
                 assert_eq!(matched_by, MatchBy::Default);
             }
             Decision::SkipNoLimit => panic!("expected default for c.rs"),

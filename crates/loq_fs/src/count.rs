@@ -22,6 +22,8 @@ pub enum FileInspection {
     Text {
         /// Number of lines (wc -l style: newline-terminated).
         lines: usize,
+        /// Number of bytes read from the file.
+        bytes: usize,
     },
 }
 
@@ -49,13 +51,14 @@ pub fn inspect_file(path: &Path) -> Result<FileInspection, CountError> {
     let mut buf = [0u8; BUF_SIZE];
     let mut read = file.read(&mut buf).map_err(CountError::Unreadable)?;
     if read == 0 {
-        return Ok(FileInspection::Text { lines: 0 });
+        return Ok(FileInspection::Text { lines: 0, bytes: 0 });
     }
 
     if memchr(0, &buf[..read]).is_some() {
         return Ok(FileInspection::Binary);
     }
 
+    let mut bytes = read;
     let mut newlines = memchr_iter(b'\n', &buf[..read]).count();
     let mut last_byte = buf[read - 1];
 
@@ -64,6 +67,7 @@ pub fn inspect_file(path: &Path) -> Result<FileInspection, CountError> {
         if read == 0 {
             break;
         }
+        bytes += read;
         newlines += memchr_iter(b'\n', &buf[..read]).count();
         last_byte = buf[read - 1];
     }
@@ -73,7 +77,7 @@ pub fn inspect_file(path: &Path) -> Result<FileInspection, CountError> {
         lines += 1;
     }
 
-    Ok(FileInspection::Text { lines })
+    Ok(FileInspection::Text { lines, bytes })
 }
 
 #[cfg(test)]
@@ -89,39 +93,46 @@ mod tests {
 
     use std::io::Write;
 
+    fn text_lines(result: FileInspection) -> usize {
+        match result {
+            FileInspection::Text { lines, .. } => lines,
+            FileInspection::Binary => panic!("expected text file"),
+        }
+    }
+
     #[test]
     fn count_empty_file() {
         let file = write_temp(b"");
         let result = inspect_file(file.path()).unwrap();
-        assert_eq!(result, FileInspection::Text { lines: 0 });
+        assert_eq!(text_lines(result), 0);
     }
 
     #[test]
     fn count_trailing_newline() {
         let file = write_temp(b"a\n");
         let result = inspect_file(file.path()).unwrap();
-        assert_eq!(result, FileInspection::Text { lines: 1 });
+        assert_eq!(text_lines(result), 1);
     }
 
     #[test]
     fn count_no_trailing_newline() {
         let file = write_temp(b"a");
         let result = inspect_file(file.path()).unwrap();
-        assert_eq!(result, FileInspection::Text { lines: 1 });
+        assert_eq!(text_lines(result), 1);
     }
 
     #[test]
     fn count_multiple_lines() {
         let file = write_temp(b"a\nb\n");
         let result = inspect_file(file.path()).unwrap();
-        assert_eq!(result, FileInspection::Text { lines: 2 });
+        assert_eq!(text_lines(result), 2);
     }
 
     #[test]
     fn count_multiple_lines_no_trailing_newline() {
         let file = write_temp(b"a\nb");
         let result = inspect_file(file.path()).unwrap();
-        assert_eq!(result, FileInspection::Text { lines: 2 });
+        assert_eq!(text_lines(result), 2);
     }
 
     #[test]
@@ -154,7 +165,7 @@ mod tests {
         }
         let file = write_temp(&content);
         let result = inspect_file(file.path()).unwrap();
-        assert_eq!(result, FileInspection::Text { lines: 1000 });
+        assert_eq!(text_lines(result), 1000);
     }
 
     #[test]
@@ -167,7 +178,7 @@ mod tests {
         content.extend_from_slice(b"final line without newline");
         let file = write_temp(&content);
         let result = inspect_file(file.path()).unwrap();
-        assert_eq!(result, FileInspection::Text { lines: 1000 });
+        assert_eq!(text_lines(result), 1000);
     }
 
     #[test]
@@ -181,7 +192,7 @@ mod tests {
         let file = write_temp(&content);
         let result = inspect_file(file.path()).unwrap();
         // This returns Text, not Binary - the null byte in chunk 2 is not detected
-        assert_eq!(result, FileInspection::Text { lines: 1 });
+        assert_eq!(text_lines(result), 1);
     }
 
     #[test]
@@ -189,7 +200,7 @@ mod tests {
         // Windows-style CRLF (\r\n) - we count \n only, so this is 3 lines
         let file = write_temp(b"line1\r\nline2\r\nline3\r\n");
         let result = inspect_file(file.path()).unwrap();
-        assert_eq!(result, FileInspection::Text { lines: 3 });
+        assert_eq!(text_lines(result), 3);
     }
 
     #[test]
@@ -197,7 +208,7 @@ mod tests {
         // Mix of \n and \r\n - we only count \n
         let file = write_temp(b"unix\nwindows\r\nmore unix\n");
         let result = inspect_file(file.path()).unwrap();
-        assert_eq!(result, FileInspection::Text { lines: 3 });
+        assert_eq!(text_lines(result), 3);
     }
 
     #[test]
@@ -206,6 +217,6 @@ mod tests {
         let file = write_temp(b"line1\rline2\rline3\r");
         let result = inspect_file(file.path()).unwrap();
         // No \n chars, but file doesn't end in \n, so we count 1 line
-        assert_eq!(result, FileInspection::Text { lines: 1 });
+        assert_eq!(text_lines(result), 1);
     }
 }

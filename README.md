@@ -96,6 +96,12 @@ fix_guidance = "Split large files: helpers → src/utils/, types → src/types/"
 [[rules]]
 path = "**/*.tsx"
 max_lines = 300
+
+# Agent-facing files can use approximate token budgets.
+# Tokens are estimated as bytes / 4, rounded up.
+[[rules]]
+path = "prompts/**/*.md"
+max_tokens = 8000
 ```
 
 ## Output options

@@ -40,8 +40,10 @@ pub(crate) fn scan_violations_with_threshold(
             continue;
         }
 
-        if let loq_core::OutcomeKind::Violation { actual, .. } = outcome.kind {
-            violations.insert(outcome.match_key, actual);
+        if let loq_core::OutcomeKind::Violation { actual, limit, .. } = outcome.kind {
+            if limit.metric == loq_core::Metric::Lines {
+                violations.insert(outcome.match_key, actual);
+            }
         }
     }
 
@@ -139,5 +141,26 @@ max_lines = 10
 
         assert_eq!(violations.len(), 1);
         assert_eq!(violations.get("violates.rs"), Some(&2));
+    }
+
+    #[test]
+    fn scan_violations_ignores_token_rules() {
+        let temp = TempDir::new().unwrap();
+        std::fs::write(temp.path().join("prompt.md"), "abcdefghijklmnopq\n").unwrap();
+        let doc: DocumentMut = r#"
+default_max_lines = 500
+
+[[rules]]
+path = "*.md"
+max_tokens = 4
+"#
+        .parse()
+        .unwrap();
+
+        let violations =
+            scan_violations_with_threshold(temp.path(), &doc, 1, "baseline scan should succeed")
+                .unwrap();
+
+        assert!(violations.is_empty());
     }
 }

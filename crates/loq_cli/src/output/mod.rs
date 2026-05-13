@@ -3,6 +3,7 @@ mod json;
 use std::io;
 
 use loq_core::report::{Finding, FindingKind, SkipReason, Summary};
+use loq_core::{Limit, Metric};
 use loq_fs::walk::WalkError;
 use termcolor::{Color, ColorSpec, WriteColor};
 
@@ -173,11 +174,16 @@ pub fn write_finding<W: WriteColor>(
         } => {
             // Format: ✖ 1,427 > 500  path/to/file.rs
             // Right-align actual within 6 chars (handles up to 99,999)
-            let actual_str = format_number(*actual);
-            let limit_str = format_number(*limit);
+            let actual_str = formatted_measurement(*actual, *limit);
+            let limit_str = format_number(limit.max);
             writer.set_color(&fg(color).set_bold(true).clone())?;
             write!(writer, "{actual_str:>6}")?;
             writer.reset()?;
+            if limit.metric == Metric::Tokens {
+                writer.set_color(&dimmed())?;
+                write!(writer, " tokens")?;
+                writer.reset()?;
+            }
             writer.set_color(&dimmed())?;
             write!(writer, " > ")?;
             writer.reset()?;
@@ -194,10 +200,10 @@ pub fn write_finding<W: WriteColor>(
                 writer.set_color(&dimmed())?;
                 let rule_str = match matched_by {
                     loq_core::MatchBy::Rule { pattern } => {
-                        format!("max-lines={limit} (match: {pattern})")
+                        format!("{}={} (match: {pattern})", limit_key(*limit), limit.max)
                     }
                     loq_core::MatchBy::Default => {
-                        format!("max-lines={limit} (default)")
+                        format!("{}={} (default)", limit_key(*limit), limit.max)
                     }
                 };
                 writeln!(writer, "                  └─ rule: {rule_str}")?;
@@ -246,6 +252,22 @@ pub fn format_number(n: usize) -> String {
         result.insert(0, c);
     }
     result
+}
+
+fn formatted_measurement(actual: usize, limit: Limit) -> String {
+    let value = format_number(actual);
+    if limit.is_approximate() {
+        format!("~{value}")
+    } else {
+        value
+    }
+}
+
+const fn limit_key(limit: Limit) -> &'static str {
+    match limit.metric {
+        Metric::Lines => "max-lines",
+        Metric::Tokens => "max-tokens",
+    }
 }
 
 pub fn write_block<W: WriteColor>(

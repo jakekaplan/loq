@@ -6,7 +6,7 @@
 use std::path::Path;
 use std::sync::Mutex;
 
-use loq_core::{MatchBy, OutcomeKind};
+use loq_core::{Limit, MatchBy, Metric, OutcomeKind};
 
 use crate::cache::{Cache, CachedResult};
 use crate::count::{self, FileInspection};
@@ -29,7 +29,7 @@ impl Inspector {
         &self,
         path: &Path,
         cache_key: &str,
-        limit: usize,
+        limit: Limit,
         matched_by: MatchBy,
     ) -> OutcomeKind {
         let mtime = std::fs::metadata(path).and_then(|m| m.modified()).ok();
@@ -43,9 +43,10 @@ impl Inspector {
                 self.cache_result(cache_key, mtime, CachedResult::Binary);
                 OutcomeKind::Binary
             }
-            Ok(FileInspection::Text { lines }) => {
-                self.cache_result(cache_key, mtime, CachedResult::Text(lines));
-                outcome_for_lines(lines, limit, matched_by)
+            Ok(FileInspection::Text { lines, bytes }) => {
+                let actual = measurement_for_limit(lines, bytes, limit);
+                self.cache_result(cache_key, mtime, CachedResult::Text(actual));
+                outcome_for_measurement(actual, limit, matched_by)
             }
             Err(count::CountError::Missing) => OutcomeKind::Missing,
             Err(count::CountError::Unreadable(error)) => OutcomeKind::Unreadable {
@@ -63,7 +64,7 @@ impl Inspector {
         &self,
         cache_key: &str,
         mtime: Option<std::time::SystemTime>,
-        limit: usize,
+        limit: Limit,
         matched_by: &MatchBy,
     ) -> Option<OutcomeKind> {
         let mt = mtime?;
@@ -90,26 +91,39 @@ impl Inspector {
 
 fn cached_result_to_outcome(
     result: CachedResult,
-    limit: usize,
+    limit: Limit,
     matched_by: MatchBy,
 ) -> OutcomeKind {
     match result {
-        CachedResult::Text(lines) => outcome_for_lines(lines, limit, matched_by),
+        CachedResult::Text(actual) => outcome_for_measurement(actual, limit, matched_by),
         CachedResult::Binary => OutcomeKind::Binary,
     }
 }
 
-const fn outcome_for_lines(lines: usize, limit: usize, matched_by: MatchBy) -> OutcomeKind {
-    if lines > limit {
+const fn measurement_for_limit(lines: usize, bytes: usize, limit: Limit) -> usize {
+    match limit.metric {
+        Metric::Lines => lines,
+        Metric::Tokens => {
+            if bytes % 4 == 0 {
+                bytes / 4
+            } else {
+                bytes / 4 + 1
+            }
+        }
+    }
+}
+
+const fn outcome_for_measurement(actual: usize, limit: Limit, matched_by: MatchBy) -> OutcomeKind {
+    if actual > limit.max {
         OutcomeKind::Violation {
             limit,
-            actual: lines,
+            actual,
             matched_by,
         }
     } else {
         OutcomeKind::Pass {
             limit,
-            actual: lines,
+            actual,
             matched_by,
         }
     }
@@ -128,16 +142,32 @@ mod tests {
         std::fs::write(file.path(), "a\nb\n").unwrap();
         let inspector = Inspector::new(Cache::empty());
 
-        let outcome = inspector.inspect(file.path(), "a.rs", 1, MatchBy::Default);
+        let outcome = inspector.inspect(file.path(), "a.rs", Limit::lines(1), MatchBy::Default);
 
-        assert!(matches!(
-            outcome,
-            OutcomeKind::Violation {
-                actual: 2,
-                limit: 1,
-                ..
+        match outcome {
+            OutcomeKind::Violation { actual, limit, .. } => {
+                assert_eq!(actual, 2);
+                assert_eq!(limit, Limit::lines(1));
             }
-        ));
+            other => panic!("expected violation, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn token_file_outcome_uses_ceil_bytes_over_four() {
+        let file = NamedTempFile::new().unwrap();
+        std::fs::write(file.path(), "12345").unwrap();
+        let inspector = Inspector::new(Cache::empty());
+
+        let outcome = inspector.inspect(file.path(), "a.md", Limit::tokens(1), MatchBy::Default);
+
+        match outcome {
+            OutcomeKind::Violation { actual, limit, .. } => {
+                assert_eq!(actual, 2);
+                assert_eq!(limit, Limit::tokens(1));
+            }
+            other => panic!("expected violation, got {other:?}"),
+        }
     }
 
     #[test]
@@ -146,7 +176,7 @@ mod tests {
         std::fs::write(file.path(), b"\0binary").unwrap();
         let inspector = Inspector::new(Cache::empty());
 
-        let outcome = inspector.inspect(file.path(), "bin.dat", 1, MatchBy::Default);
+        let outcome = inspector.inspect(file.path(), "bin.dat", Limit::lines(1), MatchBy::Default);
 
         assert!(matches!(outcome, OutcomeKind::Binary));
     }
@@ -155,7 +185,12 @@ mod tests {
     fn missing_file_is_not_cacheable() {
         let inspector = Inspector::new(Cache::empty());
 
-        let outcome = inspector.inspect(Path::new("missing.rs"), "missing.rs", 1, MatchBy::Default);
+        let outcome = inspector.inspect(
+            Path::new("missing.rs"),
+            "missing.rs",
+            Limit::lines(1),
+            MatchBy::Default,
+        );
 
         assert!(matches!(outcome, OutcomeKind::Missing));
     }

@@ -1,0 +1,7 @@
+---
+source: crates/loq_cli/tests/snapshots.rs
+expression: stdout
+---
+✖      3 > 2      code.rs
+✖     ~5 tokens > 4      prompt.md
+2 violations
