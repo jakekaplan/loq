@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1778616916410,
+  "lastUpdate": 1778636326261,
   "repoUrl": "https://github.com/jakekaplan/loq",
   "entries": {
     "Benchmark": [
@@ -1438,6 +1438,54 @@ window.BENCHMARK_DATA = {
           {
             "name": "ruff",
             "value": 0.0006944438400000002,
+            "range": "± 0",
+            "unit": "seconds"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "40362401+jakekaplan@users.noreply.github.com",
+            "name": "Jake Kaplan",
+            "username": "jakekaplan"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "bba64878eca5b8c853c40170f706ef8d4e8ec855",
+          "message": "Merge pull request #57 from jakekaplan/refactor/cached-inspection\n\nCentralize cached file inspection",
+          "timestamp": "2026-05-12T21:37:38-04:00",
+          "tree_id": "eb6861331f166498d4ceaeddbafb870017fa79f2",
+          "url": "https://github.com/jakekaplan/loq/commit/bba64878eca5b8c853c40170f706ef8d4e8ec855"
+        },
+        "date": 1778636325450,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "cpython",
+            "value": 0.00105088198,
+            "range": "± 0.0001",
+            "unit": "seconds"
+          },
+          {
+            "name": "airflow",
+            "value": 0.0010357445799999998,
+            "range": "± 0.0001",
+            "unit": "seconds"
+          },
+          {
+            "name": "prefect",
+            "value": 0.0009468488799999999,
+            "range": "± 0.0001",
+            "unit": "seconds"
+          },
+          {
+            "name": "ruff",
+            "value": 0.0009066698799999999,
             "range": "± 0",
             "unit": "seconds"
           }
