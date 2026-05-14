@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1778636326261,
+  "lastUpdate": 1778793551115,
   "repoUrl": "https://github.com/jakekaplan/loq",
   "entries": {
     "Benchmark": [
@@ -1486,6 +1486,54 @@ window.BENCHMARK_DATA = {
           {
             "name": "ruff",
             "value": 0.0009066698799999999,
+            "range": "± 0",
+            "unit": "seconds"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "40362401+jakekaplan@users.noreply.github.com",
+            "name": "Jake Kaplan",
+            "username": "jakekaplan"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "ab8000f0f9c003bc1f99ba355de1654cc904597d",
+          "message": "Merge pull request #58 from jakekaplan/codex/token-budgets\n\n[codex] Support approximate token budgets",
+          "timestamp": "2026-05-14T17:18:08-04:00",
+          "tree_id": "a8b1a44d136ceac680c14c37d73115d67a4edd4c",
+          "url": "https://github.com/jakekaplan/loq/commit/ab8000f0f9c003bc1f99ba355de1654cc904597d"
+        },
+        "date": 1778793550678,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "cpython",
+            "value": 0.00074064952,
+            "range": "± 0.0001",
+            "unit": "seconds"
+          },
+          {
+            "name": "airflow",
+            "value": 0.0007255155199999999,
+            "range": "± 0.0001",
+            "unit": "seconds"
+          },
+          {
+            "name": "prefect",
+            "value": 0.0007346414199999999,
+            "range": "± 0",
+            "unit": "seconds"
+          },
+          {
+            "name": "ruff",
+            "value": 0.00070197692,
             "range": "± 0",
             "unit": "seconds"
           }
