@@ -144,13 +144,17 @@ mod tests {
 
         let outcome = inspector.inspect(file.path(), "a.rs", Limit::lines(1), MatchBy::Default);
 
-        match outcome {
-            OutcomeKind::Violation { actual, limit, .. } => {
-                assert_eq!(actual, 2);
-                assert_eq!(limit, Limit::lines(1));
+        assert!(matches!(
+            outcome,
+            OutcomeKind::Violation {
+                actual: 2,
+                limit: Limit {
+                    metric: Metric::Lines,
+                    max: 1
+                },
+                ..
             }
-            other => panic!("expected violation, got {other:?}"),
-        }
+        ));
     }
 
     #[test]
@@ -161,13 +165,38 @@ mod tests {
 
         let outcome = inspector.inspect(file.path(), "a.md", Limit::tokens(1), MatchBy::Default);
 
-        match outcome {
-            OutcomeKind::Violation { actual, limit, .. } => {
-                assert_eq!(actual, 2);
-                assert_eq!(limit, Limit::tokens(1));
+        assert!(matches!(
+            outcome,
+            OutcomeKind::Violation {
+                actual: 2,
+                limit: Limit {
+                    metric: Metric::Tokens,
+                    max: 1
+                },
+                ..
             }
-            other => panic!("expected violation, got {other:?}"),
-        }
+        ));
+    }
+
+    #[test]
+    fn token_file_outcome_handles_even_four_byte_chunks() {
+        let file = NamedTempFile::new().unwrap();
+        std::fs::write(file.path(), "1234").unwrap();
+        let inspector = Inspector::new(Cache::empty());
+
+        let outcome = inspector.inspect(file.path(), "a.md", Limit::tokens(1), MatchBy::Default);
+
+        assert!(matches!(
+            outcome,
+            OutcomeKind::Pass {
+                actual: 1,
+                limit: Limit {
+                    metric: Metric::Tokens,
+                    max: 1
+                },
+                ..
+            }
+        ));
     }
 
     #[test]

@@ -115,6 +115,27 @@ fn write_finding_token_violation_marks_approximate_unit() {
 }
 
 #[test]
+fn write_finding_token_violation_verbose_shows_token_rule() {
+    let finding = Finding {
+        path: "prompts/build.md".into(),
+        config_source: ConfigOrigin::BuiltIn,
+        kind: FindingKind::Violation {
+            limit: loq_core::Limit::tokens(4),
+            actual: 5,
+            over_by: 1,
+            matched_by: MatchBy::Rule {
+                pattern: "prompts/**/*.md".into(),
+            },
+        },
+    };
+
+    let out = output_string(|w| write_finding(w, &finding, true));
+
+    assert!(out.contains("max-tokens=4"));
+    assert!(out.contains("match: prompts/**/*.md"));
+}
+
+#[test]
 fn write_finding_violation_verbose_default_match() {
     let finding = Finding {
         path: "src/lib.rs".into(),

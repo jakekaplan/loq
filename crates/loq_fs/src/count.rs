@@ -122,6 +122,19 @@ mod tests {
     }
 
     #[test]
+    fn count_tracks_bytes() {
+        let file = write_temp(b"abcd");
+        let result = inspect_file(file.path()).unwrap();
+        assert_eq!(result, FileInspection::Text { lines: 1, bytes: 4 });
+    }
+
+    #[test]
+    #[should_panic(expected = "expected text file")]
+    fn text_lines_panics_for_binary() {
+        text_lines(FileInspection::Binary);
+    }
+
+    #[test]
     fn count_multiple_lines() {
         let file = write_temp(b"a\nb\n");
         let result = inspect_file(file.path()).unwrap();
@@ -153,6 +166,23 @@ mod tests {
     fn unreadable_path_returns_unreadable() {
         let dir = tempfile::TempDir::new().unwrap();
         let err = inspect_file(dir.path()).unwrap_err();
+        assert!(matches!(err, CountError::Unreadable(_)));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn unreadable_file_open_returns_unreadable() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let file = write_temp(b"secret");
+        let original_permissions = std::fs::metadata(file.path()).unwrap().permissions();
+        let mut unreadable_permissions = original_permissions.clone();
+        unreadable_permissions.set_mode(0o000);
+        std::fs::set_permissions(file.path(), unreadable_permissions).unwrap();
+
+        let err = inspect_file(file.path()).unwrap_err();
+
+        std::fs::set_permissions(file.path(), original_permissions).unwrap();
         assert!(matches!(err, CountError::Unreadable(_)));
     }
 
