@@ -74,6 +74,7 @@ fn suggest_key(key: &str) -> Option<String> {
         "rules",
         "path",
         "max_lines",
+        "max_tokens",
         "fix_guidance",
     ];
     let mut best = None;
@@ -136,7 +137,17 @@ mod tests {
         let text = "default_max_lines = 500\n[[rules]]\npath = \"**/*.rs\"\nmax_lines = 10\n";
         let config = parse_config(Path::new("loq.toml"), text).unwrap();
         assert_eq!(config.rules.len(), 1);
-        assert_eq!(config.rules[0].max_lines, 10);
+        assert_eq!(config.rules[0].max_lines, Some(10));
+    }
+
+    #[test]
+    fn token_rule_parsed_correctly() {
+        let text =
+            "default_max_lines = 500\n[[rules]]\npath = \"prompts/**/*.md\"\nmax_tokens = 8000\n";
+        let config = parse_config(Path::new("loq.toml"), text).unwrap();
+        assert_eq!(config.rules.len(), 1);
+        assert_eq!(config.rules[0].max_lines, None);
+        assert_eq!(config.rules[0].max_tokens, Some(8000));
     }
 
     #[test]

@@ -200,7 +200,7 @@ fn exactly_at_limit_passes() {
 
     match &output.outcomes[0].kind {
         OutcomeKind::Pass { limit, actual, .. } => {
-            assert_eq!(*limit, 3);
+            assert_eq!(*limit, loq_core::Limit::lines(3));
             assert_eq!(*actual, 3);
         }
         other => panic!("expected Pass, got {other:?}"),
@@ -226,8 +226,37 @@ fn one_over_limit_violates() {
 
     match &output.outcomes[0].kind {
         OutcomeKind::Violation { limit, actual, .. } => {
-            assert_eq!(*limit, 3);
+            assert_eq!(*limit, loq_core::Limit::lines(3));
             assert_eq!(*actual, 4);
+        }
+        other => panic!("expected Violation, got {other:?}"),
+    }
+}
+
+#[test]
+fn token_rule_uses_approximate_byte_budget() {
+    let temp = TempDir::new().unwrap();
+    write_file(
+        &temp,
+        "loq.toml",
+        "default_max_lines = 100\n[[rules]]\npath = \"prompt.md\"\nmax_tokens = 4\n",
+    );
+    let file = write_file(&temp, "prompt.md", "abcdefghijklmnopq\n");
+
+    let output = run_check(
+        vec![file],
+        CheckOptions {
+            config_path: Some(temp.path().join("loq.toml")),
+            cwd: temp.path().to_path_buf(),
+            use_cache: false,
+        },
+    )
+    .unwrap();
+
+    match &output.outcomes[0].kind {
+        OutcomeKind::Violation { limit, actual, .. } => {
+            assert_eq!(*limit, loq_core::Limit::tokens(4));
+            assert_eq!(*actual, 5);
         }
         other => panic!("expected Violation, got {other:?}"),
     }
@@ -326,7 +355,7 @@ fn subdir_check_uses_config_root_match_key() {
     assert_eq!(output.outcomes[0].display_path, "../src/big.rs");
     assert_eq!(output.outcomes[0].match_key, "src/big.rs");
     match &output.outcomes[0].kind {
-        OutcomeKind::Violation { limit, .. } => assert_eq!(*limit, 1),
+        OutcomeKind::Violation { limit, .. } => assert_eq!(*limit, loq_core::Limit::lines(1)),
         other => panic!("expected Violation, got {other:?}"),
     }
 }

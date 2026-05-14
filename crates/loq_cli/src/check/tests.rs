@@ -101,7 +101,7 @@ fn handle_check_output_json_format() {
                 match_key: "big.rs".into(),
                 config_source: ConfigOrigin::BuiltIn,
                 kind: OutcomeKind::Violation {
-                    limit: 100,
+                    limit: loq_core::Limit::lines(100),
                     actual: 150,
                     matched_by: MatchBy::Default,
                 },

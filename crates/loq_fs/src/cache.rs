@@ -1,6 +1,6 @@
-//! File line count caching.
+//! File measurement caching.
 //!
-//! Caches line counts keyed by relative file path and mtime to skip I/O on unchanged files.
+//! Caches measurements keyed by relative file path and mtime to skip I/O on unchanged files.
 //! Cache is invalidated when config changes (detected via config hash).
 //! Keys are paths relative to config root for consistency across working directories.
 
@@ -39,7 +39,7 @@ struct CacheFileRef<'a> {
 /// because we need an mtime for cache invalidation, and `metadata()` fails for those.
 #[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq)]
 pub enum CachedResult {
-    /// File is text with given line count.
+    /// File is text with the measured value for the active metric.
     Text(usize),
     /// File is binary.
     Binary,
@@ -53,7 +53,7 @@ struct CacheEntry {
     result: CachedResult,
 }
 
-/// In-memory cache for file line counts.
+/// In-memory cache for file measurements.
 pub struct Cache {
     entries: FxHashMap<String, CacheEntry>,
     config_hash: u64,
@@ -163,12 +163,12 @@ fn mtime_to_parts(mtime: SystemTime) -> (u64, u32) {
 pub fn hash_config(config: &CompiledConfig) -> u64 {
     let mut hasher = rustc_hash::FxHasher::default();
 
-    // Hash default_max_lines
-    config.default_max_lines.hash(&mut hasher);
+    // Hash default limit.
+    config.default_limit.hash(&mut hasher);
 
     // Hash rules (patterns and limits)
     for rule in config.rules() {
-        rule.max_lines.hash(&mut hasher);
+        rule.limit.hash(&mut hasher);
         for pattern in &rule.patterns {
             pattern.hash(&mut hasher);
         }

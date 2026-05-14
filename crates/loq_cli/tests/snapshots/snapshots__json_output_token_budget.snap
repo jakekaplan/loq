@@ -5,21 +5,29 @@ expression: json
 {
   "skip_warnings": [],
   "summary": {
-    "files_checked": 1,
+    "files_checked": 2,
     "passed": 0,
     "skipped": 0,
-    "violations": 1,
+    "violations": 2,
     "walk_errors": 0
   },
   "version": "[version]",
   "violations": [
     {
       "approximate": false,
-      "lines": 20,
-      "max_lines": 10,
+      "lines": 3,
+      "max_lines": 2,
       "metric": "lines",
-      "path": "toolong.rs",
-      "rule": "default"
+      "path": "code.rs",
+      "rule": "code.rs"
+    },
+    {
+      "approximate": true,
+      "max_tokens": 4,
+      "metric": "tokens",
+      "path": "prompt.md",
+      "rule": "prompt.md",
+      "tokens": 5
     }
   ],
   "walk_errors": []

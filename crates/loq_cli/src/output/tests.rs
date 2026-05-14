@@ -78,7 +78,7 @@ fn write_finding_violation() {
         path: "src/main.rs".into(),
         config_source: ConfigOrigin::BuiltIn,
         kind: FindingKind::Violation {
-            limit: 100,
+            limit: loq_core::Limit::lines(100),
             actual: 150,
             over_by: 50,
             matched_by: MatchBy::Default,
@@ -93,12 +93,55 @@ fn write_finding_violation() {
 }
 
 #[test]
+fn write_finding_token_violation_marks_approximate_unit() {
+    let finding = Finding {
+        path: "prompts/build.md".into(),
+        config_source: ConfigOrigin::BuiltIn,
+        kind: FindingKind::Violation {
+            limit: loq_core::Limit::tokens(4),
+            actual: 5,
+            over_by: 1,
+            matched_by: MatchBy::Rule {
+                pattern: "prompts/**/*.md".into(),
+            },
+        },
+    };
+
+    let out = output_string(|w| write_finding(w, &finding, false));
+
+    assert!(out.contains("~5 tokens"));
+    assert!(out.contains("> 4"));
+    assert!(out.contains("build.md"));
+}
+
+#[test]
+fn write_finding_token_violation_verbose_shows_token_rule() {
+    let finding = Finding {
+        path: "prompts/build.md".into(),
+        config_source: ConfigOrigin::BuiltIn,
+        kind: FindingKind::Violation {
+            limit: loq_core::Limit::tokens(4),
+            actual: 5,
+            over_by: 1,
+            matched_by: MatchBy::Rule {
+                pattern: "prompts/**/*.md".into(),
+            },
+        },
+    };
+
+    let out = output_string(|w| write_finding(w, &finding, true));
+
+    assert!(out.contains("max-tokens=4"));
+    assert!(out.contains("match: prompts/**/*.md"));
+}
+
+#[test]
 fn write_finding_violation_verbose_default_match() {
     let finding = Finding {
         path: "src/lib.rs".into(),
         config_source: ConfigOrigin::BuiltIn,
         kind: FindingKind::Violation {
-            limit: 100,
+            limit: loq_core::Limit::lines(100),
             actual: 200,
             over_by: 100,
             matched_by: MatchBy::Default,
@@ -115,7 +158,7 @@ fn write_finding_violation_verbose_rule_match() {
         path: "src/lib.rs".into(),
         config_source: ConfigOrigin::File(std::path::PathBuf::from("/project/loq.toml")),
         kind: FindingKind::Violation {
-            limit: 50,
+            limit: loq_core::Limit::lines(50),
             actual: 75,
             over_by: 25,
             matched_by: MatchBy::Rule {
@@ -175,7 +218,7 @@ fn write_finding_path_without_directory() {
         path: "file.txt".into(),
         config_source: ConfigOrigin::BuiltIn,
         kind: FindingKind::Violation {
-            limit: 10,
+            limit: loq_core::Limit::lines(10),
             actual: 20,
             over_by: 10,
             matched_by: MatchBy::Default,

@@ -167,6 +167,15 @@ fn fix_guidance_shown_on_violation() {
     insta::assert_snapshot!(stdout);
 }
 
+#[test]
+fn token_budget() {
+    let (stdout, stderr, success) = run_loq("token_budget");
+
+    assert!(!success, "should fail with mixed line and token violations");
+    assert!(stderr.is_empty(), "stderr should be empty");
+    insta::assert_snapshot!(stdout);
+}
+
 // JSON output tests
 
 fn run_loq_json(fixture: &str) -> (Value, bool) {
@@ -221,6 +230,15 @@ fn json_output_pass_and_fail() {
 fn json_output_multiple_rules() {
     let (json, success) = run_loq_json("multiple_rules");
     assert!(!success, "should fail when rule is violated");
+    insta::assert_json_snapshot!(json, {
+        ".version" => "[version]",
+    });
+}
+
+#[test]
+fn json_output_token_budget() {
+    let (json, success) = run_loq_json("token_budget");
+    assert!(!success, "should fail with mixed line and token violations");
     insta::assert_json_snapshot!(json, {
         ".version" => "[version]",
     });

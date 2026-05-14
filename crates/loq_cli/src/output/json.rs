@@ -3,7 +3,7 @@
 use std::io::{self, Write};
 
 use loq_core::report::{FindingKind, Report, SkipReason};
-use loq_core::MatchBy;
+use loq_core::{Limit, MatchBy, Metric};
 use loq_fs::walk::WalkError;
 use serde::Serialize;
 
@@ -21,8 +21,16 @@ struct JsonOutput {
 #[derive(Debug, Serialize)]
 struct JsonViolation {
     path: String,
-    lines: usize,
-    max_lines: usize,
+    metric: &'static str,
+    approximate: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    lines: Option<usize>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    max_lines: Option<usize>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    tokens: Option<usize>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    max_tokens: Option<usize>,
     rule: String,
 }
 
@@ -72,8 +80,12 @@ pub fn write_json<W: Write>(
                 };
                 violations.push(JsonViolation {
                     path: finding.path.clone(),
-                    lines: *actual,
-                    max_lines: *limit,
+                    metric: limit.metric.as_str(),
+                    approximate: limit.is_approximate(),
+                    lines: metric_value(*actual, *limit, Metric::Lines),
+                    max_lines: metric_value(limit.max, *limit, Metric::Lines),
+                    tokens: metric_value(*actual, *limit, Metric::Tokens),
+                    max_tokens: metric_value(limit.max, *limit, Metric::Tokens),
                     rule,
                 });
             }
@@ -114,6 +126,10 @@ pub fn write_json<W: Write>(
     writeln!(writer)
 }
 
+fn metric_value(value: usize, limit: Limit, metric: Metric) -> Option<usize> {
+    (limit.metric == metric).then_some(value)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -148,7 +164,7 @@ mod tests {
                 match_key: "b.rs".into(),
                 config_source: ConfigOrigin::BuiltIn,
                 kind: OutcomeKind::Pass {
-                    limit: 100,
+                    limit: loq_core::Limit::lines(100),
                     actual: 50,
                     matched_by: MatchBy::Default,
                 },
@@ -159,7 +175,7 @@ mod tests {
                 match_key: "c.rs".into(),
                 config_source: ConfigOrigin::BuiltIn,
                 kind: OutcomeKind::Violation {
-                    limit: 100,
+                    limit: loq_core::Limit::lines(100),
                     actual: 150,
                     matched_by: MatchBy::Default,
                 },
@@ -242,7 +258,7 @@ mod tests {
             match_key: "big.rs".into(),
             config_source: ConfigOrigin::BuiltIn,
             kind: OutcomeKind::Violation {
-                limit: 100,
+                limit: loq_core::Limit::lines(100),
                 actual: 200,
                 matched_by: MatchBy::Rule {
                     pattern: "**/*.rs".into(),
@@ -260,6 +276,33 @@ mod tests {
     }
 
     #[test]
+    fn token_violation_uses_token_fields() {
+        let outcomes = vec![FileOutcome {
+            path: "prompt.md".into(),
+            display_path: "prompt.md".into(),
+            match_key: "prompt.md".into(),
+            config_source: ConfigOrigin::BuiltIn,
+            kind: OutcomeKind::Violation {
+                limit: loq_core::Limit::tokens(4),
+                actual: 5,
+                matched_by: MatchBy::Rule {
+                    pattern: "prompts/**/*.md".into(),
+                },
+            },
+        }];
+
+        let json = json_output_string(outcomes, vec![], None);
+        let parsed: serde_json::Value = serde_json::from_str(&json).unwrap();
+
+        assert_eq!(parsed["violations"][0]["metric"], "tokens");
+        assert_eq!(parsed["violations"][0]["approximate"], true);
+        assert_eq!(parsed["violations"][0]["tokens"], 5);
+        assert_eq!(parsed["violations"][0]["max_tokens"], 4);
+        assert!(parsed["violations"][0]["lines"].is_null());
+        assert!(parsed["violations"][0]["max_lines"].is_null());
+    }
+
+    #[test]
     fn violation_with_default_match() {
         let outcomes = vec![FileOutcome {
             path: "big.rs".into(),
@@ -267,7 +310,7 @@ mod tests {
             match_key: "big.rs".into(),
             config_source: ConfigOrigin::BuiltIn,
             kind: OutcomeKind::Violation {
-                limit: 100,
+                limit: loq_core::Limit::lines(100),
                 actual: 200,
                 matched_by: MatchBy::Default,
             },
@@ -309,7 +352,7 @@ mod tests {
             match_key: "big.rs".into(),
             config_source: ConfigOrigin::BuiltIn,
             kind: OutcomeKind::Violation {
-                limit: 100,
+                limit: loq_core::Limit::lines(100),
                 actual: 200,
                 matched_by: MatchBy::Default,
             },
@@ -329,7 +372,7 @@ mod tests {
             match_key: "small.rs".into(),
             config_source: ConfigOrigin::BuiltIn,
             kind: OutcomeKind::Pass {
-                limit: 100,
+                limit: loq_core::Limit::lines(100),
                 actual: 50,
                 matched_by: MatchBy::Default,
             },
@@ -350,7 +393,7 @@ mod tests {
                 match_key: "z.rs".into(),
                 config_source: ConfigOrigin::BuiltIn,
                 kind: OutcomeKind::Violation {
-                    limit: 100,
+                    limit: loq_core::Limit::lines(100),
                     actual: 200,
                     matched_by: MatchBy::Default,
                 },
@@ -361,7 +404,7 @@ mod tests {
                 match_key: "a.rs".into(),
                 config_source: ConfigOrigin::BuiltIn,
                 kind: OutcomeKind::Violation {
-                    limit: 100,
+                    limit: loq_core::Limit::lines(100),
                     actual: 200,
                     matched_by: MatchBy::Default,
                 },

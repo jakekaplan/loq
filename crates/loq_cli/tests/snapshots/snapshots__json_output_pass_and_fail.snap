@@ -14,8 +14,10 @@ expression: json
   "version": "[version]",
   "violations": [
     {
+      "approximate": false,
       "lines": 15,
       "max_lines": 10,
+      "metric": "lines",
       "path": "error.rs",
       "rule": "default"
     }

@@ -9,6 +9,8 @@ use globset::{GlobBuilder, GlobMatcher};
 use serde::{Deserialize, Deserializer};
 use thiserror::Error;
 
+use crate::Limit;
+
 /// Default line limit when no config is provided.
 pub const DEFAULT_MAX_LINES: usize = 500;
 /// Default behavior for respecting `.gitignore`.
@@ -21,7 +23,9 @@ pub struct Rule {
     #[serde(deserialize_with = "deserialize_string_or_vec")]
     pub path: Vec<String>,
     /// Maximum allowed lines for matched files.
-    pub max_lines: usize,
+    pub max_lines: Option<usize>,
+    /// Maximum allowed approximate tokens for matched files.
+    pub max_tokens: Option<usize>,
 }
 
 fn deserialize_string_or_vec<'de, D>(deserializer: D) -> Result<Vec<String>, D::Error>
@@ -86,11 +90,13 @@ impl LoqConfig {
             rules: vec![
                 Rule {
                     path: vec!["**/*.tsx".to_string()],
-                    max_lines: 300,
+                    max_lines: Some(300),
+                    max_tokens: None,
                 },
                 Rule {
                     path: vec!["tests/**/*".to_string()],
-                    max_lines: DEFAULT_MAX_LINES,
+                    max_lines: Some(DEFAULT_MAX_LINES),
+                    max_tokens: None,
                 },
             ],
             ..Self::default()
@@ -115,7 +121,7 @@ pub struct CompiledConfig {
     /// Root directory for relative path matching.
     pub root_dir: PathBuf,
     /// Default line limit for files not matching any rule.
-    pub default_max_lines: Option<usize>,
+    pub default_limit: Option<Limit>,
     /// Whether to respect `.gitignore` patterns.
     pub respect_gitignore: bool,
     /// Guidance text shown when violations exist.
@@ -143,8 +149,8 @@ impl CompiledConfig {
 pub struct CompiledRule {
     /// Original glob pattern strings.
     pub patterns: Vec<String>,
-    /// Maximum allowed lines.
-    pub max_lines: usize,
+    /// Maximum allowed budget.
+    pub limit: Limit,
     matchers: Vec<GlobMatcher>,
 }
 
@@ -233,6 +239,14 @@ pub enum ConfigError {
         /// Error message from the glob parser.
         message: String,
     },
+    /// Invalid limit configuration.
+    #[error("{} - {}", path.display(), message)]
+    InvalidLimit {
+        /// Path to the config file.
+        path: PathBuf,
+        /// Validation message.
+        message: String,
+    },
 }
 
 #[allow(clippy::ref_option)]
@@ -279,9 +293,10 @@ pub fn compile_config(
         for pattern in &rule.path {
             matchers.push(compile_glob(pattern, &path_for_errors)?);
         }
+        let limit = rule_limit(&rule, &path_for_errors)?;
         rules.push(CompiledRule {
             patterns: rule.path,
-            max_lines: rule.max_lines,
+            limit,
             matchers,
         });
     }
@@ -289,12 +304,33 @@ pub fn compile_config(
     Ok(CompiledConfig {
         origin,
         root_dir,
-        default_max_lines: config.default_max_lines,
+        default_limit: config.default_max_lines.map(Limit::lines),
         respect_gitignore: config.respect_gitignore,
         fix_guidance: config.fix_guidance,
         exclude,
         rules,
     })
+}
+
+fn rule_limit(rule: &Rule, source_path: &Path) -> Result<Limit, ConfigError> {
+    match (rule.max_lines, rule.max_tokens) {
+        (Some(lines), None) => Ok(Limit::lines(lines)),
+        (None, Some(tokens)) => Ok(Limit::tokens(tokens)),
+        (Some(_), Some(_)) => Err(ConfigError::InvalidLimit {
+            path: source_path.to_path_buf(),
+            message: format!(
+                "rule for '{}' must set only one of max_lines or max_tokens",
+                rule.path.join(", ")
+            ),
+        }),
+        (None, None) => Err(ConfigError::InvalidLimit {
+            path: source_path.to_path_buf(),
+            message: format!(
+                "rule for '{}' must set max_lines or max_tokens",
+                rule.path.join(", ")
+            ),
+        }),
+    }
 }
 
 fn compile_patterns(patterns: &[String], source_path: &Path) -> Result<PatternList, ConfigError> {
@@ -329,114 +365,4 @@ const fn default_respect_gitignore() -> bool {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use std::path::PathBuf;
-
-    #[test]
-    fn default_config_has_expected_values() {
-        let config = LoqConfig::default();
-        assert_eq!(config.default_max_lines, Some(DEFAULT_MAX_LINES));
-        assert!(config.respect_gitignore);
-        assert!(config.exclude.is_empty());
-        assert!(config.rules.is_empty());
-    }
-
-    #[test]
-    fn built_in_defaults_matches_default() {
-        let default = LoqConfig::default();
-        let built_in = LoqConfig::built_in_defaults();
-        assert_eq!(default.default_max_lines, built_in.default_max_lines);
-        assert_eq!(default.respect_gitignore, built_in.respect_gitignore);
-    }
-
-    #[test]
-    fn init_template_has_rules() {
-        let template = LoqConfig::init_template();
-        assert_eq!(template.default_max_lines, Some(DEFAULT_MAX_LINES));
-        assert_eq!(template.rules.len(), 2);
-        assert_eq!(template.rules[0].path, vec!["**/*.tsx"]);
-        assert_eq!(template.rules[1].path, vec!["tests/**/*"]);
-    }
-
-    #[test]
-    fn invalid_glob_reports_error() {
-        let config = LoqConfig {
-            default_max_lines: Some(1),
-            respect_gitignore: true,
-            exclude: vec![],
-            rules: vec![Rule {
-                path: vec!["[[".to_string()],
-                max_lines: 1,
-            }],
-            fix_guidance: None,
-        };
-        let err =
-            compile_config(ConfigOrigin::BuiltIn, PathBuf::from("."), config, None).unwrap_err();
-        match err {
-            ConfigError::Glob { .. } => {}
-            _ => panic!("expected glob error"),
-        }
-    }
-
-    #[test]
-    fn glob_error_display_is_stable() {
-        let config = LoqConfig {
-            default_max_lines: Some(1),
-            respect_gitignore: true,
-            exclude: vec!["[[".to_string()],
-            rules: vec![],
-            fix_guidance: None,
-        };
-        let err =
-            compile_config(ConfigOrigin::BuiltIn, PathBuf::from("."), config, None).unwrap_err();
-        assert!(err.to_string().contains("invalid glob"));
-    }
-
-    #[test]
-    fn glob_star_does_not_cross_directories() {
-        let config = LoqConfig {
-            default_max_lines: None,
-            respect_gitignore: true,
-            exclude: vec![],
-            rules: vec![Rule {
-                path: vec!["src/*.rs".to_string()],
-                max_lines: 1,
-            }],
-            fix_guidance: None,
-        };
-        let compiled =
-            compile_config(ConfigOrigin::BuiltIn, PathBuf::from("."), config, None).unwrap();
-        let rule = &compiled.rules()[0];
-
-        assert!(rule.matches("src/lib.rs").is_some());
-        assert!(rule.matches("src/nested/lib.rs").is_none());
-    }
-
-    #[test]
-    fn pattern_list_no_match_returns_none() {
-        let patterns = vec![PatternMatcher {
-            pattern: "*.rs".to_string(),
-            matcher: globset::GlobBuilder::new("*.rs")
-                .literal_separator(true)
-                .build()
-                .unwrap()
-                .compile_matcher(),
-        }];
-        let list = PatternList::new(patterns);
-        assert!(list.matches("foo.txt").is_none());
-    }
-
-    #[test]
-    fn format_toml_error_without_location() {
-        let msg = format_toml_error(Path::new("test.toml"), &None, "parse error");
-        assert_eq!(msg, "test.toml - parse error");
-    }
-
-    #[test]
-    fn format_unknown_key_error_without_suggestion() {
-        let msg = format_unknown_key_error(Path::new("test.toml"), "xyz", &Some((1, 1)), &None);
-        assert!(msg.contains("unknown key 'xyz'"));
-        assert!(!msg.contains("did you mean"));
-    }
-}
+mod tests;

@@ -83,8 +83,10 @@ fn run_relax_inner(args: &RelaxArgs) -> Result<RelaxReport> {
 fn collect_violations(outcomes: &[loq_core::FileOutcome]) -> HashMap<String, usize> {
     let mut violations = HashMap::new();
     for outcome in outcomes {
-        if let loq_core::OutcomeKind::Violation { actual, .. } = outcome.kind {
-            violations.insert(outcome.match_key.clone(), actual);
+        if let loq_core::OutcomeKind::Violation { actual, limit, .. } = outcome.kind {
+            if limit.metric == loq_core::Metric::Lines {
+                violations.insert(outcome.match_key.clone(), actual);
+            }
         }
     }
     violations
@@ -170,7 +172,7 @@ mod tests {
                 match_key: "src/a.rs".into(),
                 config_source: ConfigOrigin::BuiltIn,
                 kind: OutcomeKind::Violation {
-                    limit: 10,
+                    limit: loq_core::Limit::lines(10),
                     actual: 12,
                     matched_by: MatchBy::Default,
                 },
@@ -181,7 +183,7 @@ mod tests {
                 match_key: "src/b.rs".into(),
                 config_source: ConfigOrigin::BuiltIn,
                 kind: OutcomeKind::Pass {
-                    limit: 10,
+                    limit: loq_core::Limit::lines(10),
                     actual: 9,
                     matched_by: MatchBy::Default,
                 },
@@ -191,6 +193,25 @@ mod tests {
         let violations = collect_violations(&outcomes);
         assert_eq!(violations.len(), 1);
         assert_eq!(violations.get("src/a.rs"), Some(&12));
+    }
+
+    #[test]
+    fn collect_violations_ignores_token_violations() {
+        let outcomes = vec![loq_core::FileOutcome {
+            path: PathBuf::from("/tmp/prompt"),
+            display_path: "prompt.md".into(),
+            match_key: "prompt.md".into(),
+            config_source: ConfigOrigin::BuiltIn,
+            kind: OutcomeKind::Violation {
+                limit: loq_core::Limit::tokens(4),
+                actual: 5,
+                matched_by: MatchBy::Default,
+            },
+        }];
+
+        let violations = collect_violations(&outcomes);
+
+        assert!(violations.is_empty());
     }
 
     #[test]
