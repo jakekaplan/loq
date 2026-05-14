@@ -222,6 +222,31 @@ max_lines = 1000
 }
 
 #[test]
+fn preserves_exact_token_rules() {
+    let temp = TempDir::new().unwrap();
+    let config = r#"default_max_lines = 500
+
+[[rules]]
+path = "prompts/build.md"
+max_tokens = 4
+"#;
+    write_file(&temp, "loq.toml", config);
+    write_file(&temp, "prompts/build.md", "one\ntwo\n");
+
+    cargo_bin_cmd!("loq")
+        .current_dir(temp.path())
+        .args(["baseline", "--threshold", "1"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("✔ No changes needed"));
+
+    let updated = std::fs::read_to_string(temp.path().join("loq.toml")).unwrap();
+    assert!(updated.contains("path = \"prompts/build.md\""));
+    assert!(updated.contains("max_tokens = 4"));
+    assert!(!updated.contains("max_lines = 2"));
+}
+
+#[test]
 fn no_changes_when_all_compliant() {
     let temp = TempDir::new().unwrap();
 
