@@ -14,20 +14,29 @@ fn handle_fs_error_returns_error_status() {
 }
 
 #[test]
-fn handle_check_output_default_mode_skips_skip_warnings() {
+fn handle_check_output_default_mode_shows_missing_but_skips_other_warnings() {
     use loq_core::report::{FileOutcome, OutcomeKind};
     use loq_core::ConfigOrigin;
     use termcolor::NoColor;
 
     let mut stdout = NoColor::new(Vec::new());
     let output = loq_fs::CheckOutput {
-        outcomes: vec![FileOutcome {
-            path: "missing.txt".into(),
-            display_path: "missing.txt".into(),
-            match_key: "missing.txt".into(),
-            config_source: ConfigOrigin::BuiltIn,
-            kind: OutcomeKind::Missing,
-        }],
+        outcomes: vec![
+            FileOutcome {
+                path: "missing.txt".into(),
+                display_path: "missing.txt".into(),
+                match_key: "missing.txt".into(),
+                config_source: ConfigOrigin::BuiltIn,
+                kind: OutcomeKind::Missing,
+            },
+            FileOutcome {
+                path: "skipped.bin".into(),
+                display_path: "skipped.bin".into(),
+                match_key: "skipped.bin".into(),
+                config_source: ConfigOrigin::BuiltIn,
+                kind: OutcomeKind::Binary,
+            },
+        ],
         walk_errors: vec![],
         fix_guidance: None,
     };
@@ -36,7 +45,9 @@ fn handle_check_output_default_mode_skips_skip_warnings() {
     assert_eq!(status, ExitStatus::Success);
 
     let output_str = String::from_utf8(stdout.into_inner()).unwrap();
-    assert!(!output_str.contains("missing.txt") || output_str.contains("passed"));
+    assert!(output_str.contains("missing.txt"));
+    assert!(output_str.contains("file not found"));
+    assert!(!output_str.contains("skipped.bin"));
 }
 
 #[test]

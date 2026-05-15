@@ -2,4 +2,5 @@
 source: crates/loq_cli/tests/snapshots.rs
 expression: stdout
 ---
+⚠ nonexistent.rs  file not found
 ✔ 0 files ok

@@ -11,7 +11,7 @@ An electric fence for LLMs (and humans too). Written in Rust,
 
 ## Why loq?
 - 🔒 Hard limits to prevent oversized files and context rot
-- 📏 One metric: line counts (`wc -l` style)
+- 📏 Line counts first, with optional approximate token budgets for prompts and agent-facing files
 - 🧩 Works everywhere - no language-specific setup
 - 🤖 Designed specifically with coding agents in mind
 - 🦀 Lightning fast Rust core

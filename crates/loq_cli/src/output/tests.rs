@@ -254,6 +254,19 @@ fn write_summary_all_passed() {
 }
 
 #[test]
+fn write_summary_one_file_passed() {
+    let summary = Summary {
+        total: 1,
+        skipped: 0,
+        passed: 1,
+        errors: 0,
+    };
+    let out = output_string(|w| write_summary(w, &summary));
+    assert!(out.contains("1 file ok"));
+    assert!(!out.contains("1 files ok"));
+}
+
+#[test]
 fn write_summary_single_violation() {
     let summary = Summary {
         total: 1,
