@@ -298,7 +298,8 @@ pub fn write_summary<W: WriteColor>(writer: &mut W, summary: &Summary) -> io::Re
         writer.set_color(&fg(Color::Green))?;
         write!(writer, "✔")?;
         writer.reset()?;
-        writeln!(writer, " {} files ok", format_number(summary.passed))?;
+        let word = if summary.passed == 1 { "file" } else { "files" };
+        writeln!(writer, " {} {word} ok", format_number(summary.passed))?;
     }
     writer.reset()
 }

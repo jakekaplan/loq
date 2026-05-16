@@ -3,7 +3,7 @@
 use std::io::{Read, Write};
 use std::path::PathBuf;
 
-use loq_core::report::{build_report, FindingKind, Report};
+use loq_core::report::{build_report, Finding, FindingKind, Report, SkipReason};
 use loq_fs::{CheckOptions, CheckOutput, FsError};
 use termcolor::{Color, WriteColor};
 
@@ -105,7 +105,7 @@ fn write_text_output<W: WriteColor>(
 ) {
     let verbose = mode == OutputMode::Verbose;
     for finding in &report.findings {
-        if !verbose && matches!(finding.kind, FindingKind::SkipWarning { .. }) {
+        if !verbose && should_hide_finding(finding) {
             continue;
         }
         let _ = write_finding(stdout, finding, verbose);
@@ -119,6 +119,15 @@ fn write_text_output<W: WriteColor>(
     if !walk_errors.is_empty() {
         let _ = write_walk_errors(stdout, walk_errors, verbose);
     }
+}
+
+const fn should_hide_finding(finding: &Finding) -> bool {
+    matches!(
+        finding.kind,
+        FindingKind::SkipWarning {
+            reason: SkipReason::Binary | SkipReason::Unreadable(_)
+        }
+    )
 }
 
 #[cfg(test)]

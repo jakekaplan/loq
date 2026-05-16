@@ -19,7 +19,7 @@ fn default_check_success() {
         .current_dir(temp.path())
         .assert()
         .success()
-        .stdout(predicate::str::contains("files ok"));
+        .stdout(predicate::str::contains("1 file ok"));
 }
 
 #[test]
@@ -32,7 +32,7 @@ fn check_explicit_files() {
         .args(["check", "a.txt"])
         .assert()
         .success()
-        .stdout(predicate::str::contains("files ok"));
+        .stdout(predicate::str::contains("1 file ok"));
 }
 
 #[test]
@@ -230,7 +230,7 @@ fn missing_file_warns() {
 
     cargo_bin_cmd!("loq")
         .current_dir(temp.path())
-        .args(["--verbose", "check", "missing.txt"])
+        .args(["check", "missing.txt"])
         .assert()
         .success()
         .stdout(predicate::str::contains("⚠"))
