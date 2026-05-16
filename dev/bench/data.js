@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1778793551115,
+  "lastUpdate": 1778893368965,
   "repoUrl": "https://github.com/jakekaplan/loq",
   "entries": {
     "Benchmark": [
@@ -1534,6 +1534,54 @@ window.BENCHMARK_DATA = {
           {
             "name": "ruff",
             "value": 0.00070197692,
+            "range": "± 0",
+            "unit": "seconds"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "40362401+jakekaplan@users.noreply.github.com",
+            "name": "Jake Kaplan",
+            "username": "jakekaplan"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "fc5cf102b9e2b8580c937bc3b7dc9c6b772f15bd",
+          "message": "Merge pull request #59 from jakekaplan/codex/token-budgets\n\n[codex] improve CLI warning output",
+          "timestamp": "2026-05-15T21:01:53-04:00",
+          "tree_id": "37912470906cd7d36ceb23631b5954be821ea168",
+          "url": "https://github.com/jakekaplan/loq/commit/fc5cf102b9e2b8580c937bc3b7dc9c6b772f15bd"
+        },
+        "date": 1778893368659,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "cpython",
+            "value": 0.0008757013399999999,
+            "range": "± 0",
+            "unit": "seconds"
+          },
+          {
+            "name": "airflow",
+            "value": 0.0008639973399999999,
+            "range": "± 0",
+            "unit": "seconds"
+          },
+          {
+            "name": "prefect",
+            "value": 0.00085354924,
+            "range": "± 0",
+            "unit": "seconds"
+          },
+          {
+            "name": "ruff",
+            "value": 0.0008518849399999998,
             "range": "± 0",
             "unit": "seconds"
           }
