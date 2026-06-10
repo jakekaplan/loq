@@ -103,13 +103,9 @@ fn cached_result_to_outcome(
 const fn measurement_for_limit(lines: usize, bytes: usize, limit: Limit) -> usize {
     match limit.metric {
         Metric::Lines => lines,
-        Metric::Tokens => {
-            if bytes % 4 == 0 {
-                bytes / 4
-            } else {
-                bytes / 4 + 1
-            }
-        }
+        // Deliberate bytes/4 heuristic, not a real tokenizer; rounded up so
+        // any non-empty file counts as at least one token.
+        Metric::Tokens => bytes.div_ceil(4),
     }
 }
 
