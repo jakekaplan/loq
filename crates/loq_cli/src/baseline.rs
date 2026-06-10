@@ -9,7 +9,7 @@ use toml_edit::DocumentMut;
 
 use crate::baseline_shared::{finish, scan_violations_with_threshold, ChangeReport};
 use crate::cli::BaselineArgs;
-use crate::config_edit::{load_doc_or_default, persist_doc, threshold_from_doc};
+use crate::config_edit::{load_doc_or_default, locate_config, persist_doc, threshold_from_doc};
 use crate::exact_limits::{self, ExactLimit, ExactLimits};
 use crate::output::{
     change_style, max_formatted_width, plural, write_change_row, write_ok_line, ChangeKind,
@@ -41,16 +41,16 @@ pub fn run_baseline<W1: WriteColor, W2: WriteColor>(
 
 fn run_baseline_inner(args: &BaselineArgs) -> Result<BaselineReport> {
     let cwd = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
-    let config_path = cwd.join("loq.toml");
+    let (config_path, root) = locate_config(&cwd);
 
     let (mut doc, config_exists) = load_doc_or_default(&config_path)?;
     let threshold = threshold_from_doc(&doc, args.threshold);
     let violations =
-        scan_violations_with_threshold(&cwd, &doc, threshold, "baseline check failed")?;
+        scan_violations_with_threshold(&root, &doc, threshold, "baseline check failed")?;
     let existing_rules = ExactLimits::collect(&doc);
     let report = apply_baseline_changes(&mut doc, &violations, &existing_rules);
 
-    persist_doc(&cwd, &config_path, &doc, config_exists)?;
+    persist_doc(&root, &config_path, &doc, config_exists)?;
 
     Ok(report)
 }

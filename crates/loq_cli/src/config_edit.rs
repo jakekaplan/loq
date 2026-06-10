@@ -1,12 +1,28 @@
 //! Shared helpers for editing `loq.toml` with `toml_edit`.
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result};
 use loq_core::config::{DEFAULT_MAX_LINES, DEFAULT_RESPECT_GITIGNORE};
 use toml_edit::{DocumentMut, Item};
 
 use crate::init::add_to_gitignore;
+
+/// Locates the `loq.toml` an edit command should operate on, plus the
+/// directory that governs it.
+///
+/// Walks up from `cwd` to find an existing config (matching how `check`
+/// discovers one); falls back to `cwd/loq.toml` when none exists. The
+/// returned directory is the config's parent — the root that exact-path
+/// rule keys are relative to — so edits land in the project's real config
+/// instead of spawning a stray one in a subdirectory.
+pub(crate) fn locate_config(cwd: &Path) -> (PathBuf, PathBuf) {
+    let path = loq_fs::discover::find_config(cwd).unwrap_or_else(|| cwd.join("loq.toml"));
+    let root = path
+        .parent()
+        .map_or_else(|| cwd.to_path_buf(), Path::to_path_buf);
+    (path, root)
+}
 
 /// Create a default document for initializing `loq.toml`.
 pub(crate) fn default_document() -> DocumentMut {

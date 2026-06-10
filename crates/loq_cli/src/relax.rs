@@ -10,7 +10,7 @@ use toml_edit::DocumentMut;
 
 use crate::baseline_shared::{finish, line_violations, ChangeReport};
 use crate::cli::RelaxArgs;
-use crate::config_edit::{load_doc_or_default, persist_doc};
+use crate::config_edit::{load_doc_or_default, locate_config, persist_doc};
 use crate::exact_limits::{self, ExactLimits};
 use crate::output::{
     change_style, max_formatted_width, plural, write_change_row, write_ok_line, ChangeKind,
@@ -42,18 +42,18 @@ pub fn run_relax<W1: WriteColor, W2: WriteColor>(
 
 fn run_relax_inner(args: &RelaxArgs) -> Result<RelaxReport> {
     let cwd = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
-    let config_path = cwd.join("loq.toml");
+    let (config_path, root) = locate_config(&cwd);
     let config_exists = config_path.exists();
 
     let paths = if args.files.is_empty() {
-        vec![cwd.clone()]
+        vec![root.clone()]
     } else {
         args.files.clone()
     };
 
     let options = CheckOptions {
         config_path: config_exists.then(|| config_path.clone()),
-        cwd: cwd.clone(),
+        cwd,
         use_cache: false,
     };
 
@@ -71,7 +71,7 @@ fn run_relax_inner(args: &RelaxArgs) -> Result<RelaxReport> {
     let existing_rules = ExactLimits::collect(&doc);
     let changes = apply_relax_changes(&mut doc, &violations, &existing_rules, args.extra);
 
-    persist_doc(&cwd, &config_path, &doc, config_exists_for_write)?;
+    persist_doc(&root, &config_path, &doc, config_exists_for_write)?;
 
     Ok(RelaxReport { changes })
 }
