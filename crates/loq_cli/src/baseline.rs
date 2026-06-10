@@ -45,8 +45,13 @@ fn run_baseline_inner(args: &BaselineArgs) -> Result<BaselineReport> {
 
     let (mut doc, config_exists) = load_doc_or_default(&config_path)?;
     let threshold = threshold_from_doc(&doc, args.threshold);
-    let violations =
-        scan_violations_with_threshold(&root, &doc, threshold, "baseline check failed")?;
+    let violations = scan_violations_with_threshold(
+        &root,
+        std::slice::from_ref(&cwd),
+        &doc,
+        threshold,
+        "baseline check failed",
+    )?;
     let existing_rules = ExactLimits::collect(&doc);
     let report = apply_baseline_changes(&mut doc, &violations, &existing_rules);
 

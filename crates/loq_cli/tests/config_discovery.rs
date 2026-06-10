@@ -43,6 +43,33 @@ fn baseline_from_subdir_edits_root_config() {
 }
 
 #[test]
+fn baseline_from_subdir_does_not_scan_sibling_dirs() {
+    let temp = TempDir::new().unwrap();
+    let root = temp.path();
+    std::fs::write(root.join("loq.toml"), "default_max_lines = 500\n").unwrap();
+    write_file(root, "pkg/legacy.txt", &repeat_lines(501));
+    write_file(root, "other/sibling.txt", &repeat_lines(700));
+
+    cargo_bin_cmd!("loq")
+        .current_dir(root.join("pkg"))
+        .args(["baseline"])
+        .assert()
+        .success();
+
+    let config = std::fs::read_to_string(root.join("loq.toml")).unwrap();
+    // The targeted subdir is baselined (keyed relative to the config root)...
+    assert!(
+        config.contains("\"pkg/legacy.txt\""),
+        "config was: {config}"
+    );
+    // ...but a sibling directory outside the scan scope is left untouched.
+    assert!(
+        !config.contains("sibling.txt"),
+        "baseline leaked into a sibling directory: {config}"
+    );
+}
+
+#[test]
 fn relax_from_subdir_edits_root_config() {
     let temp = TempDir::new().unwrap();
     let root = temp.path();

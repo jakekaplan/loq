@@ -1,7 +1,7 @@
 //! Shared helpers for baseline-like commands.
 
 use std::collections::HashMap;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result};
 use loq_core::config::DEFAULT_RESPECT_GITIGNORE;
@@ -55,25 +55,30 @@ fn line_violation(outcome: &FileOutcome) -> Option<(String, usize)> {
     None
 }
 
-/// Find all files that violate the given threshold.
+/// Find files under `scan_paths` that violate the given threshold.
+///
+/// The temporary config and match keys are rooted at `root` (the discovered
+/// config's directory), while only `scan_paths` are walked — so keys stay
+/// root-relative without widening the scan beyond what the caller asked for.
 pub(crate) fn scan_violations_with_threshold(
-    cwd: &Path,
+    root: &Path,
+    scan_paths: &[PathBuf],
     doc: &DocumentMut,
     threshold: usize,
     context: &'static str,
 ) -> Result<HashMap<String, usize>> {
     let temp_config = build_temp_config(doc, threshold);
-    let temp_file = tempfile::NamedTempFile::new_in(cwd).context("failed to create temp file")?;
+    let temp_file = tempfile::NamedTempFile::new_in(root).context("failed to create temp file")?;
     std::io::Write::write_all(&mut &temp_file, temp_config.as_bytes())
         .context("failed to write temp config")?;
 
     let options = CheckOptions {
         config_path: Some(temp_file.path().to_path_buf()),
-        cwd: cwd.to_path_buf(),
+        cwd: root.to_path_buf(),
         use_cache: false,
     };
 
-    let output = loq_fs::run_check(vec![cwd.to_path_buf()], options).context(context)?;
+    let output = loq_fs::run_check(scan_paths.to_vec(), options).context(context)?;
     let temp_config_path = temp_file
         .path()
         .canonicalize()
@@ -94,8 +99,16 @@ pub(crate) fn scan_violations_with_threshold(
 fn build_temp_config(doc: &DocumentMut, threshold: usize) -> String {
     let mut temp_doc = DocumentMut::new();
 
-    let threshold_value = i64::try_from(threshold).unwrap_or(i64::MAX);
-    temp_doc["default_max_lines"] = toml_edit::value(threshold_value);
+    // In a token-default project, keep the token default so token-governed
+    // files surface as token violations (which baseline ignores) rather than
+    // being mis-scanned as line violations and grandfathered as max_lines
+    // rules that would silently shadow the token budget.
+    if let Some(tokens) = token_default(doc) {
+        temp_doc["default_max_tokens"] = toml_edit::value(tokens);
+    } else {
+        let threshold_value = i64::try_from(threshold).unwrap_or(i64::MAX);
+        temp_doc["default_max_lines"] = toml_edit::value(threshold_value);
+    }
 
     let respect_gitignore = doc
         .get("respect_gitignore")
@@ -127,6 +140,18 @@ fn build_temp_config(doc: &DocumentMut, threshold: usize) -> String {
     }
 
     temp_doc.to_string()
+}
+
+/// Returns the project's default token budget, if tokens are the default metric.
+///
+/// A line default takes precedence (and an explicit `default_max_lines` makes
+/// the config line-governed), so this only fires when `default_max_tokens` is
+/// set without `default_max_lines`.
+fn token_default(doc: &DocumentMut) -> Option<i64> {
+    if doc.get("default_max_lines").is_some() {
+        return None;
+    }
+    doc.get("default_max_tokens").and_then(Item::as_integer)
 }
 
 #[cfg(test)]
@@ -233,14 +258,39 @@ max_lines = 10
     }
 
     #[test]
+    fn build_temp_config_preserves_token_default() {
+        let doc: DocumentMut = "default_max_tokens = 8000\n".parse().unwrap();
+
+        let temp = build_temp_config(&doc, 500);
+
+        assert!(temp.contains("default_max_tokens = 8000"));
+        assert!(!temp.contains("default_max_lines"));
+    }
+
+    #[test]
+    fn build_temp_config_uses_line_threshold_when_lines_are_the_default() {
+        let doc: DocumentMut = "default_max_lines = 500\n".parse().unwrap();
+
+        let temp = build_temp_config(&doc, 123);
+
+        assert!(temp.contains("default_max_lines = 123"));
+        assert!(!temp.contains("default_max_tokens"));
+    }
+
+    #[test]
     fn scan_violations_does_not_include_temp_config_file() {
         let temp = TempDir::new().unwrap();
         std::fs::write(temp.path().join("violates.rs"), "a\nb\n").unwrap();
         let doc = DocumentMut::new();
 
-        let violations =
-            scan_violations_with_threshold(temp.path(), &doc, 1, "baseline scan should succeed")
-                .unwrap();
+        let violations = scan_violations_with_threshold(
+            temp.path(),
+            &[temp.path().to_path_buf()],
+            &doc,
+            1,
+            "baseline scan should succeed",
+        )
+        .unwrap();
 
         assert_eq!(violations.len(), 1);
         assert_eq!(violations.get("violates.rs"), Some(&2));
@@ -260,9 +310,14 @@ max_tokens = 4
         .parse()
         .unwrap();
 
-        let violations =
-            scan_violations_with_threshold(temp.path(), &doc, 1, "baseline scan should succeed")
-                .unwrap();
+        let violations = scan_violations_with_threshold(
+            temp.path(),
+            &[temp.path().to_path_buf()],
+            &doc,
+            1,
+            "baseline scan should succeed",
+        )
+        .unwrap();
 
         assert!(violations.is_empty());
     }
@@ -282,9 +337,14 @@ max_tokens = 4
         .parse()
         .unwrap();
 
-        let violations =
-            scan_violations_with_threshold(temp.path(), &doc, 1, "baseline scan should succeed")
-                .unwrap();
+        let violations = scan_violations_with_threshold(
+            temp.path(),
+            &[temp.path().to_path_buf()],
+            &doc,
+            1,
+            "baseline scan should succeed",
+        )
+        .unwrap();
 
         assert!(violations.is_empty());
     }

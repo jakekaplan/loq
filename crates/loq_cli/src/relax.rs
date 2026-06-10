@@ -46,7 +46,7 @@ fn run_relax_inner(args: &RelaxArgs) -> Result<RelaxReport> {
     let config_exists = config_path.exists();
 
     let paths = if args.files.is_empty() {
-        vec![root.clone()]
+        vec![cwd.clone()]
     } else {
         args.files.clone()
     };

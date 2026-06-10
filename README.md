@@ -71,6 +71,9 @@ loq tighten
 
 All three commands manage exact-path rules in `loq.toml`. `baseline` and
 `relax` can add new rules; `tighten` only updates or removes existing ones.
+They manage line limits and leave token-governed files alone, and they
+operate on the current directory (like `check`), writing to the nearest
+`loq.toml` found above it.
 
 ## Configuration
 

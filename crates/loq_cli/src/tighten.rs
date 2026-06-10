@@ -47,8 +47,13 @@ fn run_tighten_inner(args: &TightenArgs) -> Result<TightenReport> {
     let (mut doc, config_exists) = load_doc_or_default(&config_path)?;
     let threshold = threshold_from_doc(&doc, args.threshold);
 
-    let violations =
-        scan_violations_with_threshold(&root, &doc, threshold, "tighten check failed")?;
+    let violations = scan_violations_with_threshold(
+        &root,
+        std::slice::from_ref(&cwd),
+        &doc,
+        threshold,
+        "tighten check failed",
+    )?;
     let existing_rules = ExactLimits::collect(&doc);
     let report = apply_tighten_changes(&mut doc, &violations, &existing_rules);
 
