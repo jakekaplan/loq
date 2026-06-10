@@ -69,6 +69,7 @@ fn find_key_location(text: &str, key: &str) -> Option<(usize, usize)> {
 fn suggest_key(key: &str) -> Option<String> {
     let candidates = [
         "default_max_lines",
+        "default_max_tokens",
         "respect_gitignore",
         "exclude",
         "rules",
@@ -148,6 +149,14 @@ mod tests {
         assert_eq!(config.rules.len(), 1);
         assert_eq!(config.rules[0].max_lines, None);
         assert_eq!(config.rules[0].max_tokens, Some(8000));
+    }
+
+    #[test]
+    fn default_max_tokens_parsed() {
+        let text = "default_max_tokens = 2000\n";
+        let config = parse_config(Path::new("loq.toml"), text).unwrap();
+        assert_eq!(config.default_max_tokens, Some(2000));
+        assert_eq!(config.default_max_lines, None);
     }
 
     #[test]

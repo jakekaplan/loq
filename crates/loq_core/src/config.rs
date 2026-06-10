@@ -50,6 +50,8 @@ where
 pub struct LoqConfig {
     /// Default line limit for files not matching any rule.
     pub default_max_lines: Option<usize>,
+    /// Default approximate token limit for files not matching any rule.
+    pub default_max_tokens: Option<usize>,
     /// Whether to skip files matched by `.gitignore`.
     #[serde(default = "default_respect_gitignore")]
     pub respect_gitignore: bool,
@@ -68,6 +70,7 @@ impl Default for LoqConfig {
     fn default() -> Self {
         Self {
             default_max_lines: Some(DEFAULT_MAX_LINES),
+            default_max_tokens: None,
             respect_gitignore: DEFAULT_RESPECT_GITIGNORE,
             exclude: Vec::new(),
             rules: Vec::new(),
@@ -287,6 +290,7 @@ pub fn compile_config(
         source_path.map_or_else(|| PathBuf::from("<built-in defaults>"), Path::to_path_buf);
 
     let exclude = compile_patterns(&config.exclude, &path_for_errors)?;
+    let default_limit = default_limit(&config, &path_for_errors)?;
     let mut rules = Vec::new();
     for rule in config.rules {
         let mut matchers = Vec::new();
@@ -304,12 +308,24 @@ pub fn compile_config(
     Ok(CompiledConfig {
         origin,
         root_dir,
-        default_limit: config.default_max_lines.map(Limit::lines),
+        default_limit,
         respect_gitignore: config.respect_gitignore,
         fix_guidance: config.fix_guidance,
         exclude,
         rules,
     })
+}
+
+fn default_limit(config: &LoqConfig, source_path: &Path) -> Result<Option<Limit>, ConfigError> {
+    match (config.default_max_lines, config.default_max_tokens) {
+        (Some(_), Some(_)) => Err(ConfigError::InvalidLimit {
+            path: source_path.to_path_buf(),
+            message: "set only one of default_max_lines or default_max_tokens".to_string(),
+        }),
+        (Some(lines), None) => Ok(Some(Limit::lines(lines))),
+        (None, Some(tokens)) => Ok(Some(Limit::tokens(tokens))),
+        (None, None) => Ok(None),
+    }
 }
 
 fn rule_limit(rule: &Rule, source_path: &Path) -> Result<Limit, ConfigError> {

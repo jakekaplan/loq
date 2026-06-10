@@ -75,6 +75,7 @@ mod tests {
     fn rule_order_last_match_wins() {
         let config = LoqConfig {
             default_max_lines: Some(500),
+            default_max_tokens: None,
             respect_gitignore: true,
             exclude: vec![],
             rules: vec![
@@ -104,6 +105,7 @@ mod tests {
     fn default_fallback_when_no_rule() {
         let config = LoqConfig {
             default_max_lines: Some(123),
+            default_max_tokens: None,
             respect_gitignore: true,
             exclude: vec![],
             rules: vec![],
@@ -123,6 +125,7 @@ mod tests {
     fn skip_when_no_default_and_no_rule() {
         let config = LoqConfig {
             default_max_lines: None,
+            default_max_tokens: None,
             respect_gitignore: true,
             exclude: vec![],
             rules: vec![],
@@ -136,6 +139,7 @@ mod tests {
     fn multi_path_rule_matches_any() {
         let config = LoqConfig {
             default_max_lines: Some(500),
+            default_max_tokens: None,
             respect_gitignore: true,
             exclude: vec![],
             rules: vec![Rule {

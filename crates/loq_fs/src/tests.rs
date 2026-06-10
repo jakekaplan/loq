@@ -77,6 +77,7 @@ fn binary_and_unreadable_are_reported() {
     let temp = TempDir::new().unwrap();
     let config = loq_core::config::LoqConfig {
         default_max_lines: Some(1),
+        default_max_tokens: None,
         respect_gitignore: true,
         exclude: vec![],
         rules: vec![],

@@ -31,6 +31,7 @@ fn init_template_has_rules() {
 fn invalid_glob_reports_error() {
     let config = LoqConfig {
         default_max_lines: Some(1),
+        default_max_tokens: None,
         respect_gitignore: true,
         exclude: vec![],
         rules: vec![Rule {
@@ -51,6 +52,7 @@ fn invalid_glob_reports_error() {
 fn glob_error_display_is_stable() {
     let config = LoqConfig {
         default_max_lines: Some(1),
+        default_max_tokens: None,
         respect_gitignore: true,
         exclude: vec!["[[".to_string()],
         rules: vec![],
@@ -64,6 +66,7 @@ fn glob_error_display_is_stable() {
 fn glob_star_does_not_cross_directories() {
     let config = LoqConfig {
         default_max_lines: None,
+        default_max_tokens: None,
         respect_gitignore: true,
         exclude: vec![],
         rules: vec![Rule {
@@ -84,6 +87,7 @@ fn glob_star_does_not_cross_directories() {
 fn token_rule_compiles_to_token_limit() {
     let config = LoqConfig {
         default_max_lines: Some(1),
+        default_max_tokens: None,
         respect_gitignore: true,
         exclude: vec![],
         rules: vec![Rule {
@@ -102,6 +106,7 @@ fn token_rule_compiles_to_token_limit() {
 fn rule_with_both_budgets_is_invalid() {
     let config = LoqConfig {
         default_max_lines: Some(1),
+        default_max_tokens: None,
         respect_gitignore: true,
         exclude: vec![],
         rules: vec![Rule {
@@ -123,6 +128,7 @@ fn rule_with_both_budgets_is_invalid() {
 fn rule_without_budget_is_invalid() {
     let config = LoqConfig {
         default_max_lines: Some(1),
+        default_max_tokens: None,
         respect_gitignore: true,
         exclude: vec![],
         rules: vec![Rule {
@@ -136,6 +142,39 @@ fn rule_without_budget_is_invalid() {
 
     assert!(matches!(err, ConfigError::InvalidLimit { .. }));
     assert!(err.to_string().contains("must set max_lines or max_tokens"));
+}
+
+#[test]
+fn default_token_limit_compiles() {
+    let config = LoqConfig {
+        default_max_lines: None,
+        default_max_tokens: Some(2000),
+        respect_gitignore: true,
+        exclude: vec![],
+        rules: vec![],
+        fix_guidance: None,
+    };
+    let compiled = compile_config(ConfigOrigin::BuiltIn, PathBuf::from("."), config, None).unwrap();
+
+    assert_eq!(compiled.default_limit, Some(Limit::tokens(2000)));
+}
+
+#[test]
+fn both_default_budgets_are_invalid() {
+    let config = LoqConfig {
+        default_max_lines: Some(500),
+        default_max_tokens: Some(2000),
+        respect_gitignore: true,
+        exclude: vec![],
+        rules: vec![],
+        fix_guidance: None,
+    };
+    let err = compile_config(ConfigOrigin::BuiltIn, PathBuf::from("."), config, None).unwrap_err();
+
+    assert!(matches!(err, ConfigError::InvalidLimit { .. }));
+    assert!(err
+        .to_string()
+        .contains("only one of default_max_lines or default_max_tokens"));
 }
 
 #[test]

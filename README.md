@@ -80,6 +80,10 @@ loq works zero-config. Run `loq init` to create a `loq.toml` file to customize:
 # default, for files not matching any rule
 default_max_lines = 500
 
+# Or default to an approximate token budget instead of lines.
+# Set only one of default_max_lines / default_max_tokens.
+# default_max_tokens = 8000
+
 # skip .gitignore'd files
 respect_gitignore = true
 
