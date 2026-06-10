@@ -7,12 +7,13 @@ use anyhow::Result;
 use termcolor::WriteColor;
 use toml_edit::DocumentMut;
 
-use crate::baseline_shared::scan_violations_with_threshold;
+use crate::baseline_shared::{finish, scan_violations_with_threshold, ChangeReport};
 use crate::cli::TightenArgs;
 use crate::config_edit::{load_doc_or_default, persist_doc, threshold_from_doc};
 use crate::exact_limits::{self, ExactLimit, ExactLimits};
 use crate::output::{
-    change_style, max_formatted_width, print_error, write_change_row, ChangeKind, ChangeRow,
+    change_style, max_formatted_width, plural, write_change_row, write_ok_line, ChangeKind,
+    ChangeRow,
 };
 use crate::ExitStatus;
 
@@ -21,9 +22,13 @@ struct TightenReport {
     removed: usize,
 }
 
-impl TightenReport {
+impl ChangeReport for TightenReport {
     fn is_empty(&self) -> bool {
         self.changes.is_empty() && self.removed == 0
+    }
+
+    fn write<W: WriteColor>(&self, writer: &mut W) -> std::io::Result<()> {
+        write_report(writer, self)
     }
 }
 
@@ -32,17 +37,7 @@ pub fn run_tighten<W1: WriteColor, W2: WriteColor>(
     stdout: &mut W1,
     stderr: &mut W2,
 ) -> ExitStatus {
-    match run_tighten_inner(args) {
-        Ok(report) => {
-            if report.is_empty() {
-                let _ = writeln!(stdout, "✔ No changes needed");
-                return ExitStatus::Success;
-            }
-            let _ = write_report(stdout, &report);
-            ExitStatus::Success
-        }
-        Err(err) => print_error(stderr, &format!("{err:#}")),
-    }
+    finish(run_tighten_inner(args), stdout, stderr)
 }
 
 fn run_tighten_inner(args: &TightenArgs) -> Result<TightenReport> {
@@ -117,32 +112,23 @@ fn write_report<W: WriteColor>(writer: &mut W, report: &TightenReport) -> std::i
         }
 
         let count = report.changes.len();
-        writer.set_color(&style.ok)?;
-        write!(writer, "✔ ")?;
-        writer.reset()?;
-        writer.set_color(&style.dimmed)?;
-        write!(
+        write_ok_line(
             writer,
-            "Tightened limits for {count} file{}",
-            if count == 1 { "" } else { "s" }
+            &style,
+            &format!("Tightened limits for {count} file{}", plural(count)),
         )?;
-        writer.reset()?;
-        writeln!(writer)?;
     }
 
     if report.removed > 0 {
-        writer.set_color(&style.ok)?;
-        write!(writer, "✔ ")?;
-        writer.reset()?;
-        writer.set_color(&style.dimmed)?;
-        write!(
+        write_ok_line(
             writer,
-            "Removed limits for {} file{}",
-            report.removed,
-            if report.removed == 1 { "" } else { "s" }
+            &style,
+            &format!(
+                "Removed limits for {} file{}",
+                report.removed,
+                plural(report.removed)
+            ),
         )?;
-        writer.reset()?;
-        writeln!(writer)?;
     }
 
     Ok(())

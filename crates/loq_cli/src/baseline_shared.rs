@@ -5,10 +5,55 @@ use std::path::Path;
 
 use anyhow::{Context, Result};
 use loq_core::config::DEFAULT_RESPECT_GITIGNORE;
+use loq_core::{FileOutcome, Metric, OutcomeKind};
 use loq_fs::CheckOptions;
+use termcolor::WriteColor;
 use toml_edit::{DocumentMut, Item};
 
 use crate::exact_limits::{extract_paths, is_exact_path};
+use crate::output::print_error;
+use crate::ExitStatus;
+
+/// A change report produced by a baseline-style command.
+pub(crate) trait ChangeReport {
+    /// Returns true when the command made no changes.
+    fn is_empty(&self) -> bool;
+    /// Writes the human-readable change summary.
+    fn write<W: WriteColor>(&self, writer: &mut W) -> std::io::Result<()>;
+}
+
+/// Prints a change report (or error) and returns the process exit status.
+pub(crate) fn finish<W1: WriteColor, W2: WriteColor, R: ChangeReport>(
+    result: Result<R>,
+    stdout: &mut W1,
+    stderr: &mut W2,
+) -> ExitStatus {
+    match result {
+        Ok(report) if report.is_empty() => {
+            let _ = writeln!(stdout, "✔ No changes needed");
+            ExitStatus::Success
+        }
+        Ok(report) => {
+            let _ = report.write(stdout);
+            ExitStatus::Success
+        }
+        Err(err) => print_error(stderr, &format!("{err:#}")),
+    }
+}
+
+/// Collects line-metric violations keyed by match key.
+pub(crate) fn line_violations(outcomes: &[FileOutcome]) -> HashMap<String, usize> {
+    outcomes.iter().filter_map(line_violation).collect()
+}
+
+fn line_violation(outcome: &FileOutcome) -> Option<(String, usize)> {
+    if let OutcomeKind::Violation { actual, limit, .. } = &outcome.kind {
+        if limit.metric == Metric::Lines {
+            return Some((outcome.match_key.clone(), *actual));
+        }
+    }
+    None
+}
 
 /// Find all files that violate the given threshold.
 pub(crate) fn scan_violations_with_threshold(
@@ -34,18 +79,12 @@ pub(crate) fn scan_violations_with_threshold(
         .canonicalize()
         .unwrap_or_else(|_| temp_file.path().to_path_buf());
 
-    let mut violations = HashMap::new();
-    for outcome in output.outcomes {
-        if outcome.path == temp_config_path {
-            continue;
-        }
-
-        if let loq_core::OutcomeKind::Violation { actual, limit, .. } = outcome.kind {
-            if limit.metric == loq_core::Metric::Lines {
-                violations.insert(outcome.match_key, actual);
-            }
-        }
-    }
+    let violations = output
+        .outcomes
+        .iter()
+        .filter(|outcome| outcome.path != temp_config_path)
+        .filter_map(line_violation)
+        .collect();
 
     Ok(violations)
 }
@@ -93,7 +132,46 @@ fn build_temp_config(doc: &DocumentMut, threshold: usize) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use loq_core::{ConfigOrigin, Limit, MatchBy};
+    use std::path::PathBuf;
     use tempfile::TempDir;
+
+    fn violation(match_key: &str, limit: Limit, actual: usize) -> FileOutcome {
+        FileOutcome {
+            path: PathBuf::from(match_key),
+            display_path: match_key.into(),
+            match_key: match_key.into(),
+            config_source: ConfigOrigin::BuiltIn,
+            kind: OutcomeKind::Violation {
+                limit,
+                actual,
+                matched_by: MatchBy::Default,
+            },
+        }
+    }
+
+    #[test]
+    fn line_violations_keys_by_match_key() {
+        let mut pass = violation("src/b.rs", Limit::lines(10), 9);
+        pass.kind = OutcomeKind::Pass {
+            limit: Limit::lines(10),
+            actual: 9,
+            matched_by: MatchBy::Default,
+        };
+        let outcomes = vec![violation("src/a.rs", Limit::lines(10), 12), pass];
+
+        let violations = line_violations(&outcomes);
+
+        assert_eq!(violations.len(), 1);
+        assert_eq!(violations.get("src/a.rs"), Some(&12));
+    }
+
+    #[test]
+    fn line_violations_ignores_token_violations() {
+        let outcomes = vec![violation("prompt.md", Limit::tokens(4), 5)];
+
+        assert!(line_violations(&outcomes).is_empty());
+    }
 
     #[test]
     fn build_temp_config_keeps_glob_rules_only() {

@@ -8,11 +8,13 @@ use loq_fs::CheckOptions;
 use termcolor::WriteColor;
 use toml_edit::DocumentMut;
 
+use crate::baseline_shared::{finish, line_violations, ChangeReport};
 use crate::cli::RelaxArgs;
 use crate::config_edit::{load_doc_or_default, persist_doc};
 use crate::exact_limits::{self, ExactLimits};
 use crate::output::{
-    change_style, max_formatted_width, print_error, write_change_row, ChangeKind, ChangeRow,
+    change_style, max_formatted_width, plural, write_change_row, write_ok_line, ChangeKind,
+    ChangeRow,
 };
 use crate::ExitStatus;
 
@@ -20,9 +22,13 @@ struct RelaxReport {
     changes: Vec<ChangeRow>,
 }
 
-impl RelaxReport {
+impl ChangeReport for RelaxReport {
     fn is_empty(&self) -> bool {
         self.changes.is_empty()
+    }
+
+    fn write<W: WriteColor>(&self, writer: &mut W) -> std::io::Result<()> {
+        write_report(writer, self)
     }
 }
 
@@ -31,17 +37,7 @@ pub fn run_relax<W1: WriteColor, W2: WriteColor>(
     stdout: &mut W1,
     stderr: &mut W2,
 ) -> ExitStatus {
-    match run_relax_inner(args) {
-        Ok(report) => {
-            if report.is_empty() {
-                let _ = writeln!(stdout, "✔ No changes needed");
-                return ExitStatus::Success;
-            }
-            let _ = write_report(stdout, &report);
-            ExitStatus::Success
-        }
-        Err(err) => print_error(stderr, &format!("{err:#}")),
-    }
+    finish(run_relax_inner(args), stdout, stderr)
 }
 
 fn run_relax_inner(args: &RelaxArgs) -> Result<RelaxReport> {
@@ -62,7 +58,7 @@ fn run_relax_inner(args: &RelaxArgs) -> Result<RelaxReport> {
     };
 
     let output = loq_fs::run_check(paths, options).context("relax check failed")?;
-    let violations = collect_violations(&output.outcomes);
+    let violations = line_violations(&output.outcomes);
 
     if violations.is_empty() {
         return Ok(RelaxReport {
@@ -78,18 +74,6 @@ fn run_relax_inner(args: &RelaxArgs) -> Result<RelaxReport> {
     persist_doc(&cwd, &config_path, &doc, config_exists_for_write)?;
 
     Ok(RelaxReport { changes })
-}
-
-fn collect_violations(outcomes: &[loq_core::FileOutcome]) -> HashMap<String, usize> {
-    let mut violations = HashMap::new();
-    for outcome in outcomes {
-        if let loq_core::OutcomeKind::Violation { actual, limit, .. } = outcome.kind {
-            if limit.metric == loq_core::Metric::Lines {
-                violations.insert(outcome.match_key.clone(), actual);
-            }
-        }
-    }
-    violations
 }
 
 fn apply_relax_changes(
@@ -139,80 +123,18 @@ fn write_report<W: WriteColor>(writer: &mut W, report: &RelaxReport) -> std::io:
             &change.path,
         )?;
     }
-    writer.set_color(&style.ok)?;
-    write!(writer, "✔ ")?;
-    writer.reset()?;
-    writer.set_color(&style.dimmed)?;
-    write!(
+    write_ok_line(
         writer,
-        "Relaxed limits for {count} file{}",
-        if count == 1 { "" } else { "s" }
-    )?;
-    writer.reset()?;
-    writeln!(writer)?;
-    Ok(())
+        &style,
+        &format!("Relaxed limits for {count} file{}", plural(count)),
+    )
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use loq_core::report::OutcomeKind;
-    use loq_core::{ConfigOrigin, MatchBy};
-    use std::collections::HashMap;
-    use std::path::PathBuf;
     use termcolor::NoColor;
     use toml_edit::Item;
-
-    #[test]
-    fn collect_violations_uses_match_key() {
-        let outcomes = vec![
-            loq_core::FileOutcome {
-                path: PathBuf::from("/tmp/a"),
-                display_path: "./src/a.rs".into(),
-                match_key: "src/a.rs".into(),
-                config_source: ConfigOrigin::BuiltIn,
-                kind: OutcomeKind::Violation {
-                    limit: loq_core::Limit::lines(10),
-                    actual: 12,
-                    matched_by: MatchBy::Default,
-                },
-            },
-            loq_core::FileOutcome {
-                path: PathBuf::from("/tmp/b"),
-                display_path: "src/b.rs".into(),
-                match_key: "src/b.rs".into(),
-                config_source: ConfigOrigin::BuiltIn,
-                kind: OutcomeKind::Pass {
-                    limit: loq_core::Limit::lines(10),
-                    actual: 9,
-                    matched_by: MatchBy::Default,
-                },
-            },
-        ];
-
-        let violations = collect_violations(&outcomes);
-        assert_eq!(violations.len(), 1);
-        assert_eq!(violations.get("src/a.rs"), Some(&12));
-    }
-
-    #[test]
-    fn collect_violations_ignores_token_violations() {
-        let outcomes = vec![loq_core::FileOutcome {
-            path: PathBuf::from("/tmp/prompt"),
-            display_path: "prompt.md".into(),
-            match_key: "prompt.md".into(),
-            config_source: ConfigOrigin::BuiltIn,
-            kind: OutcomeKind::Violation {
-                limit: loq_core::Limit::tokens(4),
-                actual: 5,
-                matched_by: MatchBy::Default,
-            },
-        }];
-
-        let violations = collect_violations(&outcomes);
-
-        assert!(violations.is_empty());
-    }
 
     #[test]
     fn apply_relax_changes_updates_and_adds_rules() {

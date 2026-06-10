@@ -94,6 +94,31 @@ where
         .fold(6, |current, value| current.max(format_number(value).len()))
 }
 
+/// Returns the plural suffix (`""` or `"s"`) for `count`.
+#[must_use]
+pub const fn plural(count: usize) -> &'static str {
+    if count == 1 {
+        ""
+    } else {
+        "s"
+    }
+}
+
+/// Writes a dimmed summary line prefixed with a green check mark.
+pub fn write_ok_line<W: WriteColor>(
+    writer: &mut W,
+    style: &ChangeStyle,
+    text: &str,
+) -> io::Result<()> {
+    writer.set_color(&style.ok)?;
+    write!(writer, "✔ ")?;
+    writer.reset()?;
+    writer.set_color(&style.dimmed)?;
+    write!(writer, "{text}")?;
+    writer.reset()?;
+    writeln!(writer)
+}
+
 pub fn write_change_row<W: WriteColor>(
     writer: &mut W,
     style: &ChangeStyle,
@@ -287,19 +312,23 @@ pub fn write_block<W: WriteColor>(
 
 pub fn write_summary<W: WriteColor>(writer: &mut W, summary: &Summary) -> io::Result<()> {
     if summary.errors > 0 {
-        let word = if summary.errors == 1 {
-            "violation"
-        } else {
-            "violations"
-        };
         writer.set_color(&fg(Color::Red))?;
-        writeln!(writer, "{} {word}", summary.errors)?;
+        writeln!(
+            writer,
+            "{} violation{}",
+            summary.errors,
+            plural(summary.errors)
+        )?;
     } else {
         writer.set_color(&fg(Color::Green))?;
         write!(writer, "✔")?;
         writer.reset()?;
-        let word = if summary.passed == 1 { "file" } else { "files" };
-        writeln!(writer, " {} {word} ok", format_number(summary.passed))?;
+        writeln!(
+            writer,
+            " {} file{} ok",
+            format_number(summary.passed),
+            plural(summary.passed)
+        )?;
     }
     writer.reset()
 }
