@@ -184,12 +184,11 @@ pub fn write_finding<W: WriteColor>(
         FindingKind::SkipWarning { .. } => ("⚠", Color::Yellow),
     };
 
-    // Symbol
     writer.set_color(&fg(color))?;
     write!(writer, "{symbol} ")?;
     writer.reset()?;
 
-    // Details first (fixed-width), then path (variable-width)
+    // Fixed-width measurement columns first, then the variable-width path.
     match &finding.kind {
         FindingKind::Violation {
             actual,
@@ -197,8 +196,7 @@ pub fn write_finding<W: WriteColor>(
             matched_by,
             ..
         } => {
-            // Format: ✖ 1,427 > 500  path/to/file.rs
-            // Right-align actual within 6 chars (handles up to 99,999)
+            // e.g. `✖ 1_427 > 500  path/to/file.rs`
             let actual_str = formatted_measurement(*actual, *limit);
             let limit_str = format_number(limit.max);
             writer.set_color(&fg(color).set_bold(true).clone())?;

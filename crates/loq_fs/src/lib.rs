@@ -93,7 +93,6 @@ fn load_config_from_path(path: &Path, fallback_cwd: &Path) -> Result<CompiledCon
 ///
 /// Exclusion filtering (gitignore + exclude patterns) happens at the walk layer.
 pub fn run_check(paths: Vec<PathBuf>, options: CheckOptions) -> Result<CheckOutput, FsError> {
-    // Step 1: Load config (explicit path, discovered, or built-in defaults)
     let compiled = if let Some(ref config_path) = options.config_path {
         load_config_from_path(config_path, &options.cwd)?
     } else if let Some(config_path) = discover::find_config(&options.cwd) {
@@ -107,7 +106,7 @@ pub fn run_check(paths: Vec<PathBuf>, options: CheckOptions) -> Result<CheckOutp
         compile_config(ConfigOrigin::BuiltIn, root_dir, config, None)?
     };
 
-    // Step 2: Load cache (if enabled) - cache lives at config root
+    // The cache lives at the config root.
     let config_hash = cache::hash_config(&compiled);
     let file_cache = if options.use_cache {
         cache::Cache::load(&compiled.root_dir, config_hash)
@@ -116,13 +115,12 @@ pub fn run_check(paths: Vec<PathBuf>, options: CheckOptions) -> Result<CheckOutp
     };
     let inspector = Inspector::new(file_cache);
 
-    // Step 3: Canonicalize cwd once (instead of per-file)
+    // Canonicalize once here rather than per file.
     let cwd_abs = options
         .cwd
         .canonicalize()
         .unwrap_or_else(|_| options.cwd.clone());
 
-    // Step 4: Walk paths, filtering through gitignore + exclude patterns
     let walk_options = walk::WalkOptions {
         respect_gitignore: compiled.respect_gitignore,
         exclude: compiled.exclude_patterns(),
@@ -135,10 +133,8 @@ pub fn run_check(paths: Vec<PathBuf>, options: CheckOptions) -> Result<CheckOutp
     file_list.sort();
     file_list.dedup();
 
-    // Step 5: Check all files in parallel
     let outcomes = check_group(&file_list, &compiled, &cwd_abs, &inspector);
 
-    // Step 6: Save cache (if enabled) - cache lives at config root
     if options.use_cache {
         if let Some(cache) = inspector.into_cache() {
             cache.save(&compiled.root_dir);

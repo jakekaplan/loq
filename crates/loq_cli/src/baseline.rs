@@ -43,23 +43,13 @@ fn run_baseline_inner(args: &BaselineArgs) -> Result<BaselineReport> {
     let cwd = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
     let config_path = cwd.join("loq.toml");
 
-    // Step 1: Read and parse the config file (or create defaults if missing)
     let (mut doc, config_exists) = load_doc_or_default(&config_path)?;
-
-    // Step 2: Determine threshold (--threshold or default_max_lines from config)
     let threshold = threshold_from_doc(&doc, args.threshold);
-
-    // Step 3: Run check to find violations (respects config's exclude and gitignore settings)
     let violations =
         scan_violations_with_threshold(&cwd, &doc, threshold, "baseline check failed")?;
-
-    // Step 4: Collect existing exact-path rules (baseline candidates)
     let existing_rules = ExactLimits::collect(&doc);
-
-    // Step 5: Compute changes
     let report = apply_baseline_changes(&mut doc, &violations, &existing_rules);
 
-    // Step 6: Write config back
     persist_doc(&cwd, &config_path, &doc, config_exists)?;
 
     Ok(report)
