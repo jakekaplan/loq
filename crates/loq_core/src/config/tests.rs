@@ -22,7 +22,7 @@ fn invalid_glob_reports_error() {
         }],
         fix_guidance: None,
     };
-    let err = compile_config(ConfigOrigin::BuiltIn, PathBuf::from("."), config, None).unwrap_err();
+    let err = compile_config(PathBuf::from("."), config, None).unwrap_err();
     assert!(matches!(err, ConfigError::Glob { .. }));
 }
 
@@ -35,7 +35,7 @@ fn glob_error_display_is_stable() {
         rules: vec![],
         fix_guidance: None,
     };
-    let err = compile_config(ConfigOrigin::BuiltIn, PathBuf::from("."), config, None).unwrap_err();
+    let err = compile_config(PathBuf::from("."), config, None).unwrap_err();
     assert!(err.to_string().contains("invalid glob"));
 }
 
@@ -51,7 +51,7 @@ fn glob_star_does_not_cross_directories() {
         }],
         fix_guidance: None,
     };
-    let compiled = compile_config(ConfigOrigin::BuiltIn, PathBuf::from("."), config, None).unwrap();
+    let compiled = compile_config(PathBuf::from("."), config, None).unwrap();
     let rule = &compiled.rules()[0];
 
     assert!(rule.matches("src/lib.rs").is_some());
@@ -70,7 +70,7 @@ fn token_rule_compiles_to_token_limit() {
         }],
         fix_guidance: None,
     };
-    let compiled = compile_config(ConfigOrigin::BuiltIn, PathBuf::from("."), config, None).unwrap();
+    let compiled = compile_config(PathBuf::from("."), config, None).unwrap();
 
     assert_eq!(compiled.rules()[0].limit, Limit::tokens(8000));
 }
@@ -84,7 +84,7 @@ fn default_token_limit_compiles() {
         rules: vec![],
         fix_guidance: None,
     };
-    let compiled = compile_config(ConfigOrigin::BuiltIn, PathBuf::from("."), config, None).unwrap();
+    let compiled = compile_config(PathBuf::from("."), config, None).unwrap();
 
     assert_eq!(compiled.default_limit, Some(Limit::tokens(2000)));
 }

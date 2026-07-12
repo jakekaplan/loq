@@ -4,7 +4,7 @@ use std::collections::HashMap;
 use std::path::Path;
 
 use anyhow::{Context, Result};
-use loq_core::config::{compile_config, ConfigOrigin, LoqConfig};
+use loq_core::config::{compile_config, LoqConfig};
 use loq_core::{FileOutcome, Limit, Metric, OutcomeKind};
 use loq_fs::{CheckConfig, CheckOptions};
 
@@ -41,12 +41,7 @@ pub(crate) fn scan_line_violations(
     config.rules.retain(|rule| {
         rule.limit.metric == Metric::Tokens || rule.paths.iter().any(|path| !is_exact_path(path))
     });
-    let compiled = compile_config(
-        ConfigOrigin::File(config_path.to_path_buf()),
-        root.clone(),
-        config,
-        Some(config_path),
-    )?;
+    let compiled = compile_config(root.clone(), config, Some(config_path))?;
     let options = CheckOptions {
         config: CheckConfig::Compiled(compiled),
         cwd: root,

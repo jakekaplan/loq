@@ -1,21 +1,18 @@
 //! Path identity for checked files.
 //!
-//! Centralizes the path forms used by loq: absolute filesystem path,
-//! cwd-relative display path, config-root-relative match key, and cache key.
+//! Centralizes the cwd-relative display path and config-root-relative match key.
 
-use std::path::{Path, PathBuf};
+use std::path::Path;
+#[cfg(windows)]
+use std::path::PathBuf;
 
 /// The path forms loq needs for one checked file.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq)]
 pub struct PathIdentity {
-    /// Absolute path to the file, or cwd joined with the input path for missing files.
-    pub absolute: PathBuf,
     /// Path relative to the working directory for output.
     pub display: String,
     /// Path relative to the config root for rule matching and managed exact-path rules.
     pub match_key: String,
-    /// Cache key for file inspection results.
-    pub cache_key: String,
 }
 
 impl PathIdentity {
@@ -27,14 +24,8 @@ impl PathIdentity {
         let absolute = path.canonicalize().unwrap_or_else(|_| cwd.join(path));
         let display = display_key(&absolute, cwd);
         let match_key = relative_key(&absolute, root);
-        let cache_key = match_key.clone();
 
-        Self {
-            absolute,
-            display,
-            match_key,
-            cache_key,
-        }
+        Self { display, match_key }
     }
 }
 
@@ -135,8 +126,6 @@ mod tests {
 
         assert_eq!(identity.display, "../src/app.rs");
         assert_eq!(identity.match_key, "src/app.rs");
-        assert_eq!(identity.cache_key, identity.match_key);
-        assert_eq!(identity.absolute, file.canonicalize().unwrap());
     }
 
     #[test]
@@ -147,7 +136,6 @@ mod tests {
 
         let identity = PathIdentity::new(missing, &root, &root);
 
-        assert_eq!(identity.absolute, root.join("missing.rs"));
         assert_eq!(identity.display, "missing.rs");
         assert_eq!(identity.match_key, "missing.rs");
     }

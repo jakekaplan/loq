@@ -16,24 +16,19 @@ fn handle_fs_error_returns_error_status() {
 #[test]
 fn handle_check_output_default_mode_shows_missing_but_skips_other_warnings() {
     use loq_core::report::{FileOutcome, OutcomeKind};
-    use loq_core::ConfigOrigin;
     use termcolor::NoColor;
 
     let mut stdout = NoColor::new(Vec::new());
     let output = loq_fs::CheckOutput {
         outcomes: vec![
             FileOutcome {
-                path: "missing.txt".into(),
                 display_path: "missing.txt".into(),
                 match_key: "missing.txt".into(),
-                config_source: ConfigOrigin::BuiltIn,
                 kind: OutcomeKind::Missing,
             },
             FileOutcome {
-                path: "skipped.bin".into(),
                 display_path: "skipped.bin".into(),
                 match_key: "skipped.bin".into(),
-                config_source: ConfigOrigin::BuiltIn,
                 kind: OutcomeKind::Binary,
             },
         ],
@@ -53,16 +48,13 @@ fn handle_check_output_default_mode_shows_missing_but_skips_other_warnings() {
 #[test]
 fn handle_check_output_verbose_mode_shows_skip_warnings() {
     use loq_core::report::{FileOutcome, OutcomeKind};
-    use loq_core::ConfigOrigin;
     use termcolor::NoColor;
 
     let mut stdout = NoColor::new(Vec::new());
     let output = loq_fs::CheckOutput {
         outcomes: vec![FileOutcome {
-            path: "missing.txt".into(),
             display_path: "missing.txt".into(),
             match_key: "missing.txt".into(),
-            config_source: ConfigOrigin::BuiltIn,
             kind: OutcomeKind::Missing,
         }],
         walk_errors: vec![],
@@ -98,7 +90,6 @@ fn handle_check_output_with_walk_errors() {
 #[test]
 fn handle_check_output_json_format() {
     use loq_core::report::{FileOutcome, OutcomeKind};
-    use loq_core::ConfigOrigin;
     use loq_core::MatchBy;
     use loq_fs::walk::WalkError;
     use termcolor::NoColor;
@@ -107,10 +98,8 @@ fn handle_check_output_json_format() {
     let output = loq_fs::CheckOutput {
         outcomes: vec![
             FileOutcome {
-                path: "big.rs".into(),
                 display_path: "big.rs".into(),
                 match_key: "big.rs".into(),
-                config_source: ConfigOrigin::BuiltIn,
                 kind: OutcomeKind::Violation {
                     limit: loq_core::Limit::lines(100),
                     actual: 150,
@@ -118,10 +107,8 @@ fn handle_check_output_json_format() {
                 },
             },
             FileOutcome {
-                path: "skipped.bin".into(),
                 display_path: "skipped.bin".into(),
                 match_key: "skipped.bin".into(),
-                config_source: ConfigOrigin::BuiltIn,
                 kind: OutcomeKind::Binary,
             },
         ],

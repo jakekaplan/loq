@@ -51,20 +51,9 @@ impl Default for LoqConfig {
     }
 }
 
-/// Where a configuration came from.
-#[derive(Debug, Clone)]
-pub enum ConfigOrigin {
-    /// Using built-in defaults (no config file found).
-    BuiltIn,
-    /// Loaded from a specific file path.
-    File(PathBuf),
-}
-
 /// Configuration with compiled glob matchers, ready for use.
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct CompiledConfig {
-    /// Where this config came from.
-    pub origin: ConfigOrigin,
     /// Root directory for relative path matching.
     pub root_dir: PathBuf,
     /// Default budget for files not matching any rule.
@@ -225,7 +214,6 @@ fn format_unknown_key_error(
 /// Takes a `LoqConfig` and compiles all glob patterns into matchers.
 /// The `root_dir` is used for relative path matching during checks.
 pub fn compile_config(
-    origin: ConfigOrigin,
     root_dir: PathBuf,
     config: LoqConfig,
     source_path: Option<&Path>,
@@ -248,7 +236,6 @@ pub fn compile_config(
     }
 
     Ok(CompiledConfig {
-        origin,
         root_dir,
         default_limit: config.default_limit,
         respect_gitignore: config.respect_gitignore,

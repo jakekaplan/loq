@@ -2,27 +2,22 @@
 //!
 //! Collects file check outcomes and generates structured reports.
 
-use crate::config::ConfigOrigin;
 use crate::decide::MatchBy;
 use crate::Limit;
 
 /// The result of checking a single file.
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct FileOutcome {
-    /// Absolute path to the file.
-    pub path: std::path::PathBuf,
     /// Path relative to working directory for display.
     pub display_path: String,
     /// Path relative to config root for rule matching and managed exact-path rules.
     pub match_key: String,
-    /// Which config was used for this file.
-    pub config_source: ConfigOrigin,
     /// What happened when checking the file.
     pub kind: OutcomeKind,
 }
 
 /// What happened when checking a file.
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub enum OutcomeKind {
     /// No limit configured for this file.
     NoLimit,
@@ -56,7 +51,7 @@ pub enum OutcomeKind {
 }
 
 /// Why a file was skipped (for warnings).
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub enum SkipReason {
     /// Binary file (contains null bytes).
     Binary,
@@ -67,7 +62,7 @@ pub enum SkipReason {
 }
 
 /// A reportable finding (violation or skip warning).
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub enum FindingKind {
     /// File exceeded its configured budget.
     Violation {
@@ -75,8 +70,6 @@ pub enum FindingKind {
         limit: Limit,
         /// Actual measured value.
         actual: usize,
-        /// Amount over the limit.
-        over_by: usize,
         /// How the limit was determined.
         matched_by: MatchBy,
     },
@@ -88,18 +81,16 @@ pub enum FindingKind {
 }
 
 /// A single finding to report.
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct Finding {
     /// Display path for the file.
     pub path: String,
-    /// Which config was used.
-    pub config_source: ConfigOrigin,
     /// What kind of finding this is.
     pub kind: FindingKind,
 }
 
 /// Summary statistics for a check run.
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Default)]
 pub struct Summary {
     /// Total files processed.
     pub total: usize,
@@ -112,7 +103,7 @@ pub struct Summary {
 }
 
 /// The complete report from a check run.
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct Report {
     /// All findings (skip warnings first, then violations by overage).
     pub findings: Vec<Finding>,
@@ -189,7 +180,6 @@ pub fn build_report(outcomes: &[FileOutcome], fix_guidance: Option<String>) -> R
 fn push_skip_warning(findings: &mut Vec<Finding>, outcome: &FileOutcome, reason: SkipReason) {
     findings.push(Finding {
         path: outcome.display_path.clone(),
-        config_source: outcome.config_source.clone(),
         kind: FindingKind::SkipWarning { reason },
     });
 }
@@ -201,14 +191,11 @@ fn push_violation(
     actual: usize,
     matched_by: MatchBy,
 ) {
-    let over_by = actual.saturating_sub(limit.max);
     findings.push(Finding {
         path: outcome.display_path.clone(),
-        config_source: outcome.config_source.clone(),
         kind: FindingKind::Violation {
             limit,
             actual,
-            over_by,
             matched_by,
         },
     });
@@ -225,12 +212,18 @@ pub fn sort_findings(findings: &mut [Finding]) {
         match (&a.kind, &b.kind) {
             (
                 FindingKind::Violation {
-                    over_by: a_over, ..
+                    limit: a_limit,
+                    actual: a_actual,
+                    ..
                 },
                 FindingKind::Violation {
-                    over_by: b_over, ..
+                    limit: b_limit,
+                    actual: b_actual,
+                    ..
                 },
-            ) => a_over.cmp(b_over).then_with(|| a.path.cmp(&b.path)),
+            ) => (a_actual - a_limit.max)
+                .cmp(&(b_actual - b_limit.max))
+                .then_with(|| a.path.cmp(&b.path)),
             _ => a.path.cmp(&b.path),
         }
     });
@@ -246,17 +239,14 @@ const fn finding_rank(kind: &FindingKind) -> u8 {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::config::ConfigOrigin;
     use crate::Limit;
 
     #[test]
     fn summary_counts_each_file_once() {
         let outcomes = vec![
             FileOutcome {
-                path: "a".into(),
                 display_path: "a".into(),
                 match_key: "a".into(),
-                config_source: ConfigOrigin::BuiltIn,
                 kind: OutcomeKind::Pass {
                     limit: Limit::lines(10),
                     actual: 5,
@@ -264,10 +254,8 @@ mod tests {
                 },
             },
             FileOutcome {
-                path: "b".into(),
                 display_path: "b".into(),
                 match_key: "b".into(),
-                config_source: ConfigOrigin::BuiltIn,
                 kind: OutcomeKind::Violation {
                     limit: Limit::lines(10),
                     actual: 20,
@@ -275,10 +263,8 @@ mod tests {
                 },
             },
             FileOutcome {
-                path: "c".into(),
                 display_path: "c".into(),
                 match_key: "c".into(),
-                config_source: ConfigOrigin::BuiltIn,
                 kind: OutcomeKind::Violation {
                     limit: Limit::lines(10),
                     actual: 12,
@@ -286,24 +272,18 @@ mod tests {
                 },
             },
             FileOutcome {
-                path: "d".into(),
                 display_path: "d".into(),
                 match_key: "d".into(),
-                config_source: ConfigOrigin::BuiltIn,
                 kind: OutcomeKind::Missing,
             },
             FileOutcome {
-                path: "e".into(),
                 display_path: "e".into(),
                 match_key: "e".into(),
-                config_source: ConfigOrigin::BuiltIn,
                 kind: OutcomeKind::Binary,
             },
             FileOutcome {
-                path: "f".into(),
                 display_path: "f".into(),
                 match_key: "f".into(),
-                config_source: ConfigOrigin::BuiltIn,
                 kind: OutcomeKind::Unreadable {
                     error: "denied".into(),
                 },
@@ -321,27 +301,22 @@ mod tests {
         let mut findings = vec![
             Finding {
                 path: "b".into(),
-                config_source: ConfigOrigin::BuiltIn,
                 kind: FindingKind::Violation {
                     limit: Limit::lines(10),
                     actual: 12,
-                    over_by: 2,
                     matched_by: MatchBy::Default,
                 },
             },
             Finding {
                 path: "a".into(),
-                config_source: ConfigOrigin::BuiltIn,
                 kind: FindingKind::Violation {
                     limit: Limit::lines(10),
                     actual: 20,
-                    over_by: 10,
                     matched_by: MatchBy::Default,
                 },
             },
             Finding {
                 path: "c".into(),
-                config_source: ConfigOrigin::BuiltIn,
                 kind: FindingKind::SkipWarning {
                     reason: SkipReason::Missing,
                 },
@@ -357,10 +332,8 @@ mod tests {
     #[test]
     fn nolimit_is_skipped() {
         let outcomes = vec![FileOutcome {
-            path: "nolimit.js".into(),
             display_path: "nolimit.js".into(),
             match_key: "nolimit.js".into(),
-            config_source: ConfigOrigin::BuiltIn,
             kind: OutcomeKind::NoLimit,
         }];
         let report = build_report(&outcomes, None);
@@ -375,10 +348,8 @@ mod tests {
     #[test]
     fn fix_guidance_included_when_violations_exist() {
         let outcomes = vec![FileOutcome {
-            path: "big.rs".into(),
             display_path: "big.rs".into(),
             match_key: "big.rs".into(),
-            config_source: ConfigOrigin::BuiltIn,
             kind: OutcomeKind::Violation {
                 limit: Limit::lines(100),
                 actual: 150,
@@ -398,10 +369,8 @@ mod tests {
     #[test]
     fn fix_guidance_excluded_when_no_violations() {
         let outcomes = vec![FileOutcome {
-            path: "small.rs".into(),
             display_path: "small.rs".into(),
             match_key: "small.rs".into(),
-            config_source: ConfigOrigin::BuiltIn,
             kind: OutcomeKind::Pass {
                 limit: Limit::lines(100),
                 actual: 50,
