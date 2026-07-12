@@ -80,6 +80,29 @@ mod tests {
     }
 
     #[test]
+    fn scan_rejects_invalid_glob() {
+        let temp = TempDir::new().unwrap();
+        let config = LoqConfig {
+            rules: vec![Rule {
+                paths: vec!["[".into()],
+                limit: Limit::lines(1),
+            }],
+            ..LoqConfig::default()
+        };
+
+        let error = scan_line_violations(
+            temp.path(),
+            temp.path(),
+            &temp.path().join("loq.toml"),
+            config,
+            1,
+        )
+        .unwrap_err();
+
+        assert!(error.to_string().contains("invalid glob"));
+    }
+
+    #[test]
     fn scan_ignores_token_violations() {
         let temp = TempDir::new().unwrap();
         std::fs::write(temp.path().join("prompt.md"), "abcdefghijklmnopq\n").unwrap();

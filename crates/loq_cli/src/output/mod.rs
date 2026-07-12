@@ -307,23 +307,19 @@ pub fn write_block<W: WriteColor>(
 
 pub fn write_summary<W: WriteColor>(writer: &mut W, summary: &Summary) -> io::Result<()> {
     if summary.errors > 0 {
+        let word = if summary.errors == 1 {
+            "violation"
+        } else {
+            "violations"
+        };
         writer.set_color(&fg(Color::Red))?;
-        writeln!(
-            writer,
-            "{} violation{}",
-            summary.errors,
-            plural(summary.errors)
-        )?;
+        writeln!(writer, "{} {word}", summary.errors)?;
     } else {
         writer.set_color(&fg(Color::Green))?;
         write!(writer, "✔")?;
         writer.reset()?;
-        writeln!(
-            writer,
-            " {} file{} ok",
-            format_number(summary.passed),
-            plural(summary.passed)
-        )?;
+        let word = if summary.passed == 1 { "file" } else { "files" };
+        writeln!(writer, " {} {word} ok", format_number(summary.passed))?;
     }
     writer.reset()
 }
