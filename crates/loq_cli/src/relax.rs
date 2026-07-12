@@ -41,7 +41,7 @@ pub fn run_relax<W1: WriteColor, W2: WriteColor>(
 
 fn run_relax_inner(args: &RelaxArgs) -> Result<RelaxReport> {
     let cwd = std::env::current_dir().context("failed to get current directory")?;
-    let (config_path, root) = config_path_and_root(&cwd);
+    let (config_path, root) = config_path_and_root(&cwd)?;
     let config_exists = config_path.exists();
 
     let paths = if args.files.is_empty() {

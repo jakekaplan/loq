@@ -41,10 +41,14 @@ fn baseline_from_subdir_edits_root_config() {
 }
 
 #[test]
-fn baseline_from_subdir_does_not_scan_sibling_dirs() {
+fn baseline_from_subdir_preserves_sibling_rule() {
     let temp = TempDir::new().unwrap();
     let root = temp.path();
-    std::fs::write(root.join("loq.toml"), "default_max_lines = 500\n").unwrap();
+    std::fs::write(
+        root.join("loq.toml"),
+        "default_max_lines = 500\n\n[[rules]]\npath = \"other/sibling.txt\"\nmax_lines = 800\n",
+    )
+    .unwrap();
     write_file(root, "pkg/legacy.txt", &repeat_lines(501));
     write_file(root, "other/sibling.txt", &repeat_lines(700));
 
@@ -60,8 +64,8 @@ fn baseline_from_subdir_does_not_scan_sibling_dirs() {
         "config was: {config}"
     );
     assert!(
-        !config.contains("sibling.txt"),
-        "baseline leaked into a sibling directory: {config}"
+        config.contains("path = \"other/sibling.txt\"\nmax_lines = 800"),
+        "baseline changed a sibling rule: {config}"
     );
 }
 
@@ -91,15 +95,16 @@ fn relax_from_subdir_edits_root_config() {
 }
 
 #[test]
-fn tighten_from_subdir_edits_root_config() {
+fn tighten_from_subdir_preserves_sibling_rule() {
     let temp = TempDir::new().unwrap();
     let root = temp.path();
     std::fs::write(
         root.join("loq.toml"),
-        "default_max_lines = 500\n\n[[rules]]\npath = \"pkg/legacy.txt\"\nmax_lines = 900\n",
+        "default_max_lines = 500\n\n[[rules]]\npath = \"pkg/legacy.txt\"\nmax_lines = 900\n\n[[rules]]\npath = \"other/sibling.txt\"\nmax_lines = 800\n",
     )
     .unwrap();
     write_file(root, "pkg/legacy.txt", &repeat_lines(600));
+    write_file(root, "other/sibling.txt", &repeat_lines(700));
 
     cargo_bin_cmd!("loq")
         .current_dir(root.join("pkg"))
@@ -112,5 +117,12 @@ fn tighten_from_subdir_edits_root_config() {
         "tighten created a stray config in the subdirectory"
     );
     let config = std::fs::read_to_string(root.join("loq.toml")).unwrap();
-    assert!(config.contains("max_lines = 600"), "config was: {config}");
+    assert!(
+        config.contains("path = \"pkg/legacy.txt\"\nmax_lines = 600"),
+        "config was: {config}"
+    );
+    assert!(
+        config.contains("path = \"other/sibling.txt\"\nmax_lines = 800"),
+        "tighten changed a sibling rule: {config}"
+    );
 }

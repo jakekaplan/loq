@@ -10,12 +10,14 @@ use toml_edit::{DocumentMut, Item};
 use crate::init::add_to_gitignore;
 
 /// Returns the governing config path and its root directory.
-pub(crate) fn config_path_and_root(cwd: &Path) -> (PathBuf, PathBuf) {
+pub(crate) fn config_path_and_root(cwd: &Path) -> Result<(PathBuf, PathBuf)> {
     let path = loq_fs::discover::find_config(cwd).unwrap_or_else(|| cwd.join("loq.toml"));
     let root = path
         .parent()
-        .map_or_else(|| cwd.to_path_buf(), Path::to_path_buf);
-    (path, root)
+        .context("config path has no parent")?
+        .canonicalize()
+        .context("failed to resolve config root")?;
+    Ok((path, root))
 }
 
 /// Create a default document for initializing `loq.toml`.

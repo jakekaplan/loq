@@ -40,7 +40,7 @@ pub fn run_baseline<W1: WriteColor, W2: WriteColor>(
 
 fn run_baseline_inner(args: &BaselineArgs) -> Result<BaselineReport> {
     let cwd = std::env::current_dir().context("failed to get current directory")?;
-    let (config_path, root) = config_path_and_root(&cwd);
+    let (config_path, root) = config_path_and_root(&cwd)?;
 
     let (mut doc, config_exists) = load_doc_or_default(&config_path)?;
     let config = loq_core::parse_config(&config_path, &doc.to_string())?;
@@ -48,7 +48,8 @@ fn run_baseline_inner(args: &BaselineArgs) -> Result<BaselineReport> {
     let violations = scan_line_violations(&root, &cwd, &config_path, config, threshold)
         .context("baseline check failed")?;
     let existing_rules = ExactLimits::collect(&doc);
-    let report = apply_baseline_changes(&mut doc, &violations, &existing_rules);
+    let scope = loq_fs::PathIdentity::new(&cwd, &root, &root).match_key;
+    let report = apply_baseline_changes(&mut doc, &violations, &existing_rules, &scope);
 
     persist_doc(&root, &config_path, &doc, config_exists)?;
 
@@ -59,11 +60,12 @@ fn apply_baseline_changes(
     doc: &mut DocumentMut,
     violations: &HashMap<String, usize>,
     existing_rules: &ExactLimits,
+    scope: &str,
 ) -> BaselineReport {
     let mut changes = Vec::new();
     let mut limits_to_remove: Vec<ExactLimit> = Vec::new();
 
-    for (path, limit) in existing_rules.iter() {
+    for (path, limit) in existing_rules.within(scope) {
         if let Some(&actual) = violations.get(path) {
             if actual != limit.max_lines {
                 exact_limits::update_limit(doc, limit, actual);

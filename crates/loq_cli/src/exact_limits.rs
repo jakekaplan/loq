@@ -4,6 +4,7 @@
 //! rule discovery, and safe updates/removal by rule index.
 
 use std::collections::HashMap;
+use std::path::Path;
 
 use loq_fs::path_identity::normalize_key;
 use toml_edit::{DocumentMut, Item, Table};
@@ -76,6 +77,15 @@ impl ExactLimits {
         self.rules
             .iter()
             .map(|(path, limit)| (path.as_str(), *limit))
+    }
+
+    /// Iterates over limits inside a config-relative path scope.
+    pub fn within<'a>(
+        &'a self,
+        scope: &'a str,
+    ) -> impl Iterator<Item = (&'a str, ExactLimit)> + 'a {
+        self.iter()
+            .filter(move |(path, _)| scope.is_empty() || Path::new(path).starts_with(scope))
     }
 }
 
