@@ -1,22 +1,16 @@
-//! Shared helpers for editing `loq.toml` with `toml_edit`.
+//! `loq.toml` editing.
 
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result};
-use loq_core::config::{DEFAULT_MAX_LINES, DEFAULT_RESPECT_GITIGNORE};
+use loq_core::config::{LoqConfig, DEFAULT_MAX_LINES, DEFAULT_RESPECT_GITIGNORE};
+use loq_core::Metric;
 use toml_edit::{DocumentMut, Item};
 
 use crate::init::add_to_gitignore;
 
-/// Locates the `loq.toml` an edit command should operate on, plus the
-/// directory that governs it.
-///
-/// Walks up from `cwd` to find an existing config (matching how `check`
-/// discovers one); falls back to `cwd/loq.toml` when none exists. The
-/// returned directory is the config's parent — the root that exact-path
-/// rule keys are relative to — so edits land in the project's real config
-/// instead of spawning a stray one in a subdirectory.
-pub(crate) fn locate_config(cwd: &Path) -> (PathBuf, PathBuf) {
+/// Returns the governing config path and its root directory.
+pub(crate) fn config_path_and_root(cwd: &Path) -> (PathBuf, PathBuf) {
     let path = loq_fs::discover::find_config(cwd).unwrap_or_else(|| cwd.join("loq.toml"));
     let root = path
         .parent()
@@ -69,12 +63,10 @@ pub(crate) fn persist_doc(
     Ok(())
 }
 
-pub(crate) fn threshold_from_doc(doc: &DocumentMut, explicit: Option<usize>) -> usize {
-    explicit.unwrap_or_else(|| {
-        doc.get("default_max_lines")
-            .and_then(Item::as_integer)
-            .and_then(|value| usize::try_from(value).ok())
-            .unwrap_or(DEFAULT_MAX_LINES)
+pub(crate) fn line_threshold(config: &LoqConfig, explicit: Option<usize>) -> usize {
+    explicit.unwrap_or_else(|| match config.default_limit {
+        Some(limit) if limit.metric == Metric::Lines => limit.max,
+        _ => DEFAULT_MAX_LINES,
     })
 }
 

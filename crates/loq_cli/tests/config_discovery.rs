@@ -1,5 +1,3 @@
-//! Edit commands discover the config upward instead of spawning a stray one.
-
 use std::path::Path;
 
 use assert_cmd::cargo::cargo_bin_cmd;
@@ -57,12 +55,10 @@ fn baseline_from_subdir_does_not_scan_sibling_dirs() {
         .success();
 
     let config = std::fs::read_to_string(root.join("loq.toml")).unwrap();
-    // The targeted subdir is baselined (keyed relative to the config root)...
     assert!(
         config.contains("\"pkg/legacy.txt\""),
         "config was: {config}"
     );
-    // ...but a sibling directory outside the scan scope is left untouched.
     assert!(
         !config.contains("sibling.txt"),
         "baseline leaked into a sibling directory: {config}"

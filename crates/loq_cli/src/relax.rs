@@ -1,20 +1,19 @@
 //! Relax command implementation.
 
 use std::collections::HashMap;
-use std::path::PathBuf;
 
 use anyhow::{Context, Result};
-use loq_fs::CheckOptions;
+use loq_fs::{CheckConfig, CheckOptions};
 use termcolor::WriteColor;
 use toml_edit::DocumentMut;
 
-use crate::baseline_shared::{finish, line_violations, ChangeReport};
 use crate::cli::RelaxArgs;
-use crate::config_edit::{load_doc_or_default, locate_config, persist_doc};
+use crate::config_edit::{config_path_and_root, load_doc_or_default, persist_doc};
 use crate::exact_limits::{self, ExactLimits};
+use crate::line_violations::line_violations;
 use crate::output::{
-    change_style, max_formatted_width, plural, write_change_row, write_ok_line, ChangeKind,
-    ChangeRow,
+    change_style, max_formatted_width, plural, print_error, write_change_row, write_ok_line,
+    ChangeKind, ChangeRow,
 };
 use crate::ExitStatus;
 
@@ -22,27 +21,27 @@ struct RelaxReport {
     changes: Vec<ChangeRow>,
 }
 
-impl ChangeReport for RelaxReport {
-    fn is_empty(&self) -> bool {
-        self.changes.is_empty()
-    }
-
-    fn write<W: WriteColor>(&self, writer: &mut W) -> std::io::Result<()> {
-        write_report(writer, self)
-    }
-}
-
 pub fn run_relax<W1: WriteColor, W2: WriteColor>(
     args: &RelaxArgs,
     stdout: &mut W1,
     stderr: &mut W2,
 ) -> ExitStatus {
-    finish(run_relax_inner(args), stdout, stderr)
+    match run_relax_inner(args) {
+        Ok(report) if report.changes.is_empty() => {
+            let _ = writeln!(stdout, "✔ No changes needed");
+            ExitStatus::Success
+        }
+        Ok(report) => {
+            let _ = write_report(stdout, &report);
+            ExitStatus::Success
+        }
+        Err(err) => print_error(stderr, &format!("{err:#}")),
+    }
 }
 
 fn run_relax_inner(args: &RelaxArgs) -> Result<RelaxReport> {
-    let cwd = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
-    let (config_path, root) = locate_config(&cwd);
+    let cwd = std::env::current_dir().context("failed to get current directory")?;
+    let (config_path, root) = config_path_and_root(&cwd);
     let config_exists = config_path.exists();
 
     let paths = if args.files.is_empty() {
@@ -51,8 +50,13 @@ fn run_relax_inner(args: &RelaxArgs) -> Result<RelaxReport> {
         args.files.clone()
     };
 
+    let config = if config_exists {
+        CheckConfig::File(config_path.clone())
+    } else {
+        CheckConfig::Discover
+    };
     let options = CheckOptions {
-        config_path: config_exists.then(|| config_path.clone()),
+        config,
         cwd,
         use_cache: false,
     };

@@ -188,7 +188,6 @@ pub fn write_finding<W: WriteColor>(
     write!(writer, "{symbol} ")?;
     writer.reset()?;
 
-    // Fixed-width measurement columns first, then the variable-width path.
     match &finding.kind {
         FindingKind::Violation {
             actual,
@@ -196,7 +195,6 @@ pub fn write_finding<W: WriteColor>(
             matched_by,
             ..
         } => {
-            // e.g. `✖ 1_427 > 500  path/to/file.rs`
             let actual_str = formatted_measurement(*actual, *limit);
             let limit_str = format_number(limit.max);
             writer.set_color(&fg(color).set_bold(true).clone())?;
@@ -214,7 +212,6 @@ pub fn write_finding<W: WriteColor>(
             write!(writer, "{limit_str:<6}")?;
             writer.reset()?;
 
-            // Path (directory dimmed, filename bold)
             write!(writer, " ")?;
             write_path(writer, &finding.path)?;
             writeln!(writer)?;

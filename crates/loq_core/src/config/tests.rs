@@ -4,55 +4,32 @@ use std::path::PathBuf;
 #[test]
 fn default_config_has_expected_values() {
     let config = LoqConfig::default();
-    assert_eq!(config.default_max_lines, Some(DEFAULT_MAX_LINES));
+    assert_eq!(config.default_limit, Some(Limit::lines(DEFAULT_MAX_LINES)));
     assert!(config.respect_gitignore);
     assert!(config.exclude.is_empty());
     assert!(config.rules.is_empty());
 }
 
 #[test]
-fn built_in_defaults_matches_default() {
-    let default = LoqConfig::default();
-    let built_in = LoqConfig::built_in_defaults();
-    assert_eq!(default.default_max_lines, built_in.default_max_lines);
-    assert_eq!(default.respect_gitignore, built_in.respect_gitignore);
-}
-
-#[test]
-fn init_template_has_rules() {
-    let template = LoqConfig::init_template();
-    assert_eq!(template.default_max_lines, Some(DEFAULT_MAX_LINES));
-    assert_eq!(template.rules.len(), 2);
-    assert_eq!(template.rules[0].path, vec!["**/*.tsx"]);
-    assert_eq!(template.rules[1].path, vec!["tests/**/*"]);
-}
-
-#[test]
 fn invalid_glob_reports_error() {
     let config = LoqConfig {
-        default_max_lines: Some(1),
-        default_max_tokens: None,
+        default_limit: Some(Limit::lines(1)),
         respect_gitignore: true,
         exclude: vec![],
         rules: vec![Rule {
-            path: vec!["[[".to_string()],
-            max_lines: Some(1),
-            max_tokens: None,
+            paths: vec!["[[".to_string()],
+            limit: Limit::lines(1),
         }],
         fix_guidance: None,
     };
     let err = compile_config(ConfigOrigin::BuiltIn, PathBuf::from("."), config, None).unwrap_err();
-    match err {
-        ConfigError::Glob { .. } => {}
-        _ => panic!("expected glob error"),
-    }
+    assert!(matches!(err, ConfigError::Glob { .. }));
 }
 
 #[test]
 fn glob_error_display_is_stable() {
     let config = LoqConfig {
-        default_max_lines: Some(1),
-        default_max_tokens: None,
+        default_limit: Some(Limit::lines(1)),
         respect_gitignore: true,
         exclude: vec!["[[".to_string()],
         rules: vec![],
@@ -65,14 +42,12 @@ fn glob_error_display_is_stable() {
 #[test]
 fn glob_star_does_not_cross_directories() {
     let config = LoqConfig {
-        default_max_lines: None,
-        default_max_tokens: None,
+        default_limit: None,
         respect_gitignore: true,
         exclude: vec![],
         rules: vec![Rule {
-            path: vec!["src/*.rs".to_string()],
-            max_lines: Some(1),
-            max_tokens: None,
+            paths: vec!["src/*.rs".to_string()],
+            limit: Limit::lines(1),
         }],
         fix_guidance: None,
     };
@@ -86,14 +61,12 @@ fn glob_star_does_not_cross_directories() {
 #[test]
 fn token_rule_compiles_to_token_limit() {
     let config = LoqConfig {
-        default_max_lines: Some(1),
-        default_max_tokens: None,
+        default_limit: Some(Limit::lines(1)),
         respect_gitignore: true,
         exclude: vec![],
         rules: vec![Rule {
-            path: vec!["prompts/**/*.md".to_string()],
-            max_lines: None,
-            max_tokens: Some(8000),
+            paths: vec!["prompts/**/*.md".to_string()],
+            limit: Limit::tokens(8000),
         }],
         fix_guidance: None,
     };
@@ -103,52 +76,9 @@ fn token_rule_compiles_to_token_limit() {
 }
 
 #[test]
-fn rule_with_both_budgets_is_invalid() {
-    let config = LoqConfig {
-        default_max_lines: Some(1),
-        default_max_tokens: None,
-        respect_gitignore: true,
-        exclude: vec![],
-        rules: vec![Rule {
-            path: vec!["**/*.md".to_string()],
-            max_lines: Some(100),
-            max_tokens: Some(1000),
-        }],
-        fix_guidance: None,
-    };
-    let err = compile_config(ConfigOrigin::BuiltIn, PathBuf::from("."), config, None).unwrap_err();
-
-    assert!(matches!(err, ConfigError::InvalidLimit { .. }));
-    assert!(err
-        .to_string()
-        .contains("only one of max_lines or max_tokens"));
-}
-
-#[test]
-fn rule_without_budget_is_invalid() {
-    let config = LoqConfig {
-        default_max_lines: Some(1),
-        default_max_tokens: None,
-        respect_gitignore: true,
-        exclude: vec![],
-        rules: vec![Rule {
-            path: vec!["**/*.md".to_string()],
-            max_lines: None,
-            max_tokens: None,
-        }],
-        fix_guidance: None,
-    };
-    let err = compile_config(ConfigOrigin::BuiltIn, PathBuf::from("."), config, None).unwrap_err();
-
-    assert!(matches!(err, ConfigError::InvalidLimit { .. }));
-    assert!(err.to_string().contains("must set max_lines or max_tokens"));
-}
-
-#[test]
 fn default_token_limit_compiles() {
     let config = LoqConfig {
-        default_max_lines: None,
-        default_max_tokens: Some(2000),
+        default_limit: Some(Limit::tokens(2000)),
         respect_gitignore: true,
         exclude: vec![],
         rules: vec![],
@@ -157,24 +87,6 @@ fn default_token_limit_compiles() {
     let compiled = compile_config(ConfigOrigin::BuiltIn, PathBuf::from("."), config, None).unwrap();
 
     assert_eq!(compiled.default_limit, Some(Limit::tokens(2000)));
-}
-
-#[test]
-fn both_default_budgets_are_invalid() {
-    let config = LoqConfig {
-        default_max_lines: Some(500),
-        default_max_tokens: Some(2000),
-        respect_gitignore: true,
-        exclude: vec![],
-        rules: vec![],
-        fix_guidance: None,
-    };
-    let err = compile_config(ConfigOrigin::BuiltIn, PathBuf::from("."), config, None).unwrap_err();
-
-    assert!(matches!(err, ConfigError::InvalidLimit { .. }));
-    assert!(err
-        .to_string()
-        .contains("only one of default_max_lines or default_max_tokens"));
 }
 
 #[test]

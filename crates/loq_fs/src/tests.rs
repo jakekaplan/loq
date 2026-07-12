@@ -23,7 +23,7 @@ fn excluded_files_are_filtered_out() {
     let output = run_check(
         vec![file],
         CheckOptions {
-            config_path: Some(temp.path().join("loq.toml")),
+            config: CheckConfig::File(temp.path().join("loq.toml")),
             cwd: temp.path().to_path_buf(),
             use_cache: false,
         },
@@ -43,7 +43,7 @@ fn no_default_skips_files() {
     let output = run_check(
         vec![file],
         CheckOptions {
-            config_path: Some(temp.path().join("loq.toml")),
+            config: CheckConfig::File(temp.path().join("loq.toml")),
             cwd: temp.path().to_path_buf(),
             use_cache: false,
         },
@@ -62,7 +62,7 @@ fn missing_files_reported() {
     let output = run_check(
         vec![missing],
         CheckOptions {
-            config_path: Some(temp.path().join("loq.toml")),
+            config: CheckConfig::File(temp.path().join("loq.toml")),
             cwd: temp.path().to_path_buf(),
             use_cache: false,
         },
@@ -76,8 +76,7 @@ fn missing_files_reported() {
 fn binary_and_unreadable_are_reported() {
     let temp = TempDir::new().unwrap();
     let config = loq_core::config::LoqConfig {
-        default_max_lines: Some(1),
-        default_max_tokens: None,
+        default_limit: Some(loq_core::Limit::lines(1)),
         respect_gitignore: true,
         exclude: vec![],
         rules: vec![],
@@ -111,7 +110,7 @@ fn explicit_file_bypasses_gitignore() {
     let output = run_check(
         vec![file],
         CheckOptions {
-            config_path: None,
+            config: CheckConfig::Discover,
             cwd: temp.path().to_path_buf(),
             use_cache: false,
         },
@@ -134,7 +133,7 @@ fn directory_walk_respects_gitignore() {
     let output = run_check(
         vec![temp.path().to_path_buf()],
         CheckOptions {
-            config_path: None,
+            config: CheckConfig::Discover,
             cwd: temp.path().to_path_buf(),
             use_cache: false,
         },
@@ -172,7 +171,7 @@ fn gitignore_can_be_disabled() {
     let output = run_check(
         vec![file],
         CheckOptions {
-            config_path: Some(temp.path().join("loq.toml")),
+            config: CheckConfig::File(temp.path().join("loq.toml")),
             cwd: temp.path().to_path_buf(),
             use_cache: false,
         },
@@ -192,7 +191,7 @@ fn exactly_at_limit_passes() {
     let output = run_check(
         vec![file],
         CheckOptions {
-            config_path: Some(temp.path().join("loq.toml")),
+            config: CheckConfig::File(temp.path().join("loq.toml")),
             cwd: temp.path().to_path_buf(),
             use_cache: false,
         },
@@ -218,7 +217,7 @@ fn one_over_limit_violates() {
     let output = run_check(
         vec![file],
         CheckOptions {
-            config_path: Some(temp.path().join("loq.toml")),
+            config: CheckConfig::File(temp.path().join("loq.toml")),
             cwd: temp.path().to_path_buf(),
             use_cache: false,
         },
@@ -247,7 +246,7 @@ fn token_rule_uses_approximate_byte_budget() {
     let output = run_check(
         vec![file],
         CheckOptions {
-            config_path: Some(temp.path().join("loq.toml")),
+            config: CheckConfig::File(temp.path().join("loq.toml")),
             cwd: temp.path().to_path_buf(),
             use_cache: false,
         },
@@ -277,7 +276,7 @@ fn gitignore_negation_works_in_directory_walk() {
     let output = run_check(
         vec![temp.path().to_path_buf()],
         CheckOptions {
-            config_path: None,
+            config: CheckConfig::Discover,
             cwd: temp.path().to_path_buf(),
             use_cache: false,
         },
@@ -316,7 +315,7 @@ fn explicit_files_bypass_gitignore_even_with_negation() {
     let output = run_check(
         vec![ignored, whitelisted],
         CheckOptions {
-            config_path: None,
+            config: CheckConfig::Discover,
             cwd: temp.path().to_path_buf(),
             use_cache: false,
         },
@@ -346,7 +345,7 @@ fn subdir_check_uses_config_root_match_key() {
     let output = run_check(
         vec![file],
         CheckOptions {
-            config_path: Some(temp.path().join("loq.toml")),
+            config: CheckConfig::File(temp.path().join("loq.toml")),
             cwd,
             use_cache: false,
         },
@@ -369,7 +368,7 @@ fn missing_config_file_returns_error() {
     let result = run_check(
         vec![file],
         CheckOptions {
-            config_path: Some(temp.path().join("nonexistent.toml")),
+            config: CheckConfig::File(temp.path().join("nonexistent.toml")),
             cwd: temp.path().to_path_buf(),
             use_cache: false,
         },
@@ -397,7 +396,7 @@ fn exclude_pattern_with_globstar() {
     let output = run_check(
         vec![temp.path().to_path_buf()],
         CheckOptions {
-            config_path: Some(temp.path().join("loq.toml")),
+            config: CheckConfig::File(temp.path().join("loq.toml")),
             cwd: temp.path().to_path_buf(),
             use_cache: false,
         },

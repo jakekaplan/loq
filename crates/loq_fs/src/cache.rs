@@ -191,8 +191,7 @@ mod tests {
 
     fn make_config(default_max: Option<usize>) -> CompiledConfig {
         let config = LoqConfig {
-            default_max_lines: default_max,
-            default_max_tokens: None,
+            default_limit: default_max.map(loq_core::Limit::lines),
             ..LoqConfig::default()
         };
         compile_config(ConfigOrigin::BuiltIn, PathBuf::from("."), config, None).unwrap()

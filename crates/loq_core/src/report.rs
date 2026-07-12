@@ -35,20 +35,20 @@ pub enum OutcomeKind {
     },
     /// File appears to be binary (contains null bytes).
     Binary,
-    /// File exceeds its line limit.
+    /// File exceeds its configured budget.
     Violation {
         /// The configured budget.
         limit: Limit,
-        /// Actual line count.
+        /// Actual measured value.
         actual: usize,
         /// How the limit was determined.
         matched_by: MatchBy,
     },
-    /// File is within its line limit.
+    /// File is within its configured budget.
     Pass {
         /// The configured budget.
         limit: Limit,
-        /// Actual line count.
+        /// Actual measured value.
         actual: usize,
         /// How the limit was determined.
         matched_by: MatchBy,
@@ -69,13 +69,13 @@ pub enum SkipReason {
 /// A reportable finding (violation or skip warning).
 #[derive(Debug, Clone)]
 pub enum FindingKind {
-    /// File exceeded its line limit.
+    /// File exceeded its configured budget.
     Violation {
         /// The configured budget.
         limit: Limit,
-        /// Actual line count.
+        /// Actual measured value.
         actual: usize,
-        /// How many lines over the limit.
+        /// Amount over the limit.
         over_by: usize,
         /// How the limit was determined.
         matched_by: MatchBy,

@@ -45,10 +45,20 @@ pub enum FsError {
     },
 }
 
+/// Configuration used for a check.
+pub enum CheckConfig {
+    /// Discover `loq.toml` from the working directory, or use built-in defaults.
+    Discover,
+    /// Load a specific `loq.toml` file.
+    File(PathBuf),
+    /// Use an already compiled configuration.
+    Compiled(CompiledConfig),
+}
+
 /// Options for running a check.
 pub struct CheckOptions {
-    /// Explicit config file path (overrides discovery).
-    pub config_path: Option<PathBuf>,
+    /// Configuration selection.
+    pub config: CheckConfig,
     /// Current working directory for relative paths.
     pub cwd: PathBuf,
     /// Whether to use file caching (default: true).
@@ -93,20 +103,23 @@ fn load_config_from_path(path: &Path, fallback_cwd: &Path) -> Result<CompiledCon
 ///
 /// Exclusion filtering (gitignore + exclude patterns) happens at the walk layer.
 pub fn run_check(paths: Vec<PathBuf>, options: CheckOptions) -> Result<CheckOutput, FsError> {
-    let compiled = if let Some(ref config_path) = options.config_path {
-        load_config_from_path(config_path, &options.cwd)?
-    } else if let Some(config_path) = discover::find_config(&options.cwd) {
-        load_config_from_path(&config_path, &options.cwd)?
-    } else {
-        let config = LoqConfig::built_in_defaults();
-        let root_dir = options
-            .cwd
-            .canonicalize()
-            .unwrap_or_else(|_| options.cwd.clone());
-        compile_config(ConfigOrigin::BuiltIn, root_dir, config, None)?
+    let compiled = match options.config {
+        CheckConfig::File(path) => load_config_from_path(&path, &options.cwd)?,
+        CheckConfig::Compiled(config) => config,
+        CheckConfig::Discover => {
+            if let Some(path) = discover::find_config(&options.cwd) {
+                load_config_from_path(&path, &options.cwd)?
+            } else {
+                let config = LoqConfig::default();
+                let root_dir = options
+                    .cwd
+                    .canonicalize()
+                    .unwrap_or_else(|_| options.cwd.clone());
+                compile_config(ConfigOrigin::BuiltIn, root_dir, config, None)?
+            }
+        }
     };
 
-    // The cache lives at the config root.
     let config_hash = cache::hash_config(&compiled);
     let file_cache = if options.use_cache {
         cache::Cache::load(&compiled.root_dir, config_hash)
@@ -115,7 +128,6 @@ pub fn run_check(paths: Vec<PathBuf>, options: CheckOptions) -> Result<CheckOutp
     };
     let inspector = Inspector::new(file_cache);
 
-    // Canonicalize once here rather than per file.
     let cwd_abs = options
         .cwd
         .canonicalize()
