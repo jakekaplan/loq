@@ -1,29 +1,24 @@
 //! Relax command implementation.
 
 use std::collections::HashMap;
-use std::path::PathBuf;
 
 use anyhow::{Context, Result};
-use loq_fs::CheckOptions;
+use loq_fs::{CheckConfig, CheckOptions};
 use termcolor::WriteColor;
 use toml_edit::DocumentMut;
 
 use crate::cli::RelaxArgs;
-use crate::config_edit::{load_doc_or_default, persist_doc};
+use crate::config_edit::{config_path_and_root, load_doc_or_default, persist_doc};
 use crate::exact_limits::{self, ExactLimits};
+use crate::line_violations::line_violations;
 use crate::output::{
-    change_style, max_formatted_width, print_error, write_change_row, ChangeKind, ChangeRow,
+    change_style, max_formatted_width, plural, print_error, write_change_row, write_ok_line,
+    ChangeKind, ChangeRow,
 };
 use crate::ExitStatus;
 
 struct RelaxReport {
     changes: Vec<ChangeRow>,
-}
-
-impl RelaxReport {
-    fn is_empty(&self) -> bool {
-        self.changes.is_empty()
-    }
 }
 
 pub fn run_relax<W1: WriteColor, W2: WriteColor>(
@@ -32,11 +27,11 @@ pub fn run_relax<W1: WriteColor, W2: WriteColor>(
     stderr: &mut W2,
 ) -> ExitStatus {
     match run_relax_inner(args) {
+        Ok(report) if report.changes.is_empty() => {
+            let _ = writeln!(stdout, "✔ No changes needed");
+            ExitStatus::Success
+        }
         Ok(report) => {
-            if report.is_empty() {
-                let _ = writeln!(stdout, "✔ No changes needed");
-                return ExitStatus::Success;
-            }
             let _ = write_report(stdout, &report);
             ExitStatus::Success
         }
@@ -45,8 +40,8 @@ pub fn run_relax<W1: WriteColor, W2: WriteColor>(
 }
 
 fn run_relax_inner(args: &RelaxArgs) -> Result<RelaxReport> {
-    let cwd = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
-    let config_path = cwd.join("loq.toml");
+    let cwd = std::env::current_dir().context("failed to get current directory")?;
+    let (config_path, root) = config_path_and_root(&cwd)?;
     let config_exists = config_path.exists();
 
     let paths = if args.files.is_empty() {
@@ -55,14 +50,19 @@ fn run_relax_inner(args: &RelaxArgs) -> Result<RelaxReport> {
         args.files.clone()
     };
 
+    let config = if config_exists {
+        CheckConfig::File(config_path.clone())
+    } else {
+        CheckConfig::Discover
+    };
     let options = CheckOptions {
-        config_path: config_exists.then(|| config_path.clone()),
-        cwd: cwd.clone(),
+        config,
+        cwd,
         use_cache: false,
     };
 
     let output = loq_fs::run_check(paths, options).context("relax check failed")?;
-    let violations = collect_violations(&output.outcomes);
+    let violations = line_violations(&output.outcomes);
 
     if violations.is_empty() {
         return Ok(RelaxReport {
@@ -75,21 +75,9 @@ fn run_relax_inner(args: &RelaxArgs) -> Result<RelaxReport> {
     let existing_rules = ExactLimits::collect(&doc);
     let changes = apply_relax_changes(&mut doc, &violations, &existing_rules, args.extra);
 
-    persist_doc(&cwd, &config_path, &doc, config_exists_for_write)?;
+    persist_doc(&root, &config_path, &doc, config_exists_for_write)?;
 
     Ok(RelaxReport { changes })
-}
-
-fn collect_violations(outcomes: &[loq_core::FileOutcome]) -> HashMap<String, usize> {
-    let mut violations = HashMap::new();
-    for outcome in outcomes {
-        if let loq_core::OutcomeKind::Violation { actual, limit, .. } = outcome.kind {
-            if limit.metric == loq_core::Metric::Lines {
-                violations.insert(outcome.match_key.clone(), actual);
-            }
-        }
-    }
-    violations
 }
 
 fn apply_relax_changes(
@@ -139,80 +127,18 @@ fn write_report<W: WriteColor>(writer: &mut W, report: &RelaxReport) -> std::io:
             &change.path,
         )?;
     }
-    writer.set_color(&style.ok)?;
-    write!(writer, "✔ ")?;
-    writer.reset()?;
-    writer.set_color(&style.dimmed)?;
-    write!(
+    write_ok_line(
         writer,
-        "Relaxed limits for {count} file{}",
-        if count == 1 { "" } else { "s" }
-    )?;
-    writer.reset()?;
-    writeln!(writer)?;
-    Ok(())
+        &style,
+        &format!("Relaxed limits for {count} file{}", plural(count)),
+    )
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use loq_core::report::OutcomeKind;
-    use loq_core::{ConfigOrigin, MatchBy};
-    use std::collections::HashMap;
-    use std::path::PathBuf;
     use termcolor::NoColor;
     use toml_edit::Item;
-
-    #[test]
-    fn collect_violations_uses_match_key() {
-        let outcomes = vec![
-            loq_core::FileOutcome {
-                path: PathBuf::from("/tmp/a"),
-                display_path: "./src/a.rs".into(),
-                match_key: "src/a.rs".into(),
-                config_source: ConfigOrigin::BuiltIn,
-                kind: OutcomeKind::Violation {
-                    limit: loq_core::Limit::lines(10),
-                    actual: 12,
-                    matched_by: MatchBy::Default,
-                },
-            },
-            loq_core::FileOutcome {
-                path: PathBuf::from("/tmp/b"),
-                display_path: "src/b.rs".into(),
-                match_key: "src/b.rs".into(),
-                config_source: ConfigOrigin::BuiltIn,
-                kind: OutcomeKind::Pass {
-                    limit: loq_core::Limit::lines(10),
-                    actual: 9,
-                    matched_by: MatchBy::Default,
-                },
-            },
-        ];
-
-        let violations = collect_violations(&outcomes);
-        assert_eq!(violations.len(), 1);
-        assert_eq!(violations.get("src/a.rs"), Some(&12));
-    }
-
-    #[test]
-    fn collect_violations_ignores_token_violations() {
-        let outcomes = vec![loq_core::FileOutcome {
-            path: PathBuf::from("/tmp/prompt"),
-            display_path: "prompt.md".into(),
-            match_key: "prompt.md".into(),
-            config_source: ConfigOrigin::BuiltIn,
-            kind: OutcomeKind::Violation {
-                limit: loq_core::Limit::tokens(4),
-                actual: 5,
-                matched_by: MatchBy::Default,
-            },
-        }];
-
-        let violations = collect_violations(&outcomes);
-
-        assert!(violations.is_empty());
-    }
 
     #[test]
     fn apply_relax_changes_updates_and_adds_rules() {

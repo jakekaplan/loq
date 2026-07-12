@@ -1,29 +1,23 @@
 //! Baseline command implementation.
 
 use std::collections::HashMap;
-use std::path::PathBuf;
 
-use anyhow::Result;
+use anyhow::{Context, Result};
 use termcolor::WriteColor;
 use toml_edit::DocumentMut;
 
-use crate::baseline_shared::scan_violations_with_threshold;
 use crate::cli::BaselineArgs;
-use crate::config_edit::{load_doc_or_default, persist_doc, threshold_from_doc};
+use crate::config_edit::{config_path_and_root, line_threshold, load_doc_or_default, persist_doc};
 use crate::exact_limits::{self, ExactLimit, ExactLimits};
+use crate::line_violations::scan_line_violations;
 use crate::output::{
-    change_style, max_formatted_width, print_error, write_change_row, ChangeKind, ChangeRow,
+    change_style, max_formatted_width, plural, print_error, write_change_row, write_ok_line,
+    ChangeKind, ChangeRow, ChangeStyle,
 };
 use crate::ExitStatus;
 
 struct BaselineReport {
     changes: Vec<ChangeRow>,
-}
-
-impl BaselineReport {
-    fn is_empty(&self) -> bool {
-        self.changes.is_empty()
-    }
 }
 
 pub fn run_baseline<W1: WriteColor, W2: WriteColor>(
@@ -32,11 +26,11 @@ pub fn run_baseline<W1: WriteColor, W2: WriteColor>(
     stderr: &mut W2,
 ) -> ExitStatus {
     match run_baseline_inner(args) {
+        Ok(report) if report.changes.is_empty() => {
+            let _ = writeln!(stdout, "✔ No changes needed");
+            ExitStatus::Success
+        }
         Ok(report) => {
-            if report.is_empty() {
-                let _ = writeln!(stdout, "✔ No changes needed");
-                return ExitStatus::Success;
-            }
             let _ = write_report(stdout, &report);
             ExitStatus::Success
         }
@@ -45,41 +39,33 @@ pub fn run_baseline<W1: WriteColor, W2: WriteColor>(
 }
 
 fn run_baseline_inner(args: &BaselineArgs) -> Result<BaselineReport> {
-    let cwd = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
-    let config_path = cwd.join("loq.toml");
+    let cwd = std::env::current_dir().context("failed to get current directory")?;
+    let (config_path, root) = config_path_and_root(&cwd)?;
 
-    // Step 1: Read and parse the config file (or create defaults if missing)
     let (mut doc, config_exists) = load_doc_or_default(&config_path)?;
-
-    // Step 2: Determine threshold (--threshold or default_max_lines from config)
-    let threshold = threshold_from_doc(&doc, args.threshold);
-
-    // Step 3: Run check to find violations (respects config's exclude and gitignore settings)
-    let violations =
-        scan_violations_with_threshold(&cwd, &doc, threshold, "baseline check failed")?;
-
-    // Step 4: Collect existing exact-path rules (baseline candidates)
+    let config = loq_core::parse_config(&config_path, &doc.to_string())?;
+    let threshold = line_threshold(&config, args.threshold);
+    let violations = scan_line_violations(&root, &cwd, &config_path, config, threshold)
+        .context("baseline check failed")?;
     let existing_rules = ExactLimits::collect(&doc);
+    let scope = loq_fs::PathIdentity::new(&cwd, &root, &root).match_key;
+    let report = apply_baseline_changes(&mut doc, &violations, &existing_rules, &scope);
 
-    // Step 5: Compute changes
-    let report = apply_baseline_changes(&mut doc, &violations, &existing_rules);
-
-    // Step 6: Write config back
-    persist_doc(&cwd, &config_path, &doc, config_exists)?;
+    persist_doc(&root, &config_path, &doc, config_exists)?;
 
     Ok(report)
 }
 
-/// Apply baseline changes to the document.
 fn apply_baseline_changes(
     doc: &mut DocumentMut,
     violations: &HashMap<String, usize>,
     existing_rules: &ExactLimits,
+    scope: &str,
 ) -> BaselineReport {
     let mut changes = Vec::new();
     let mut limits_to_remove: Vec<ExactLimit> = Vec::new();
 
-    for (path, limit) in existing_rules.iter() {
+    for (path, limit) in existing_rules.within(scope) {
         if let Some(&actual) = violations.get(path) {
             if actual != limit.max_lines {
                 exact_limits::update_limit(doc, limit, actual);
@@ -139,40 +125,22 @@ fn write_report<W: WriteColor>(writer: &mut W, report: &BaselineReport) -> std::
     let counts = write_change_lines(writer, &changes, width, &style)?;
 
     if counts.added > 0 || counts.updated > 0 {
-        writer.set_color(&style.ok)?;
-        write!(writer, "✔ ")?;
-        writer.reset()?;
-        writer.set_color(&style.dimmed)?;
-        let output = capitalize_first(&change_summary(&counts));
-        write!(writer, "{output}")?;
-        writer.reset()?;
-        writeln!(writer)?;
+        write_ok_line(writer, &style, &change_summary(&counts))?;
     }
 
     if counts.removed > 0 {
-        writer.set_color(&style.ok)?;
-        write!(writer, "✔ ")?;
-        writer.reset()?;
-        writer.set_color(&style.dimmed)?;
-        write!(
+        write_ok_line(
             writer,
-            "Removed limits for {} file{}",
-            counts.removed,
-            if counts.removed == 1 { "" } else { "s" }
+            &style,
+            &format!(
+                "Removed limits for {} file{}",
+                counts.removed,
+                plural(counts.removed)
+            ),
         )?;
-        writer.reset()?;
-        writeln!(writer)?;
     }
 
     Ok(())
-}
-
-fn capitalize_first(s: &str) -> String {
-    let mut chars = s.chars();
-    match chars.next() {
-        None => String::new(),
-        Some(c) => c.to_uppercase().collect::<String>() + chars.as_str(),
-    }
 }
 
 fn change_sort_value(change: &ChangeRow) -> usize {
@@ -192,7 +160,7 @@ fn write_change_lines<W: WriteColor>(
     writer: &mut W,
     changes: &[&ChangeRow],
     width: usize,
-    style: &crate::output::ChangeStyle,
+    style: &ChangeStyle,
 ) -> std::io::Result<ChangeCounts> {
     let mut counts = ChangeCounts {
         added: 0,
@@ -224,56 +192,25 @@ fn write_change_lines<W: WriteColor>(
 }
 
 fn change_summary(counts: &ChangeCounts) -> String {
-    let mut parts = Vec::new();
-    if counts.added > 0 {
-        parts.push(format!(
-            "added {} file{}",
-            counts.added,
-            if counts.added == 1 { "" } else { "s" }
-        ));
+    if counts.added == 0 {
+        return format!("Updated {} file{}", counts.updated, plural(counts.updated));
     }
-    if counts.updated > 0 {
-        parts.push(format!(
-            "updated {} file{}",
-            counts.updated,
-            if counts.updated == 1 { "" } else { "s" }
-        ));
+    if counts.updated == 0 {
+        return format!("Added {} file{}", counts.added, plural(counts.added));
     }
-    parts.join(", ")
+    format!(
+        "Added {} file{}, updated {} file{}",
+        counts.added,
+        plural(counts.added),
+        counts.updated,
+        plural(counts.updated)
+    )
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use termcolor::NoColor;
-
-    #[test]
-    fn baseline_report_is_empty() {
-        let report = BaselineReport {
-            changes: Vec::new(),
-        };
-        assert!(report.is_empty());
-
-        let report = BaselineReport {
-            changes: vec![ChangeRow {
-                path: "src/lib.rs".into(),
-                from: Some(10),
-                to: Some(12),
-                kind: ChangeKind::Updated,
-            }],
-        };
-        assert!(!report.is_empty());
-
-        let report = BaselineReport {
-            changes: vec![ChangeRow {
-                path: "src/old.rs".into(),
-                from: Some(10),
-                to: None,
-                kind: ChangeKind::Removed,
-            }],
-        };
-        assert!(!report.is_empty());
-    }
 
     #[test]
     fn write_report_sorts_by_limit_and_summarizes() {
@@ -335,10 +272,5 @@ mod tests {
         let removed = lines[0].split_whitespace().collect::<Vec<_>>();
         assert_eq!(removed, vec!["-", "10", "->", "-", "src/old.rs"]);
         assert_eq!(lines[1], "✔ Removed limits for 1 file");
-    }
-
-    #[test]
-    fn capitalize_first_handles_empty() {
-        assert_eq!(capitalize_first(""), "");
     }
 }

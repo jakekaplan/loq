@@ -6,12 +6,12 @@
 #![warn(missing_docs)]
 
 mod baseline;
-mod baseline_shared;
 mod check;
 mod cli;
 mod config_edit;
 mod exact_limits;
 mod init;
+mod line_violations;
 mod output;
 mod relax;
 mod tighten;

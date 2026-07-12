@@ -1,12 +1,24 @@
-//! Shared helpers for editing `loq.toml` with `toml_edit`.
+//! `loq.toml` editing.
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result};
-use loq_core::config::{DEFAULT_MAX_LINES, DEFAULT_RESPECT_GITIGNORE};
+use loq_core::config::{LoqConfig, DEFAULT_MAX_LINES, DEFAULT_RESPECT_GITIGNORE};
+use loq_core::Metric;
 use toml_edit::{DocumentMut, Item};
 
 use crate::init::add_to_gitignore;
+
+/// Returns the governing config path and its root directory.
+pub(crate) fn config_path_and_root(cwd: &Path) -> Result<(PathBuf, PathBuf)> {
+    let path = loq_fs::discover::find_config(cwd).unwrap_or_else(|| cwd.join("loq.toml"));
+    let root = path
+        .parent()
+        .context("config path has no parent")?
+        .canonicalize()
+        .context("failed to resolve config root")?;
+    Ok((path, root))
+}
 
 /// Create a default document for initializing `loq.toml`.
 pub(crate) fn default_document() -> DocumentMut {
@@ -53,12 +65,10 @@ pub(crate) fn persist_doc(
     Ok(())
 }
 
-pub(crate) fn threshold_from_doc(doc: &DocumentMut, explicit: Option<usize>) -> usize {
-    explicit.unwrap_or_else(|| {
-        doc.get("default_max_lines")
-            .and_then(Item::as_integer)
-            .and_then(|value| usize::try_from(value).ok())
-            .unwrap_or(DEFAULT_MAX_LINES)
+pub(crate) fn line_threshold(config: &LoqConfig, explicit: Option<usize>) -> usize {
+    explicit.unwrap_or_else(|| match config.default_limit {
+        Some(limit) if limit.metric == Metric::Lines => limit.max,
+        _ => DEFAULT_MAX_LINES,
     })
 }
 

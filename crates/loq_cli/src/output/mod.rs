@@ -94,6 +94,31 @@ where
         .fold(6, |current, value| current.max(format_number(value).len()))
 }
 
+/// Returns the plural suffix (`""` or `"s"`) for `count`.
+#[must_use]
+pub const fn plural(count: usize) -> &'static str {
+    if count == 1 {
+        ""
+    } else {
+        "s"
+    }
+}
+
+/// Writes a dimmed summary line prefixed with a green check mark.
+pub fn write_ok_line<W: WriteColor>(
+    writer: &mut W,
+    style: &ChangeStyle,
+    text: &str,
+) -> io::Result<()> {
+    writer.set_color(&style.ok)?;
+    write!(writer, "✔ ")?;
+    writer.reset()?;
+    writer.set_color(&style.dimmed)?;
+    write!(writer, "{text}")?;
+    writer.reset()?;
+    writeln!(writer)
+}
+
 pub fn write_change_row<W: WriteColor>(
     writer: &mut W,
     style: &ChangeStyle,
@@ -159,12 +184,10 @@ pub fn write_finding<W: WriteColor>(
         FindingKind::SkipWarning { .. } => ("⚠", Color::Yellow),
     };
 
-    // Symbol
     writer.set_color(&fg(color))?;
     write!(writer, "{symbol} ")?;
     writer.reset()?;
 
-    // Details first (fixed-width), then path (variable-width)
     match &finding.kind {
         FindingKind::Violation {
             actual,
@@ -172,8 +195,6 @@ pub fn write_finding<W: WriteColor>(
             matched_by,
             ..
         } => {
-            // Format: ✖ 1,427 > 500  path/to/file.rs
-            // Right-align actual within 6 chars (handles up to 99,999)
             let actual_str = formatted_measurement(*actual, *limit);
             let limit_str = format_number(limit.max);
             writer.set_color(&fg(color).set_bold(true).clone())?;
@@ -191,7 +212,6 @@ pub fn write_finding<W: WriteColor>(
             write!(writer, "{limit_str:<6}")?;
             writer.reset()?;
 
-            // Path (directory dimmed, filename bold)
             write!(writer, " ")?;
             write_path(writer, &finding.path)?;
             writeln!(writer)?;

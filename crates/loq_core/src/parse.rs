@@ -4,7 +4,53 @@
 
 use std::path::Path;
 
-use crate::config::{ConfigError, LoqConfig};
+use serde::{Deserialize, Deserializer};
+
+use crate::config::{ConfigError, LoqConfig, Rule, DEFAULT_RESPECT_GITIGNORE};
+use crate::Limit;
+
+#[derive(Deserialize)]
+struct RawConfig {
+    default_max_lines: Option<usize>,
+    default_max_tokens: Option<usize>,
+    #[serde(default = "default_respect_gitignore")]
+    respect_gitignore: bool,
+    #[serde(default)]
+    exclude: Vec<String>,
+    #[serde(default)]
+    rules: Vec<RawRule>,
+    #[serde(default)]
+    fix_guidance: Option<String>,
+}
+
+#[derive(Deserialize)]
+struct RawRule {
+    #[serde(deserialize_with = "deserialize_string_or_vec")]
+    path: Vec<String>,
+    max_lines: Option<usize>,
+    max_tokens: Option<usize>,
+}
+
+fn deserialize_string_or_vec<'de, D>(deserializer: D) -> Result<Vec<String>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    #[derive(Deserialize)]
+    #[serde(untagged)]
+    enum StringOrVec {
+        String(String),
+        Vec(Vec<String>),
+    }
+
+    match StringOrVec::deserialize(deserializer)? {
+        StringOrVec::String(value) => Ok(vec![value]),
+        StringOrVec::Vec(values) => Ok(values),
+    }
+}
+
+const fn default_respect_gitignore() -> bool {
+    DEFAULT_RESPECT_GITIGNORE
+}
 
 /// Parses a `loq.toml` file and validates its structure.
 ///
@@ -13,7 +59,7 @@ use crate::config::{ConfigError, LoqConfig};
 pub fn parse_config(path: &Path, text: &str) -> Result<LoqConfig, ConfigError> {
     let deserializer = toml::Deserializer::new(text);
     let mut unknown = Vec::new();
-    let parsed: LoqConfig = serde_ignored::deserialize(deserializer, |path| {
+    let raw: RawConfig = serde_ignored::deserialize(deserializer, |path| {
         if let Some(key) = extract_unknown_key_name(&path) {
             unknown.push(key);
         }
@@ -37,7 +83,55 @@ pub fn parse_config(path: &Path, text: &str) -> Result<LoqConfig, ConfigError> {
         });
     }
 
-    Ok(parsed)
+    let default_limit = match (raw.default_max_lines, raw.default_max_tokens) {
+        (Some(_), Some(_)) => {
+            return Err(ConfigError::InvalidLimit {
+                path: path.to_path_buf(),
+                message: "set only one of default_max_lines or default_max_tokens".to_string(),
+            });
+        }
+        (Some(lines), None) => Some(Limit::lines(lines)),
+        (None, Some(tokens)) => Some(Limit::tokens(tokens)),
+        (None, None) => None,
+    };
+
+    let mut rules = Vec::with_capacity(raw.rules.len());
+    for raw_rule in raw.rules {
+        let limit = match (raw_rule.max_lines, raw_rule.max_tokens) {
+            (Some(lines), None) => Limit::lines(lines),
+            (None, Some(tokens)) => Limit::tokens(tokens),
+            (Some(_), Some(_)) => {
+                return Err(ConfigError::InvalidLimit {
+                    path: path.to_path_buf(),
+                    message: format!(
+                        "rule for '{}' must set only one of max_lines or max_tokens",
+                        raw_rule.path.join(", ")
+                    ),
+                });
+            }
+            (None, None) => {
+                return Err(ConfigError::InvalidLimit {
+                    path: path.to_path_buf(),
+                    message: format!(
+                        "rule for '{}' must set max_lines or max_tokens",
+                        raw_rule.path.join(", ")
+                    ),
+                });
+            }
+        };
+        rules.push(Rule {
+            paths: raw_rule.path,
+            limit,
+        });
+    }
+
+    Ok(LoqConfig {
+        default_limit,
+        respect_gitignore: raw.respect_gitignore,
+        exclude: raw.exclude,
+        rules,
+        fix_guidance: raw.fix_guidance,
+    })
 }
 
 fn extract_unknown_key_name(path: &serde_ignored::Path) -> Option<String> {
@@ -69,6 +163,7 @@ fn find_key_location(text: &str, key: &str) -> Option<(usize, usize)> {
 fn suggest_key(key: &str) -> Option<String> {
     let candidates = [
         "default_max_lines",
+        "default_max_tokens",
         "respect_gitignore",
         "exclude",
         "rules",
@@ -137,7 +232,7 @@ mod tests {
         let text = "default_max_lines = 500\n[[rules]]\npath = \"**/*.rs\"\nmax_lines = 10\n";
         let config = parse_config(Path::new("loq.toml"), text).unwrap();
         assert_eq!(config.rules.len(), 1);
-        assert_eq!(config.rules[0].max_lines, Some(10));
+        assert_eq!(config.rules[0].limit, Limit::lines(10));
     }
 
     #[test]
@@ -146,8 +241,32 @@ mod tests {
             "default_max_lines = 500\n[[rules]]\npath = \"prompts/**/*.md\"\nmax_tokens = 8000\n";
         let config = parse_config(Path::new("loq.toml"), text).unwrap();
         assert_eq!(config.rules.len(), 1);
-        assert_eq!(config.rules[0].max_lines, None);
-        assert_eq!(config.rules[0].max_tokens, Some(8000));
+        assert_eq!(config.rules[0].limit, Limit::tokens(8000));
+    }
+
+    #[test]
+    fn both_default_budgets_are_invalid() {
+        let text = "default_max_lines = 500\ndefault_max_tokens = 2000\n";
+        let err = parse_config(Path::new("loq.toml"), text).unwrap_err();
+        assert!(err
+            .to_string()
+            .contains("only one of default_max_lines or default_max_tokens"));
+    }
+
+    #[test]
+    fn rule_with_both_budgets_is_invalid() {
+        let text = "[[rules]]\npath = \"**/*.md\"\nmax_lines = 100\nmax_tokens = 1000\n";
+        let err = parse_config(Path::new("loq.toml"), text).unwrap_err();
+        assert!(err
+            .to_string()
+            .contains("only one of max_lines or max_tokens"));
+    }
+
+    #[test]
+    fn rule_without_budget_is_invalid() {
+        let text = "[[rules]]\npath = \"**/*.md\"\n";
+        let err = parse_config(Path::new("loq.toml"), text).unwrap_err();
+        assert!(err.to_string().contains("must set max_lines or max_tokens"));
     }
 
     #[test]
@@ -258,7 +377,7 @@ max_lines = 100
 "#;
         let config = parse_config(Path::new("loq.toml"), text).unwrap();
         assert_eq!(config.rules.len(), 1);
-        assert_eq!(config.rules[0].path, vec!["**/*.rs"]);
+        assert_eq!(config.rules[0].paths, vec!["**/*.rs"]);
     }
 
     #[test]
@@ -270,7 +389,7 @@ max_lines = 100
 "#;
         let config = parse_config(Path::new("loq.toml"), text).unwrap();
         assert_eq!(config.rules.len(), 1);
-        assert_eq!(config.rules[0].path, vec!["src/a.rs", "src/b.rs"]);
+        assert_eq!(config.rules[0].paths, vec!["src/a.rs", "src/b.rs"]);
     }
 
     #[test]
@@ -281,7 +400,7 @@ path = ["only_one.rs"]
 max_lines = 100
 "#;
         let config = parse_config(Path::new("loq.toml"), text).unwrap();
-        assert_eq!(config.rules[0].path, vec!["only_one.rs"]);
+        assert_eq!(config.rules[0].paths, vec!["only_one.rs"]);
     }
 
     #[test]

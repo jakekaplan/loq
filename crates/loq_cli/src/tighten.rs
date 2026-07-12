@@ -1,18 +1,18 @@
 //! Tighten command implementation.
 
 use std::collections::HashMap;
-use std::path::PathBuf;
 
-use anyhow::Result;
+use anyhow::{Context, Result};
 use termcolor::WriteColor;
 use toml_edit::DocumentMut;
 
-use crate::baseline_shared::scan_violations_with_threshold;
 use crate::cli::TightenArgs;
-use crate::config_edit::{load_doc_or_default, persist_doc, threshold_from_doc};
+use crate::config_edit::{config_path_and_root, line_threshold, load_doc_or_default, persist_doc};
 use crate::exact_limits::{self, ExactLimit, ExactLimits};
+use crate::line_violations::scan_line_violations;
 use crate::output::{
-    change_style, max_formatted_width, print_error, write_change_row, ChangeKind, ChangeRow,
+    change_style, max_formatted_width, plural, print_error, write_change_row, write_ok_line,
+    ChangeKind, ChangeRow,
 };
 use crate::ExitStatus;
 
@@ -21,23 +21,17 @@ struct TightenReport {
     removed: usize,
 }
 
-impl TightenReport {
-    fn is_empty(&self) -> bool {
-        self.changes.is_empty() && self.removed == 0
-    }
-}
-
 pub fn run_tighten<W1: WriteColor, W2: WriteColor>(
     args: &TightenArgs,
     stdout: &mut W1,
     stderr: &mut W2,
 ) -> ExitStatus {
     match run_tighten_inner(args) {
+        Ok(report) if report.changes.is_empty() && report.removed == 0 => {
+            let _ = writeln!(stdout, "✔ No changes needed");
+            ExitStatus::Success
+        }
         Ok(report) => {
-            if report.is_empty() {
-                let _ = writeln!(stdout, "✔ No changes needed");
-                return ExitStatus::Success;
-            }
             let _ = write_report(stdout, &report);
             ExitStatus::Success
         }
@@ -46,17 +40,19 @@ pub fn run_tighten<W1: WriteColor, W2: WriteColor>(
 }
 
 fn run_tighten_inner(args: &TightenArgs) -> Result<TightenReport> {
-    let cwd = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
-    let config_path = cwd.join("loq.toml");
+    let cwd = std::env::current_dir().context("failed to get current directory")?;
+    let (config_path, root) = config_path_and_root(&cwd)?;
 
     let (mut doc, config_exists) = load_doc_or_default(&config_path)?;
-    let threshold = threshold_from_doc(&doc, args.threshold);
-
-    let violations = scan_violations_with_threshold(&cwd, &doc, threshold, "tighten check failed")?;
+    let config = loq_core::parse_config(&config_path, &doc.to_string())?;
+    let threshold = line_threshold(&config, args.threshold);
+    let violations = scan_line_violations(&root, &cwd, &config_path, config, threshold)
+        .context("tighten check failed")?;
     let existing_rules = ExactLimits::collect(&doc);
-    let report = apply_tighten_changes(&mut doc, &violations, &existing_rules);
+    let scope = loq_fs::PathIdentity::new(&cwd, &root, &root).match_key;
+    let report = apply_tighten_changes(&mut doc, &violations, &existing_rules, &scope);
 
-    persist_doc(&cwd, &config_path, &doc, config_exists)?;
+    persist_doc(&root, &config_path, &doc, config_exists)?;
 
     Ok(report)
 }
@@ -65,11 +61,12 @@ fn apply_tighten_changes(
     doc: &mut DocumentMut,
     violations: &HashMap<String, usize>,
     existing_rules: &ExactLimits,
+    scope: &str,
 ) -> TightenReport {
     let mut changes = Vec::new();
     let mut limits_to_remove: Vec<ExactLimit> = Vec::new();
 
-    for (path, limit) in existing_rules.iter() {
+    for (path, limit) in existing_rules.within(scope) {
         if let Some(&actual) = violations.get(path) {
             if actual < limit.max_lines {
                 exact_limits::update_limit(doc, limit, actual);
@@ -117,32 +114,23 @@ fn write_report<W: WriteColor>(writer: &mut W, report: &TightenReport) -> std::i
         }
 
         let count = report.changes.len();
-        writer.set_color(&style.ok)?;
-        write!(writer, "✔ ")?;
-        writer.reset()?;
-        writer.set_color(&style.dimmed)?;
-        write!(
+        write_ok_line(
             writer,
-            "Tightened limits for {count} file{}",
-            if count == 1 { "" } else { "s" }
+            &style,
+            &format!("Tightened limits for {count} file{}", plural(count)),
         )?;
-        writer.reset()?;
-        writeln!(writer)?;
     }
 
     if report.removed > 0 {
-        writer.set_color(&style.ok)?;
-        write!(writer, "✔ ")?;
-        writer.reset()?;
-        writer.set_color(&style.dimmed)?;
-        write!(
+        write_ok_line(
             writer,
-            "Removed limits for {} file{}",
-            report.removed,
-            if report.removed == 1 { "" } else { "s" }
+            &style,
+            &format!(
+                "Removed limits for {} file{}",
+                report.removed,
+                plural(report.removed)
+            ),
         )?;
-        writer.reset()?;
-        writeln!(writer)?;
     }
 
     Ok(())
@@ -204,31 +192,5 @@ mod tests {
             output.lines().collect::<Vec<_>>(),
             vec!["✔ Removed limits for 2 files"]
         );
-    }
-
-    #[test]
-    fn tighten_report_is_empty() {
-        let report = TightenReport {
-            changes: Vec::new(),
-            removed: 0,
-        };
-        assert!(report.is_empty());
-
-        let report = TightenReport {
-            changes: vec![ChangeRow {
-                path: "src/lib.rs".into(),
-                from: Some(10),
-                to: Some(9),
-                kind: ChangeKind::Adjusted,
-            }],
-            removed: 0,
-        };
-        assert!(!report.is_empty());
-
-        let report = TightenReport {
-            changes: Vec::new(),
-            removed: 1,
-        };
-        assert!(!report.is_empty());
     }
 }

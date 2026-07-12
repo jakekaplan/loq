@@ -6,7 +6,6 @@
 use std::path::{Path, PathBuf};
 
 use globset::{GlobBuilder, GlobMatcher};
-use serde::{Deserialize, Deserializer};
 use thiserror::Error;
 
 use crate::Limit;
@@ -16,90 +15,38 @@ pub const DEFAULT_MAX_LINES: usize = 500;
 /// Default behavior for respecting `.gitignore`.
 pub const DEFAULT_RESPECT_GITIGNORE: bool = true;
 
-/// A path-specific line limit rule.
-#[derive(Debug, Clone, Deserialize)]
+/// A validated path-specific limit rule.
+#[derive(Debug, Clone)]
 pub struct Rule {
-    /// Glob patterns to match files. Accepts a single string or array of strings.
-    #[serde(deserialize_with = "deserialize_string_or_vec")]
-    pub path: Vec<String>,
-    /// Maximum allowed lines for matched files.
-    pub max_lines: Option<usize>,
-    /// Maximum allowed approximate tokens for matched files.
-    pub max_tokens: Option<usize>,
+    /// Glob patterns matched by this rule.
+    pub paths: Vec<String>,
+    /// Maximum allowed budget.
+    pub limit: Limit,
 }
 
-fn deserialize_string_or_vec<'de, D>(deserializer: D) -> Result<Vec<String>, D::Error>
-where
-    D: Deserializer<'de>,
-{
-    #[derive(Deserialize)]
-    #[serde(untagged)]
-    enum StringOrVec {
-        String(String),
-        Vec(Vec<String>),
-    }
-
-    match StringOrVec::deserialize(deserializer)? {
-        StringOrVec::String(s) => Ok(vec![s]),
-        StringOrVec::Vec(v) => Ok(v),
-    }
-}
-
-/// Parsed `loq.toml` configuration (before compilation).
-#[derive(Debug, Clone, Deserialize)]
+/// Validated `loq.toml` configuration before glob compilation.
+#[derive(Debug, Clone)]
 pub struct LoqConfig {
-    /// Default line limit for files not matching any rule.
-    pub default_max_lines: Option<usize>,
+    /// Default budget for files not matching any rule.
+    pub default_limit: Option<Limit>,
     /// Whether to skip files matched by `.gitignore`.
-    #[serde(default = "default_respect_gitignore")]
     pub respect_gitignore: bool,
     /// Glob patterns for files to skip.
-    #[serde(default)]
     pub exclude: Vec<String>,
     /// Path-specific rules (last match wins).
-    #[serde(default)]
     pub rules: Vec<Rule>,
     /// Guidance text shown when violations exist.
-    #[serde(default)]
     pub fix_guidance: Option<String>,
 }
 
 impl Default for LoqConfig {
     fn default() -> Self {
         Self {
-            default_max_lines: Some(DEFAULT_MAX_LINES),
+            default_limit: Some(Limit::lines(DEFAULT_MAX_LINES)),
             respect_gitignore: DEFAULT_RESPECT_GITIGNORE,
             exclude: Vec::new(),
             rules: Vec::new(),
             fix_guidance: None,
-        }
-    }
-}
-
-impl LoqConfig {
-    /// Returns the built-in defaults used when no config file is found.
-    #[must_use]
-    pub fn built_in_defaults() -> Self {
-        Self::default()
-    }
-
-    /// Returns a template config for `loq init`.
-    #[must_use]
-    pub fn init_template() -> Self {
-        Self {
-            rules: vec![
-                Rule {
-                    path: vec!["**/*.tsx".to_string()],
-                    max_lines: Some(300),
-                    max_tokens: None,
-                },
-                Rule {
-                    path: vec!["tests/**/*".to_string()],
-                    max_lines: Some(DEFAULT_MAX_LINES),
-                    max_tokens: None,
-                },
-            ],
-            ..Self::default()
         }
     }
 }
@@ -120,7 +67,7 @@ pub struct CompiledConfig {
     pub origin: ConfigOrigin,
     /// Root directory for relative path matching.
     pub root_dir: PathBuf,
-    /// Default line limit for files not matching any rule.
+    /// Default budget for files not matching any rule.
     pub default_limit: Option<Limit>,
     /// Whether to respect `.gitignore` patterns.
     pub respect_gitignore: bool,
@@ -290,13 +237,12 @@ pub fn compile_config(
     let mut rules = Vec::new();
     for rule in config.rules {
         let mut matchers = Vec::new();
-        for pattern in &rule.path {
+        for pattern in &rule.paths {
             matchers.push(compile_glob(pattern, &path_for_errors)?);
         }
-        let limit = rule_limit(&rule, &path_for_errors)?;
         rules.push(CompiledRule {
-            patterns: rule.path,
-            limit,
+            patterns: rule.paths,
+            limit: rule.limit,
             matchers,
         });
     }
@@ -304,33 +250,12 @@ pub fn compile_config(
     Ok(CompiledConfig {
         origin,
         root_dir,
-        default_limit: config.default_max_lines.map(Limit::lines),
+        default_limit: config.default_limit,
         respect_gitignore: config.respect_gitignore,
         fix_guidance: config.fix_guidance,
         exclude,
         rules,
     })
-}
-
-fn rule_limit(rule: &Rule, source_path: &Path) -> Result<Limit, ConfigError> {
-    match (rule.max_lines, rule.max_tokens) {
-        (Some(lines), None) => Ok(Limit::lines(lines)),
-        (None, Some(tokens)) => Ok(Limit::tokens(tokens)),
-        (Some(_), Some(_)) => Err(ConfigError::InvalidLimit {
-            path: source_path.to_path_buf(),
-            message: format!(
-                "rule for '{}' must set only one of max_lines or max_tokens",
-                rule.path.join(", ")
-            ),
-        }),
-        (None, None) => Err(ConfigError::InvalidLimit {
-            path: source_path.to_path_buf(),
-            message: format!(
-                "rule for '{}' must set max_lines or max_tokens",
-                rule.path.join(", ")
-            ),
-        }),
-    }
 }
 
 fn compile_patterns(patterns: &[String], source_path: &Path) -> Result<PatternList, ConfigError> {
@@ -358,10 +283,6 @@ fn compile_glob(pattern: &str, source_path: &Path) -> Result<GlobMatcher, Config
         message: err.to_string(),
     })?;
     Ok(glob.compile_matcher())
-}
-
-const fn default_respect_gitignore() -> bool {
-    DEFAULT_RESPECT_GITIGNORE
 }
 
 #[cfg(test)]

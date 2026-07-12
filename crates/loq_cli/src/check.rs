@@ -1,10 +1,9 @@
 //! Check command implementation.
 
 use std::io::{Read, Write};
-use std::path::PathBuf;
 
 use loq_core::report::{build_report, Finding, FindingKind, Report, SkipReason};
-use loq_fs::{CheckOptions, CheckOutput, FsError};
+use loq_fs::{CheckConfig, CheckOptions, CheckOutput, FsError};
 use termcolor::{Color, WriteColor};
 
 use self::input_scope::resolve_check_inputs;
@@ -39,9 +38,9 @@ pub fn run_check<R: Read, W1: WriteColor + Write, W2: WriteColor>(
     stderr: &mut W2,
     mode: OutputMode,
 ) -> ExitStatus {
-    let cwd = std::env::current_dir()
-        .and_then(dunce::canonicalize)
-        .unwrap_or_else(|_| PathBuf::from("."));
+    let Ok(cwd) = std::env::current_dir().and_then(dunce::canonicalize) else {
+        return print_error(stderr, "failed to get current directory");
+    };
 
     let resolved = match resolve_check_inputs(args, stdin, &cwd) {
         Ok(resolved) => resolved,
@@ -49,7 +48,9 @@ pub fn run_check<R: Read, W1: WriteColor + Write, W2: WriteColor>(
     };
 
     let options = CheckOptions {
-        config_path: resolved.config_path,
+        config: resolved
+            .config_path
+            .map_or(CheckConfig::Discover, CheckConfig::File),
         cwd: cwd.clone(),
         use_cache: !args.no_cache,
     };

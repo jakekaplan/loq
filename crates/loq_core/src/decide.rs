@@ -74,19 +74,17 @@ mod tests {
     #[test]
     fn rule_order_last_match_wins() {
         let config = LoqConfig {
-            default_max_lines: Some(500),
+            default_limit: Some(Limit::lines(500)),
             respect_gitignore: true,
             exclude: vec![],
             rules: vec![
                 Rule {
-                    path: vec!["**/*.rs".to_string()],
-                    max_lines: Some(100),
-                    max_tokens: None,
+                    paths: vec!["**/*.rs".to_string()],
+                    limit: Limit::lines(100),
                 },
                 Rule {
-                    path: vec!["**/*.rs".to_string()],
-                    max_lines: Some(200),
-                    max_tokens: None,
+                    paths: vec!["**/*.rs".to_string()],
+                    limit: Limit::lines(200),
                 },
             ],
             fix_guidance: None,
@@ -103,7 +101,7 @@ mod tests {
     #[test]
     fn default_fallback_when_no_rule() {
         let config = LoqConfig {
-            default_max_lines: Some(123),
+            default_limit: Some(Limit::lines(123)),
             respect_gitignore: true,
             exclude: vec![],
             rules: vec![],
@@ -122,7 +120,7 @@ mod tests {
     #[test]
     fn skip_when_no_default_and_no_rule() {
         let config = LoqConfig {
-            default_max_lines: None,
+            default_limit: None,
             respect_gitignore: true,
             exclude: vec![],
             rules: vec![],
@@ -135,13 +133,12 @@ mod tests {
     #[test]
     fn multi_path_rule_matches_any() {
         let config = LoqConfig {
-            default_max_lines: Some(500),
+            default_limit: Some(Limit::lines(500)),
             respect_gitignore: true,
             exclude: vec![],
             rules: vec![Rule {
-                path: vec!["src/a.rs".to_string(), "src/b.rs".to_string()],
-                max_lines: Some(100),
-                max_tokens: None,
+                paths: vec!["src/a.rs".to_string(), "src/b.rs".to_string()],
+                limit: Limit::lines(100),
             }],
             fix_guidance: None,
         };
