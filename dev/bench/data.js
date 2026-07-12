@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1778893368965,
+  "lastUpdate": 1783894636732,
   "repoUrl": "https://github.com/jakekaplan/loq",
   "entries": {
     "Benchmark": [
@@ -1582,6 +1582,54 @@ window.BENCHMARK_DATA = {
           {
             "name": "ruff",
             "value": 0.0008518849399999998,
+            "range": "± 0",
+            "unit": "seconds"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "40362401+jakekaplan@users.noreply.github.com",
+            "name": "Jake Kaplan",
+            "username": "jakekaplan"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "d37b6371a09bf2dd597ffc20befc92101f5c46da",
+          "message": "Merge pull request #65 from jakekaplan/cleanup/commands-and-token-defaults\n\nCleanup: dedup change commands, fix config discovery, add default_max_tokens",
+          "timestamp": "2026-07-12T18:16:04-04:00",
+          "tree_id": "bd00252909e527e1ac794893804b2fa08a213684",
+          "url": "https://github.com/jakekaplan/loq/commit/d37b6371a09bf2dd597ffc20befc92101f5c46da"
+        },
+        "date": 1783894636193,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "cpython",
+            "value": 0.0009276208600000002,
+            "range": "± 0",
+            "unit": "seconds"
+          },
+          {
+            "name": "airflow",
+            "value": 0.0009456451600000001,
+            "range": "± 0",
+            "unit": "seconds"
+          },
+          {
+            "name": "prefect",
+            "value": 0.0009622386600000001,
+            "range": "± 0",
+            "unit": "seconds"
+          },
+          {
+            "name": "ruff",
+            "value": 0.00094458096,
             "range": "± 0",
             "unit": "seconds"
           }
