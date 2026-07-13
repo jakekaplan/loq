@@ -39,30 +39,55 @@ pub struct ChangeStyle {
     pub dimmed: ColorSpec,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum ChangeKind {
-    Added,
-    Updated,
-    Removed,
-    Adjusted,
+pub enum Change {
+    Added {
+        path: String,
+        to: usize,
+    },
+    Updated {
+        path: String,
+        from: usize,
+        to: usize,
+    },
+    Removed {
+        path: String,
+        from: usize,
+    },
+    Adjusted {
+        path: String,
+        from: usize,
+        to: usize,
+    },
 }
 
-impl ChangeKind {
-    pub const fn symbol(self) -> Option<&'static str> {
+impl Change {
+    #[must_use]
+    pub fn path(&self) -> &str {
         match self {
-            Self::Added => Some("+"),
-            Self::Updated => Some("~"),
-            Self::Removed => Some("-"),
-            Self::Adjusted => None,
+            Self::Added { path, .. }
+            | Self::Updated { path, .. }
+            | Self::Removed { path, .. }
+            | Self::Adjusted { path, .. } => path,
         }
     }
-}
 
-pub struct ChangeRow {
-    pub path: String,
-    pub from: Option<usize>,
-    pub to: Option<usize>,
-    pub kind: ChangeKind,
+    #[must_use]
+    pub const fn sort_value(&self) -> usize {
+        match self {
+            Self::Added { to, .. } | Self::Updated { to, .. } | Self::Adjusted { to, .. } => *to,
+            Self::Removed { from, .. } => *from,
+        }
+    }
+
+    #[must_use]
+    pub const fn previous(&self) -> Option<usize> {
+        match self {
+            Self::Added { .. } => None,
+            Self::Updated { from, .. }
+            | Self::Removed { from, .. }
+            | Self::Adjusted { from, .. } => Some(*from),
+        }
+    }
 }
 
 /// Builds color specs for change reports.
@@ -84,14 +109,25 @@ pub fn change_style() -> ChangeStyle {
     }
 }
 
-/// Computes a display width for formatted numbers (minimum 6).
-pub fn max_formatted_width<I>(values: I) -> usize
-where
-    I: IntoIterator<Item = usize>,
-{
-    values
-        .into_iter()
-        .fold(6, |current, value| current.max(format_number(value).len()))
+/// Computes a display width for change values (minimum 6).
+pub fn change_width(changes: &[&Change]) -> usize {
+    let mut width = 6;
+    for change in changes {
+        match change {
+            Change::Added { to, .. } => {
+                width = width.max(format_number(*to).len());
+            }
+            Change::Updated { from, to, .. } | Change::Adjusted { from, to, .. } => {
+                width = width
+                    .max(format_number(*from).len())
+                    .max(format_number(*to).len());
+            }
+            Change::Removed { from, .. } => {
+                width = width.max(format_number(*from).len());
+            }
+        }
+    }
+    width
 }
 
 /// Returns the plural suffix (`""` or `"s"`) for `count`.
@@ -119,15 +155,19 @@ pub fn write_ok_line<W: WriteColor>(
     writeln!(writer)
 }
 
-pub fn write_change_row<W: WriteColor>(
+pub fn write_change<W: WriteColor>(
     writer: &mut W,
     style: &ChangeStyle,
     width: usize,
-    symbol: Option<&str>,
-    from: Option<usize>,
-    to: Option<usize>,
-    path: &str,
+    change: &Change,
 ) -> io::Result<()> {
+    let (symbol, from, to, path) = match change {
+        Change::Added { path, to } => (Some("+"), None, Some(*to), path),
+        Change::Updated { path, from, to } => (Some("~"), Some(*from), Some(*to), path),
+        Change::Removed { path, from } => (Some("-"), Some(*from), None, path),
+        Change::Adjusted { path, from, to } => (None, Some(*from), Some(*to), path),
+    };
+
     if let Some(symbol) = symbol {
         writer.set_color(&style.dimmed)?;
         write!(writer, "{symbol} ")?;

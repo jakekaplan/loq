@@ -11,13 +11,13 @@ use crate::config_edit::{config_path_and_root, line_threshold, load_doc_or_defau
 use crate::exact_limits::{self, ExactLimit, ExactLimits};
 use crate::line_violations::scan_line_violations;
 use crate::output::{
-    change_style, max_formatted_width, plural, print_error, write_change_row, write_ok_line,
-    ChangeKind, ChangeRow, ChangeStyle,
+    change_style, change_width, plural, print_error, write_change, write_ok_line, Change,
+    ChangeStyle,
 };
 use crate::ExitStatus;
 
 struct BaselineReport {
-    changes: Vec<ChangeRow>,
+    changes: Vec<Change>,
 }
 
 pub fn run_baseline<W1: WriteColor, W2: WriteColor>(
@@ -69,20 +69,17 @@ fn apply_baseline_changes(
         if let Some(&actual) = violations.get(path) {
             if actual != limit.max_lines {
                 exact_limits::update_limit(doc, limit, actual);
-                changes.push(ChangeRow {
+                changes.push(Change::Updated {
                     path: path.to_string(),
-                    from: Some(limit.max_lines),
-                    to: Some(actual),
-                    kind: ChangeKind::Updated,
+                    from: limit.max_lines,
+                    to: actual,
                 });
             }
         } else {
             limits_to_remove.push(limit);
-            changes.push(ChangeRow {
+            changes.push(Change::Removed {
                 path: path.to_string(),
-                from: Some(limit.max_lines),
-                to: None,
-                kind: ChangeKind::Removed,
+                from: limit.max_lines,
             });
         }
     }
@@ -97,11 +94,9 @@ fn apply_baseline_changes(
 
     for (path, &actual) in new_violations {
         exact_limits::set_limit(doc, existing_rules, path, actual);
-        changes.push(ChangeRow {
+        changes.push(Change::Added {
             path: (*path).clone(),
-            from: None,
-            to: Some(actual),
-            kind: ChangeKind::Added,
+            to: actual,
         });
     }
 
@@ -116,12 +111,8 @@ fn write_report<W: WriteColor>(writer: &mut W, report: &BaselineReport) -> std::
     let style = change_style();
 
     let mut changes: Vec<_> = report.changes.iter().collect();
-    changes.sort_by_key(|change| (change_sort_value(change), change.path.as_str()));
-    let width = max_formatted_width(
-        changes
-            .iter()
-            .flat_map(|change| change.from.into_iter().chain(change.to)),
-    );
+    changes.sort_by_key(|change| (change.sort_value(), change.path()));
+    let width = change_width(&changes);
     let counts = write_change_lines(writer, &changes, width, &style)?;
 
     if counts.added > 0 || counts.updated > 0 {
@@ -143,13 +134,6 @@ fn write_report<W: WriteColor>(writer: &mut W, report: &BaselineReport) -> std::
     Ok(())
 }
 
-fn change_sort_value(change: &ChangeRow) -> usize {
-    match change.kind {
-        ChangeKind::Removed => change.from.unwrap_or(0),
-        _ => change.to.or(change.from).unwrap_or(0),
-    }
-}
-
 struct ChangeCounts {
     added: usize,
     updated: usize,
@@ -158,7 +142,7 @@ struct ChangeCounts {
 
 fn write_change_lines<W: WriteColor>(
     writer: &mut W,
-    changes: &[&ChangeRow],
+    changes: &[&Change],
     width: usize,
     style: &ChangeStyle,
 ) -> std::io::Result<ChangeCounts> {
@@ -169,23 +153,14 @@ fn write_change_lines<W: WriteColor>(
     };
 
     for change in changes {
-        match change.kind {
-            ChangeKind::Added => counts.added += 1,
-            ChangeKind::Updated => counts.updated += 1,
-            ChangeKind::Removed => counts.removed += 1,
-            ChangeKind::Adjusted => {}
+        match change {
+            Change::Added { .. } => counts.added += 1,
+            Change::Updated { .. } => counts.updated += 1,
+            Change::Removed { .. } => counts.removed += 1,
+            Change::Adjusted { .. } => {}
         }
 
-        let symbol = change.kind.symbol();
-        write_change_row(
-            writer,
-            style,
-            width,
-            symbol,
-            change.from,
-            change.to,
-            &change.path,
-        )?;
+        write_change(writer, style, width, change)?;
     }
 
     Ok(counts)
@@ -216,23 +191,18 @@ mod tests {
     fn write_report_sorts_by_limit_and_summarizes() {
         let report = BaselineReport {
             changes: vec![
-                ChangeRow {
+                Change::Updated {
                     path: "b.rs".into(),
-                    from: Some(200),
-                    to: Some(150),
-                    kind: ChangeKind::Updated,
+                    from: 200,
+                    to: 150,
                 },
-                ChangeRow {
+                Change::Added {
                     path: "a.rs".into(),
-                    from: None,
-                    to: Some(120),
-                    kind: ChangeKind::Added,
+                    to: 120,
                 },
-                ChangeRow {
+                Change::Removed {
                     path: "c.rs".into(),
-                    from: Some(300),
-                    to: None,
-                    kind: ChangeKind::Removed,
+                    from: 300,
                 },
             ],
         };
@@ -256,11 +226,9 @@ mod tests {
     #[test]
     fn write_report_handles_removed_only() {
         let report = BaselineReport {
-            changes: vec![ChangeRow {
+            changes: vec![Change::Removed {
                 path: "src/old.rs".into(),
-                from: Some(10),
-                to: None,
-                kind: ChangeKind::Removed,
+                from: 10,
             }],
         };
 

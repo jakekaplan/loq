@@ -11,13 +11,12 @@ use crate::config_edit::{config_path_and_root, line_threshold, load_doc_or_defau
 use crate::exact_limits::{self, ExactLimit, ExactLimits};
 use crate::line_violations::scan_line_violations;
 use crate::output::{
-    change_style, max_formatted_width, plural, print_error, write_change_row, write_ok_line,
-    ChangeKind, ChangeRow,
+    change_style, change_width, plural, print_error, write_change, write_ok_line, Change,
 };
 use crate::ExitStatus;
 
 struct TightenReport {
-    changes: Vec<ChangeRow>,
+    changes: Vec<Change>,
     removed: usize,
 }
 
@@ -70,11 +69,10 @@ fn apply_tighten_changes(
         if let Some(&actual) = violations.get(path) {
             if actual < limit.max_lines {
                 exact_limits::update_limit(doc, limit, actual);
-                changes.push(ChangeRow {
+                changes.push(Change::Adjusted {
                     path: path.to_string(),
-                    from: Some(limit.max_lines),
-                    to: Some(actual),
-                    kind: ChangeKind::Adjusted,
+                    from: limit.max_lines,
+                    to: actual,
                 });
             }
         } else {
@@ -93,24 +91,12 @@ fn write_report<W: WriteColor>(writer: &mut W, report: &TightenReport) -> std::i
 
     if !report.changes.is_empty() {
         let mut changes: Vec<_> = report.changes.iter().collect();
-        changes.sort_by_key(|change| (change.to, change.path.as_str()));
+        changes.sort_by_key(|change| (change.sort_value(), change.path()));
 
-        let width = max_formatted_width(
-            changes
-                .iter()
-                .flat_map(|change| change.from.into_iter().chain(change.to)),
-        );
+        let width = change_width(&changes);
 
         for change in changes {
-            write_change_row(
-                writer,
-                &style,
-                width,
-                change.kind.symbol(),
-                change.from,
-                change.to,
-                &change.path,
-            )?;
+            write_change(writer, &style, width, change)?;
         }
 
         let count = report.changes.len();
@@ -145,17 +131,15 @@ mod tests {
     fn write_report_sorts_by_limit_and_summarizes() {
         let report = TightenReport {
             changes: vec![
-                ChangeRow {
+                Change::Adjusted {
                     path: "b.rs".into(),
-                    from: Some(200),
-                    to: Some(150),
-                    kind: ChangeKind::Adjusted,
+                    from: 200,
+                    to: 150,
                 },
-                ChangeRow {
+                Change::Adjusted {
                     path: "a.rs".into(),
-                    from: Some(120),
-                    to: Some(110),
-                    kind: ChangeKind::Adjusted,
+                    from: 120,
+                    to: 110,
                 },
             ],
             removed: 1,
