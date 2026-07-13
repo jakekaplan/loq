@@ -1,6 +1,6 @@
 use super::*;
 use loq_core::report::{Finding, FindingKind, SkipReason, Summary};
-use loq_core::{ConfigOrigin, MatchBy};
+use loq_core::MatchBy;
 use termcolor::NoColor;
 
 fn output_string<F>(f: F) -> String
@@ -76,11 +76,9 @@ fn write_block_single_line() {
 fn write_finding_violation() {
     let finding = Finding {
         path: "src/main.rs".into(),
-        config_source: ConfigOrigin::BuiltIn,
         kind: FindingKind::Violation {
             limit: loq_core::Limit::lines(100),
             actual: 150,
-            over_by: 50,
             matched_by: MatchBy::Default,
         },
     };
@@ -96,11 +94,9 @@ fn write_finding_violation() {
 fn write_finding_token_violation_marks_approximate_unit() {
     let finding = Finding {
         path: "prompts/build.md".into(),
-        config_source: ConfigOrigin::BuiltIn,
         kind: FindingKind::Violation {
             limit: loq_core::Limit::tokens(4),
             actual: 5,
-            over_by: 1,
             matched_by: MatchBy::Rule {
                 pattern: "prompts/**/*.md".into(),
             },
@@ -118,11 +114,9 @@ fn write_finding_token_violation_marks_approximate_unit() {
 fn write_finding_token_violation_verbose_shows_token_rule() {
     let finding = Finding {
         path: "prompts/build.md".into(),
-        config_source: ConfigOrigin::BuiltIn,
         kind: FindingKind::Violation {
             limit: loq_core::Limit::tokens(4),
             actual: 5,
-            over_by: 1,
             matched_by: MatchBy::Rule {
                 pattern: "prompts/**/*.md".into(),
             },
@@ -139,11 +133,9 @@ fn write_finding_token_violation_verbose_shows_token_rule() {
 fn write_finding_violation_verbose_default_match() {
     let finding = Finding {
         path: "src/lib.rs".into(),
-        config_source: ConfigOrigin::BuiltIn,
         kind: FindingKind::Violation {
             limit: loq_core::Limit::lines(100),
             actual: 200,
-            over_by: 100,
             matched_by: MatchBy::Default,
         },
     };
@@ -156,11 +148,9 @@ fn write_finding_violation_verbose_default_match() {
 fn write_finding_violation_verbose_rule_match() {
     let finding = Finding {
         path: "src/lib.rs".into(),
-        config_source: ConfigOrigin::File(std::path::PathBuf::from("/project/loq.toml")),
         kind: FindingKind::Violation {
             limit: loq_core::Limit::lines(50),
             actual: 75,
-            over_by: 25,
             matched_by: MatchBy::Rule {
                 pattern: "**/*.rs".into(),
             },
@@ -175,7 +165,6 @@ fn write_finding_violation_verbose_rule_match() {
 fn write_finding_skip_binary() {
     let finding = Finding {
         path: "image.png".into(),
-        config_source: ConfigOrigin::BuiltIn,
         kind: FindingKind::SkipWarning {
             reason: SkipReason::Binary,
         },
@@ -189,7 +178,6 @@ fn write_finding_skip_binary() {
 fn write_finding_skip_missing() {
     let finding = Finding {
         path: "missing.txt".into(),
-        config_source: ConfigOrigin::BuiltIn,
         kind: FindingKind::SkipWarning {
             reason: SkipReason::Missing,
         },
@@ -202,7 +190,6 @@ fn write_finding_skip_missing() {
 fn write_finding_skip_unreadable() {
     let finding = Finding {
         path: "locked.txt".into(),
-        config_source: ConfigOrigin::BuiltIn,
         kind: FindingKind::SkipWarning {
             reason: SkipReason::Unreadable("permission denied".into()),
         },
@@ -216,11 +203,9 @@ fn write_finding_skip_unreadable() {
 fn write_finding_path_without_directory() {
     let finding = Finding {
         path: "file.txt".into(),
-        config_source: ConfigOrigin::BuiltIn,
         kind: FindingKind::Violation {
             limit: loq_core::Limit::lines(10),
             actual: 20,
-            over_by: 10,
             matched_by: MatchBy::Default,
         },
     };

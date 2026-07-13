@@ -18,7 +18,7 @@ pub use path_identity::PathIdentity;
 
 use std::path::{Path, PathBuf};
 
-use loq_core::config::{compile_config, CompiledConfig, ConfigOrigin, LoqConfig};
+use loq_core::config::{compile_config, CompiledConfig, LoqConfig};
 use loq_core::decide::{decide, Decision};
 use loq_core::report::{FileOutcome, OutcomeKind};
 use rayon::prelude::*;
@@ -87,12 +87,7 @@ fn load_config_from_path(path: &Path, fallback_cwd: &Path) -> Result<CompiledCon
         error,
     })?;
     let config = loq_core::parse_config(path, &text)?;
-    let compiled = compile_config(
-        ConfigOrigin::File(path.to_path_buf()),
-        root_dir,
-        config,
-        Some(path),
-    )?;
+    let compiled = compile_config(root_dir, config, Some(path))?;
     Ok(compiled)
 }
 
@@ -115,7 +110,7 @@ pub fn run_check(paths: Vec<PathBuf>, options: CheckOptions) -> Result<CheckOutp
                     .cwd
                     .canonicalize()
                     .unwrap_or_else(|_| options.cwd.clone());
-                compile_config(ConfigOrigin::BuiltIn, root_dir, config, None)?
+                compile_config(root_dir, config, None)?
             }
         }
     };
@@ -179,24 +174,18 @@ fn check_file(
     inspector: &Inspector,
 ) -> FileOutcome {
     let identity = PathIdentity::new(path, cwd_abs, &compiled.root_dir);
-    let config_source = compiled.origin.clone();
-
-    let make_outcome = |kind| FileOutcome {
-        path: identity.absolute.clone(),
-        display_path: identity.display.clone(),
-        match_key: identity.match_key.clone(),
-        config_source: config_source.clone(),
-        kind,
-    };
-
     let kind = match decide(compiled, &identity.match_key) {
         Decision::SkipNoLimit => OutcomeKind::NoLimit,
         Decision::Check { limit, matched_by } => {
-            inspector.inspect(path, &identity.cache_key, limit, matched_by)
+            inspector.inspect(path, &identity.match_key, limit, matched_by)
         }
     };
 
-    make_outcome(kind)
+    FileOutcome {
+        display_path: identity.display,
+        match_key: identity.match_key,
+        kind,
+    }
 }
 
 #[cfg(test)]

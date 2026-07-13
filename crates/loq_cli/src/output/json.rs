@@ -133,7 +133,6 @@ fn metric_value(value: usize, limit: Limit, metric: Metric) -> Option<usize> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use loq_core::config::ConfigOrigin;
     use loq_core::report::{build_report, FileOutcome, OutcomeKind};
     use loq_fs::walk;
 
@@ -152,17 +151,13 @@ mod tests {
     fn all_outcomes_counted() {
         let outcomes = vec![
             FileOutcome {
-                path: "a.rs".into(),
                 display_path: "a.rs".into(),
                 match_key: "a.rs".into(),
-                config_source: ConfigOrigin::BuiltIn,
                 kind: OutcomeKind::NoLimit,
             },
             FileOutcome {
-                path: "b.rs".into(),
                 display_path: "b.rs".into(),
                 match_key: "b.rs".into(),
-                config_source: ConfigOrigin::BuiltIn,
                 kind: OutcomeKind::Pass {
                     limit: loq_core::Limit::lines(100),
                     actual: 50,
@@ -170,10 +165,8 @@ mod tests {
                 },
             },
             FileOutcome {
-                path: "c.rs".into(),
                 display_path: "c.rs".into(),
                 match_key: "c.rs".into(),
-                config_source: ConfigOrigin::BuiltIn,
                 kind: OutcomeKind::Violation {
                     limit: loq_core::Limit::lines(100),
                     actual: 150,
@@ -194,10 +187,8 @@ mod tests {
     #[test]
     fn missing_file_warning() {
         let outcomes = vec![FileOutcome {
-            path: "missing.rs".into(),
             display_path: "missing.rs".into(),
             match_key: "missing.rs".into(),
-            config_source: ConfigOrigin::BuiltIn,
             kind: OutcomeKind::Missing,
         }];
 
@@ -213,10 +204,8 @@ mod tests {
     #[test]
     fn unreadable_file_warning() {
         let outcomes = vec![FileOutcome {
-            path: "locked.rs".into(),
             display_path: "locked.rs".into(),
             match_key: "locked.rs".into(),
-            config_source: ConfigOrigin::BuiltIn,
             kind: OutcomeKind::Unreadable {
                 error: "permission denied".into(),
             },
@@ -234,10 +223,8 @@ mod tests {
     #[test]
     fn binary_file_warning() {
         let outcomes = vec![FileOutcome {
-            path: "image.png".into(),
             display_path: "image.png".into(),
             match_key: "image.png".into(),
-            config_source: ConfigOrigin::BuiltIn,
             kind: OutcomeKind::Binary,
         }];
 
@@ -253,10 +240,8 @@ mod tests {
     #[test]
     fn violation_with_rule_match() {
         let outcomes = vec![FileOutcome {
-            path: "big.rs".into(),
             display_path: "big.rs".into(),
             match_key: "big.rs".into(),
-            config_source: ConfigOrigin::BuiltIn,
             kind: OutcomeKind::Violation {
                 limit: loq_core::Limit::lines(100),
                 actual: 200,
@@ -278,10 +263,8 @@ mod tests {
     #[test]
     fn token_violation_uses_token_fields() {
         let outcomes = vec![FileOutcome {
-            path: "prompt.md".into(),
             display_path: "prompt.md".into(),
             match_key: "prompt.md".into(),
-            config_source: ConfigOrigin::BuiltIn,
             kind: OutcomeKind::Violation {
                 limit: loq_core::Limit::tokens(4),
                 actual: 5,
@@ -305,10 +288,8 @@ mod tests {
     #[test]
     fn violation_with_default_match() {
         let outcomes = vec![FileOutcome {
-            path: "big.rs".into(),
             display_path: "big.rs".into(),
             match_key: "big.rs".into(),
-            config_source: ConfigOrigin::BuiltIn,
             kind: OutcomeKind::Violation {
                 limit: loq_core::Limit::lines(100),
                 actual: 200,
@@ -347,10 +328,8 @@ mod tests {
     #[test]
     fn fix_guidance_included_with_violations() {
         let outcomes = vec![FileOutcome {
-            path: "big.rs".into(),
             display_path: "big.rs".into(),
             match_key: "big.rs".into(),
-            config_source: ConfigOrigin::BuiltIn,
             kind: OutcomeKind::Violation {
                 limit: loq_core::Limit::lines(100),
                 actual: 200,
@@ -367,10 +346,8 @@ mod tests {
     #[test]
     fn fix_guidance_excluded_without_violations() {
         let outcomes = vec![FileOutcome {
-            path: "small.rs".into(),
             display_path: "small.rs".into(),
             match_key: "small.rs".into(),
-            config_source: ConfigOrigin::BuiltIn,
             kind: OutcomeKind::Pass {
                 limit: loq_core::Limit::lines(100),
                 actual: 50,
@@ -388,10 +365,8 @@ mod tests {
     fn violations_sorted_by_path() {
         let outcomes = vec![
             FileOutcome {
-                path: "z.rs".into(),
                 display_path: "z.rs".into(),
                 match_key: "z.rs".into(),
-                config_source: ConfigOrigin::BuiltIn,
                 kind: OutcomeKind::Violation {
                     limit: loq_core::Limit::lines(100),
                     actual: 200,
@@ -399,10 +374,8 @@ mod tests {
                 },
             },
             FileOutcome {
-                path: "a.rs".into(),
                 display_path: "a.rs".into(),
                 match_key: "a.rs".into(),
-                config_source: ConfigOrigin::BuiltIn,
                 kind: OutcomeKind::Violation {
                     limit: loq_core::Limit::lines(100),
                     actual: 200,

@@ -185,7 +185,7 @@ pub fn hash_config(config: &CompiledConfig) -> u64 {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use loq_core::config::{compile_config, ConfigOrigin, LoqConfig};
+    use loq_core::config::{compile_config, LoqConfig};
     use std::path::PathBuf;
     use tempfile::TempDir;
 
@@ -194,7 +194,7 @@ mod tests {
             default_limit: default_max.map(loq_core::Limit::lines),
             ..LoqConfig::default()
         };
-        compile_config(ConfigOrigin::BuiltIn, PathBuf::from("."), config, None).unwrap()
+        compile_config(PathBuf::from("."), config, None).unwrap()
     }
 
     #[test]

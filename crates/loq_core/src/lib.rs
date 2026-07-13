@@ -20,7 +20,7 @@ pub mod limit;
 pub mod parse;
 pub mod report;
 
-pub use config::{CompiledConfig, ConfigError, ConfigOrigin, LoqConfig, PatternList, Rule};
+pub use config::{CompiledConfig, ConfigError, LoqConfig, PatternList, Rule};
 pub use decide::{Decision, MatchBy};
 pub use limit::{Limit, Metric};
 pub use parse::parse_config;

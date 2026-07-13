@@ -64,11 +64,11 @@ pub fn decide(config: &CompiledConfig, path: &str) -> Decision {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::config::{compile_config, ConfigOrigin, LoqConfig, Rule};
+    use crate::config::{compile_config, LoqConfig, Rule};
     use std::path::PathBuf;
 
     fn compiled(config: LoqConfig) -> CompiledConfig {
-        compile_config(ConfigOrigin::BuiltIn, PathBuf::from("."), config, None).unwrap()
+        compile_config(PathBuf::from("."), config, None).unwrap()
     }
 
     #[test]

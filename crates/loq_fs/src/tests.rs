@@ -82,13 +82,8 @@ fn binary_and_unreadable_are_reported() {
         rules: vec![],
         fix_guidance: None,
     };
-    let compiled = loq_core::config::compile_config(
-        loq_core::config::ConfigOrigin::BuiltIn,
-        temp.path().to_path_buf(),
-        config,
-        None,
-    )
-    .unwrap();
+    let compiled =
+        loq_core::config::compile_config(temp.path().to_path_buf(), config, None).unwrap();
     let inspector = inspection::Inspector::new(cache::Cache::empty());
 
     let binary = temp.path().join("binary.txt");

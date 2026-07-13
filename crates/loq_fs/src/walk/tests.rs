@@ -1,5 +1,5 @@
 use super::*;
-use loq_core::config::{compile_config, ConfigOrigin, LoqConfig};
+use loq_core::config::{compile_config, LoqConfig};
 use tempfile::TempDir;
 
 #[cfg(unix)]
@@ -22,7 +22,7 @@ fn empty_exclude() -> loq_core::PatternList {
         exclude: vec![],
         ..LoqConfig::default()
     };
-    let compiled = compile_config(ConfigOrigin::BuiltIn, PathBuf::from("."), config, None).unwrap();
+    let compiled = compile_config(PathBuf::from("."), config, None).unwrap();
     compiled.exclude_patterns().clone()
 }
 
@@ -31,7 +31,7 @@ fn exclude_pattern(pattern: &str) -> loq_core::PatternList {
         exclude: vec![pattern.to_string()],
         ..LoqConfig::default()
     };
-    let compiled = compile_config(ConfigOrigin::BuiltIn, PathBuf::from("."), config, None).unwrap();
+    let compiled = compile_config(PathBuf::from("."), config, None).unwrap();
     compiled.exclude_patterns().clone()
 }
 
