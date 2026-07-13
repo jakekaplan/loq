@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1783894636732,
+  "lastUpdate": 1783949283961,
   "repoUrl": "https://github.com/jakekaplan/loq",
   "entries": {
     "Benchmark": [
@@ -1630,6 +1630,54 @@ window.BENCHMARK_DATA = {
           {
             "name": "ruff",
             "value": 0.00094458096,
+            "range": "± 0",
+            "unit": "seconds"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "40362401+jakekaplan@users.noreply.github.com",
+            "name": "Jake Kaplan",
+            "username": "jakekaplan"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "657e9a6ae29adc9d8b914135f2f513f9f547d22f",
+          "message": "Merge pull request #66 from jakekaplan/cleanup/dead-result-state\n\nRemove dead check result state",
+          "timestamp": "2026-07-13T09:27:03-04:00",
+          "tree_id": "1a003d32bd0af27a039cd8265220fb6186971d89",
+          "url": "https://github.com/jakekaplan/loq/commit/657e9a6ae29adc9d8b914135f2f513f9f547d22f"
+        },
+        "date": 1783949283110,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "cpython",
+            "value": 0.0007518763200000001,
+            "range": "± 0",
+            "unit": "seconds"
+          },
+          {
+            "name": "airflow",
+            "value": 0.0007434226200000001,
+            "range": "± 0",
+            "unit": "seconds"
+          },
+          {
+            "name": "prefect",
+            "value": 0.0007666009200000001,
+            "range": "± 0",
+            "unit": "seconds"
+          },
+          {
+            "name": "ruff",
+            "value": 0.00074552292,
             "range": "± 0",
             "unit": "seconds"
           }
