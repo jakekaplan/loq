@@ -146,20 +146,22 @@ fn write_change_lines<W: WriteColor>(
     width: usize,
     style: &ChangeStyle,
 ) -> std::io::Result<ChangeCounts> {
-    let mut counts = ChangeCounts {
-        added: 0,
-        updated: 0,
-        removed: 0,
+    let counts = ChangeCounts {
+        added: changes
+            .iter()
+            .filter(|change| matches!(change, Change::Added { .. }))
+            .count(),
+        updated: changes
+            .iter()
+            .filter(|change| matches!(change, Change::Updated { .. }))
+            .count(),
+        removed: changes
+            .iter()
+            .filter(|change| matches!(change, Change::Removed { .. }))
+            .count(),
     };
 
     for change in changes {
-        match change {
-            Change::Added { .. } => counts.added += 1,
-            Change::Updated { .. } => counts.updated += 1,
-            Change::Removed { .. } => counts.removed += 1,
-            Change::Adjusted { .. } => {}
-        }
-
         write_change(writer, style, width, change)?;
     }
 

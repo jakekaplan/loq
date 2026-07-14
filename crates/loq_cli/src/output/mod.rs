@@ -80,12 +80,32 @@ impl Change {
     }
 
     #[must_use]
-    pub const fn previous(&self) -> Option<usize> {
+    pub const fn from(&self) -> Option<usize> {
         match self {
             Self::Added { .. } => None,
             Self::Updated { from, .. }
             | Self::Removed { from, .. }
             | Self::Adjusted { from, .. } => Some(*from),
+        }
+    }
+
+    #[must_use]
+    pub const fn to(&self) -> Option<usize> {
+        match self {
+            Self::Removed { .. } => None,
+            Self::Added { to, .. } | Self::Updated { to, .. } | Self::Adjusted { to, .. } => {
+                Some(*to)
+            }
+        }
+    }
+
+    #[must_use]
+    pub const fn symbol(&self) -> Option<&'static str> {
+        match self {
+            Self::Added { .. } => Some("+"),
+            Self::Updated { .. } => Some("~"),
+            Self::Removed { .. } => Some("-"),
+            Self::Adjusted { .. } => None,
         }
     }
 }
@@ -111,23 +131,10 @@ pub fn change_style() -> ChangeStyle {
 
 /// Computes a display width for change values (minimum 6).
 pub fn change_width(changes: &[&Change]) -> usize {
-    let mut width = 6;
-    for change in changes {
-        match change {
-            Change::Added { to, .. } => {
-                width = width.max(format_number(*to).len());
-            }
-            Change::Updated { from, to, .. } | Change::Adjusted { from, to, .. } => {
-                width = width
-                    .max(format_number(*from).len())
-                    .max(format_number(*to).len());
-            }
-            Change::Removed { from, .. } => {
-                width = width.max(format_number(*from).len());
-            }
-        }
-    }
-    width
+    changes
+        .iter()
+        .flat_map(|change| change.from().into_iter().chain(change.to()))
+        .fold(6, |width, value| width.max(format_number(value).len()))
 }
 
 /// Returns the plural suffix (`""` or `"s"`) for `count`.
@@ -161,14 +168,10 @@ pub fn write_change<W: WriteColor>(
     width: usize,
     change: &Change,
 ) -> io::Result<()> {
-    let (symbol, from, to, path) = match change {
-        Change::Added { path, to } => (Some("+"), None, Some(*to), path),
-        Change::Updated { path, from, to } => (Some("~"), Some(*from), Some(*to), path),
-        Change::Removed { path, from } => (Some("-"), Some(*from), None, path),
-        Change::Adjusted { path, from, to } => (None, Some(*from), Some(*to), path),
-    };
+    let from = change.from();
+    let to = change.to();
 
-    if let Some(symbol) = symbol {
+    if let Some(symbol) = change.symbol() {
         writer.set_color(&style.dimmed)?;
         write!(writer, "{symbol} ")?;
         writer.reset()?;
@@ -195,7 +198,7 @@ pub fn write_change<W: WriteColor>(
     write!(writer, "{to_str:<width$}")?;
     writer.reset()?;
     write!(writer, " ")?;
-    write_path(writer, path)?;
+    write_path(writer, change.path())?;
     writeln!(writer)?;
 
     Ok(())

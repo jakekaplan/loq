@@ -107,7 +107,7 @@ fn write_report<W: WriteColor>(writer: &mut W, report: &RelaxReport) -> std::io:
     let style = change_style();
 
     let mut changes: Vec<_> = report.changes.iter().collect();
-    changes.sort_by_key(|change| (change.sort_value(), change.previous(), change.path()));
+    changes.sort_by_key(|change| (change.sort_value(), change.from(), change.path()));
     let width = change_width(&changes);
 
     for change in changes {
