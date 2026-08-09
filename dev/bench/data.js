@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1783995561876,
+  "lastUpdate": 1786288670993,
   "repoUrl": "https://github.com/jakekaplan/loq",
   "entries": {
     "Benchmark": [
@@ -1726,6 +1726,54 @@ window.BENCHMARK_DATA = {
           {
             "name": "ruff",
             "value": 0.0009133326800000001,
+            "range": "± 0",
+            "unit": "seconds"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "jake@prefect.io",
+            "name": "Jake Kaplan",
+            "username": "jakekaplan"
+          },
+          "committer": {
+            "email": "jake@prefect.io",
+            "name": "Jake Kaplan",
+            "username": "jakekaplan"
+          },
+          "distinct": true,
+          "id": "7e580e527955ea1ae747d84de39c100d45eb8d6d",
+          "message": "small fixes",
+          "timestamp": "2026-08-09T11:16:35-04:00",
+          "tree_id": "973f10543a34e0f892a375f7d1797b0db6ca992a",
+          "url": "https://github.com/jakekaplan/loq/commit/7e580e527955ea1ae747d84de39c100d45eb8d6d"
+        },
+        "date": 1786288670561,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "cpython",
+            "value": 0.0008437765,
+            "range": "± 0",
+            "unit": "seconds"
+          },
+          {
+            "name": "airflow",
+            "value": 0.0008368163000000001,
+            "range": "± 0",
+            "unit": "seconds"
+          },
+          {
+            "name": "prefect",
+            "value": 0.0008313611,
+            "range": "± 0",
+            "unit": "seconds"
+          },
+          {
+            "name": "ruff",
+            "value": 0.0008412153000000002,
             "range": "± 0",
             "unit": "seconds"
           }
