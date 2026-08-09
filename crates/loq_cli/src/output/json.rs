@@ -8,19 +8,19 @@ use loq_fs::walk::WalkError;
 use serde::Serialize;
 
 #[derive(Debug, Serialize)]
-struct JsonOutput {
+struct JsonOutput<'a> {
     version: &'static str,
-    violations: Vec<JsonViolation>,
-    skip_warnings: Vec<JsonSkipWarning>,
-    walk_errors: Vec<String>,
+    violations: Vec<JsonViolation<'a>>,
+    skip_warnings: Vec<JsonSkipWarning<'a>>,
+    walk_errors: Vec<&'a str>,
     summary: JsonSummary,
     #[serde(skip_serializing_if = "Option::is_none")]
-    fix_guidance: Option<String>,
+    fix_guidance: Option<&'a str>,
 }
 
 #[derive(Debug, Serialize)]
-struct JsonViolation {
-    path: String,
+struct JsonViolation<'a> {
+    path: &'a str,
     metric: &'static str,
     approximate: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -31,7 +31,7 @@ struct JsonViolation {
     tokens: Option<usize>,
     #[serde(skip_serializing_if = "Option::is_none")]
     max_tokens: Option<usize>,
-    rule: String,
+    rule: &'a str,
 }
 
 #[derive(Debug, Serialize)]
@@ -44,11 +44,11 @@ struct JsonSummary {
 }
 
 #[derive(Debug, Serialize)]
-struct JsonSkipWarning {
-    path: String,
+struct JsonSkipWarning<'a> {
+    path: &'a str,
     reason: &'static str,
     #[serde(skip_serializing_if = "Option::is_none")]
-    detail: Option<String>,
+    detail: Option<&'a str>,
 }
 
 pub fn write_json<W: Write>(
@@ -72,14 +72,13 @@ pub fn write_json<W: Write>(
                 limit,
                 actual,
                 matched_by,
-                ..
             } => {
                 let rule = match matched_by {
-                    MatchBy::Rule { pattern } => pattern.clone(),
-                    MatchBy::Default => "default".to_string(),
+                    MatchBy::Rule { pattern } => pattern.as_str(),
+                    MatchBy::Default => "default",
                 };
                 violations.push(JsonViolation {
-                    path: finding.path.clone(),
+                    path: &finding.path,
                     metric: limit.metric.as_str(),
                     approximate: limit.is_approximate(),
                     lines: metric_value(*actual, *limit, Metric::Lines),
@@ -93,10 +92,10 @@ pub fn write_json<W: Write>(
                 let (reason, detail) = match reason {
                     SkipReason::Missing => ("missing", None),
                     SkipReason::Binary => ("binary", None),
-                    SkipReason::Unreadable(error) => ("unreadable", Some(error.clone())),
+                    SkipReason::Unreadable(error) => ("unreadable", Some(error.as_str())),
                 };
                 skip_warnings.push(JsonSkipWarning {
-                    path: finding.path.clone(),
+                    path: &finding.path,
                     reason,
                     detail,
                 });
@@ -104,14 +103,14 @@ pub fn write_json<W: Write>(
         }
     }
 
-    violations.sort_by(|a, b| a.path.cmp(&b.path));
-    skip_warnings.sort_by(|a, b| a.path.cmp(&b.path));
+    violations.sort_by(|a, b| a.path.cmp(b.path));
+    skip_warnings.sort_by(|a, b| a.path.cmp(b.path));
 
-    let mut walk_errors: Vec<String> = walk_errors
+    let mut walk_errors: Vec<&str> = walk_errors
         .iter()
-        .map(|error| error.message.clone())
+        .map(|error| error.message.as_str())
         .collect();
-    walk_errors.sort();
+    walk_errors.sort_unstable();
 
     let output = JsonOutput {
         version: env!("CARGO_PKG_VERSION"),
@@ -119,7 +118,7 @@ pub fn write_json<W: Write>(
         skip_warnings,
         walk_errors,
         summary,
-        fix_guidance: report.fix_guidance.clone(),
+        fix_guidance: report.fix_guidance.as_deref(),
     };
 
     serde_json::to_writer_pretty(&mut *writer, &output)?;

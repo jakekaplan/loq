@@ -108,20 +108,20 @@ fn resolve_check_inputs_without_git_filter_uses_collect_inputs_behavior() {
 }
 
 #[test]
-fn decode_git_path_preserves_leading_and_trailing_spaces() {
+fn git_path_preserves_leading_and_trailing_spaces() {
     assert_eq!(
-        decode_git_path(b" leading/file.txt "),
-        Some(PathBuf::from(" leading/file.txt "))
+        path_from_git_bytes(b" leading/file.txt "),
+        PathBuf::from(" leading/file.txt ")
     );
 }
 
 #[cfg(unix)]
 #[test]
-fn decode_git_path_handles_non_utf8_bytes() {
+fn git_path_handles_non_utf8_bytes() {
     use std::{ffi::OsStr, os::unix::ffi::OsStrExt};
 
     let expected = PathBuf::from(OsStr::from_bytes(b"invalid-\xFF.txt"));
-    assert_eq!(decode_git_path(b"invalid-\xFF.txt"), Some(expected));
+    assert_eq!(path_from_git_bytes(b"invalid-\xFF.txt"), expected);
 }
 
 #[test]

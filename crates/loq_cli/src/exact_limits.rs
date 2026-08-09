@@ -34,28 +34,32 @@ pub(crate) struct ExactLimits {
 
 impl ExactLimits {
     /// Collect existing exact-path rules.
-    #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
     pub fn collect(doc: &DocumentMut) -> Self {
         let mut rules = HashMap::new();
 
         if let Some(rules_array) = doc.get("rules").and_then(Item::as_array_of_tables) {
             for (idx, rule) in rules_array.iter().enumerate() {
-                if let Some(path_value) = rule.get("path") {
-                    let paths = extract_paths(path_value);
-                    if paths.len() == 1 && is_exact_path(&paths[0]) {
-                        if let Some(max_lines) = rule.get("max_lines").and_then(Item::as_integer) {
-                            let unescaped = unescape_glob(&paths[0]);
-                            let normalized = normalize_key(&unescaped);
-                            rules.insert(
-                                normalized,
-                                ExactLimit {
-                                    max_lines: max_lines as usize,
-                                    rule_index: idx,
-                                },
-                            );
-                        }
-                    }
+                let Some(path) = rule.get("path").and_then(single_path) else {
+                    continue;
+                };
+                if !is_exact_path(path) {
+                    continue;
                 }
+                let Some(max_lines) = rule.get("max_lines").and_then(Item::as_integer) else {
+                    continue;
+                };
+                let Ok(max_lines) = usize::try_from(max_lines) else {
+                    continue;
+                };
+
+                let normalized = normalize_key(&unescape_glob(path));
+                rules.insert(
+                    normalized,
+                    ExactLimit {
+                        max_lines,
+                        rule_index: idx,
+                    },
+                );
             }
         }
 
@@ -118,17 +122,14 @@ pub(crate) fn remove_limits(doc: &mut DocumentMut, limits: impl IntoIterator<Ite
     }
 }
 
-/// Extract path strings from a path value (can be string or array).
-pub(crate) fn extract_paths(value: &Item) -> Vec<String> {
-    if let Some(s) = value.as_str() {
-        vec![s.to_string()]
-    } else if let Some(arr) = value.as_array() {
-        arr.iter()
-            .filter_map(|v| v.as_str().map(String::from))
-            .collect()
-    } else {
-        vec![]
-    }
+fn single_path(value: &Item) -> Option<&str> {
+    value.as_str().or_else(|| {
+        let paths = value.as_array()?;
+        if paths.len() != 1 {
+            return None;
+        }
+        paths.get(0)?.as_str()
+    })
 }
 
 /// Check if a path is an exact path (no unescaped glob metacharacters).
@@ -250,18 +251,26 @@ mod tests {
     }
 
     #[test]
-    fn extract_paths_from_string() {
+    fn single_path_from_string() {
         let item = Item::Value(Value::String(Formatted::new("src/main.rs".into())));
-        assert_eq!(extract_paths(&item), vec!["src/main.rs"]);
+        assert_eq!(single_path(&item), Some("src/main.rs"));
     }
 
     #[test]
-    fn extract_paths_from_array() {
+    fn single_path_from_array() {
+        let mut arr = Array::new();
+        arr.push("a.rs");
+        let item = Item::Value(Value::Array(arr));
+        assert_eq!(single_path(&item), Some("a.rs"));
+    }
+
+    #[test]
+    fn multiple_paths_are_not_single() {
         let mut arr = Array::new();
         arr.push("a.rs");
         arr.push("b.rs");
         let item = Item::Value(Value::Array(arr));
-        assert_eq!(extract_paths(&item), vec!["a.rs", "b.rs"]);
+        assert_eq!(single_path(&item), None);
     }
 
     #[test]

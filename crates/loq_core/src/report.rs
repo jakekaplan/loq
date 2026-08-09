@@ -163,7 +163,6 @@ pub fn build_report(outcomes: &[FileOutcome], fix_guidance: Option<String>) -> R
 
     sort_findings(&mut findings);
 
-    // Only include guidance if there are violations
     let fix_guidance = if summary.errors > 0 {
         fix_guidance
     } else {

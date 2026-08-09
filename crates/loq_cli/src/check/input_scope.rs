@@ -150,7 +150,8 @@ fn list_git_paths(
     let mut paths = output
         .stdout
         .split(|byte| *byte == b'\0')
-        .filter_map(decode_git_path)
+        .filter(|line| !line.is_empty())
+        .map(path_from_git_bytes)
         .map(|path| repo_root.join(path))
         .filter(|path| path.is_file())
         .collect::<Vec<_>>();
@@ -166,13 +167,6 @@ fn strip_line_endings(bytes: &[u8]) -> &[u8] {
         end -= 1;
     }
     &bytes[..end]
-}
-
-fn decode_git_path(line: &[u8]) -> Option<PathBuf> {
-    if line.is_empty() {
-        return None;
-    }
-    Some(path_from_git_bytes(line))
 }
 
 fn path_from_git_bytes(bytes: &[u8]) -> PathBuf {

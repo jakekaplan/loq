@@ -1,8 +1,6 @@
 //! Init command implementation.
 
-use std::fmt::Write as _;
-use std::path::Path;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use loq_core::config::{DEFAULT_MAX_LINES, DEFAULT_RESPECT_GITIGNORE};
 use termcolor::WriteColor;
@@ -28,7 +26,6 @@ pub fn run_init<W1: WriteColor, W2: WriteColor>(
         return print_error(stderr, &format!("failed to write loq.toml: {err}"));
     }
 
-    // Add .loq_cache to .gitignore if not already present
     add_to_gitignore(&cwd);
 
     let _ = writeln!(stdout, "✔ Created loq.toml");
@@ -40,7 +37,6 @@ pub fn run_init<W1: WriteColor, W2: WriteColor>(
 pub(crate) fn add_to_gitignore(cwd: &Path) {
     let gitignore_path = cwd.join(".gitignore");
 
-    // Only modify existing .gitignore files
     if !gitignore_path.is_file() {
         return;
     }
@@ -49,12 +45,10 @@ pub(crate) fn add_to_gitignore(cwd: &Path) {
         return;
     };
 
-    // Check if already ignored
     if contents.lines().any(|line| line.trim() == ".loq_cache") {
         return;
     }
 
-    // Append .loq_cache
     let new_contents = if contents.ends_with('\n') || contents.is_empty() {
         format!("{contents}.loq_cache\n")
     } else {
@@ -65,40 +59,26 @@ pub(crate) fn add_to_gitignore(cwd: &Path) {
 }
 
 fn default_config_text() -> String {
-    let mut out = String::new();
+    format!(
+        r#"default_max_lines = {DEFAULT_MAX_LINES}
+respect_gitignore = {DEFAULT_RESPECT_GITIGNORE}
 
-    writeln!(out, "default_max_lines = {DEFAULT_MAX_LINES}").unwrap();
-    writeln!(out, "respect_gitignore = {DEFAULT_RESPECT_GITIGNORE}").unwrap();
-    writeln!(out).unwrap();
-    writeln!(out, "# Paths, files, or glob patterns to exclude").unwrap();
-    writeln!(out, "exclude = []").unwrap();
-    writeln!(out).unwrap();
-    writeln!(
-        out,
-        "# Text to display when violations occur (useful when piping to LLMs)"
-    )
-    .unwrap();
-    writeln!(out, "# fix_guidance = \"\"").unwrap();
-    writeln!(out).unwrap();
-    writeln!(
-        out,
-        "# Rules override defaults for specific paths. Last match wins."
-    )
-    .unwrap();
-    writeln!(
-        out,
-        "# Globs: * stays within a path segment; ** matches across directories."
-    )
-    .unwrap();
-    writeln!(out, "# [[rules]]").unwrap();
-    writeln!(out, "# path = \"**/*.ext\"").unwrap();
-    writeln!(out, "# max_lines = 300").unwrap();
-    writeln!(out, "#").unwrap();
-    writeln!(out, "# [[rules]]").unwrap();
-    writeln!(out, "# path = \"some/path/**/*\"").unwrap();
-    write!(out, "# max_lines = 1000").unwrap();
+# Paths, files, or glob patterns to exclude
+exclude = []
 
-    out
+# Text to display when violations occur (useful when piping to LLMs)
+# fix_guidance = ""
+
+# Rules override defaults for specific paths. Last match wins.
+# Globs: * stays within a path segment; ** matches across directories.
+# [[rules]]
+# path = "**/*.ext"
+# max_lines = 300
+#
+# [[rules]]
+# path = "some/path/**/*"
+# max_lines = 1000"#
+    )
 }
 
 #[cfg(test)]
