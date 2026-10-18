@@ -57,20 +57,21 @@ const fn default_respect_gitignore() -> bool {
 /// Returns an error if the TOML is malformed or contains unknown keys.
 /// Unknown keys trigger a suggestion if a similar valid key exists.
 pub fn parse_config(path: &Path, text: &str) -> Result<LoqConfig, ConfigError> {
-    let deserializer = toml::Deserializer::new(text);
+    let toml_error = |err: toml::de::Error| ConfigError::Toml {
+        path: path.to_path_buf(),
+        message: err.to_string(),
+        line_col: err
+            .span()
+            .and_then(|span| line_col_from_offset(text, span.start)),
+    };
+    let deserializer = toml::Deserializer::parse(text).map_err(toml_error)?;
     let mut unknown = Vec::new();
     let raw: RawConfig = serde_ignored::deserialize(deserializer, |path| {
         if let Some(key) = extract_unknown_key_name(&path) {
             unknown.push(key);
         }
     })
-    .map_err(|err| ConfigError::Toml {
-        path: path.to_path_buf(),
-        message: err.to_string(),
-        line_col: err
-            .span()
-            .and_then(|span| line_col_from_offset(text, span.start)),
-    })?;
+    .map_err(toml_error)?;
 
     if let Some(key) = unknown.into_iter().next() {
         let line_col = find_key_location(text, &key);
