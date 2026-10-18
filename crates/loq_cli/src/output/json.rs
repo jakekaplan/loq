@@ -132,7 +132,7 @@ fn metric_value(value: usize, limit: Limit, metric: Metric) -> Option<usize> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use loq_core::report::{build_report, FileOutcome, OutcomeKind};
+    use loq_core::report::{FileOutcome, OutcomeKind, build_report};
     use loq_fs::walk;
 
     fn json_output_string(

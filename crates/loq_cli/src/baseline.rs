@@ -6,15 +6,15 @@ use anyhow::{Context, Result};
 use termcolor::WriteColor;
 use toml_edit::DocumentMut;
 
+use crate::ExitStatus;
 use crate::cli::BaselineArgs;
 use crate::config_edit::{config_path_and_root, line_threshold, load_doc_or_default, persist_doc};
 use crate::exact_limits::{self, ExactLimit, ExactLimits};
 use crate::line_violations::scan_line_violations;
 use crate::output::{
-    change_style, change_width, plural, print_error, write_change, write_ok_line, Change,
-    ChangeStyle,
+    Change, ChangeStyle, change_style, change_width, plural, print_error, write_change,
+    write_ok_line,
 };
-use crate::ExitStatus;
 
 struct BaselineReport {
     changes: Vec<Change>,

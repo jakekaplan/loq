@@ -1,6 +1,6 @@
 use super::*;
-use loq_core::report::{Finding, FindingKind, SkipReason, Summary};
 use loq_core::MatchBy;
+use loq_core::report::{Finding, FindingKind, SkipReason, Summary};
 use termcolor::NoColor;
 
 fn output_string<F>(f: F) -> String

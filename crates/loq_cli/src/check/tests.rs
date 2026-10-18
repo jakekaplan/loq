@@ -89,8 +89,8 @@ fn handle_check_output_with_walk_errors() {
 
 #[test]
 fn handle_check_output_json_format() {
-    use loq_core::report::{FileOutcome, OutcomeKind};
     use loq_core::MatchBy;
+    use loq_core::report::{FileOutcome, OutcomeKind};
     use loq_fs::walk::WalkError;
     use termcolor::NoColor;
 

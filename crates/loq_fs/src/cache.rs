@@ -185,7 +185,7 @@ pub fn hash_config(config: &CompiledConfig) -> u64 {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use loq_core::config::{compile_config, LoqConfig};
+    use loq_core::config::{LoqConfig, compile_config};
     use std::path::PathBuf;
     use tempfile::TempDir;
 
