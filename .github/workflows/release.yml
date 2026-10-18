@@ -21,8 +21,8 @@ jobs:
       contents: read
       id-token: write  # Required for trusted publishing
     steps:
-      - uses: astral-sh/setup-uv@v5
-      - uses: actions/download-artifact@v4
+      - uses: astral-sh/setup-uv@v10.3.0
+      - uses: actions/download-artifact@v8
         with:
           pattern: wheels-*
           path: dist
@@ -36,7 +36,7 @@ jobs:
     permissions:
       contents: read
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@stable
       - name: Publish to crates.io
         env:
@@ -54,15 +54,25 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/download-artifact@v4
+      - uses: actions/checkout@v7
+      - uses: actions/download-artifact@v8
         with:
           pattern: wheels-*
           path: dist
           merge-multiple: true
+      # The action appends generated notes to an existing release's body, and
+      # scripts/publish.py creates the release with curated notes before tagging.
+      - name: Check for existing release
+        id: existing
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if gh release view "$GITHUB_REF_NAME" > /dev/null 2>&1; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          fi
       - name: Create GitHub Release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           files: dist/*
-          generate_release_notes: true
+          generate_release_notes: ${{ steps.existing.outputs.exists != 'true' }}
           prerelease: ${{ contains(github.ref, 'alpha') || contains(github.ref, 'beta') || contains(github.ref, 'rc') }}
