@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1792350301141,
+  "lastUpdate": 1792351299726,
   "repoUrl": "https://github.com/jakekaplan/loq",
   "entries": {
     "Benchmark": [
@@ -1967,6 +1967,54 @@ window.BENCHMARK_DATA = {
             "name": "ruff",
             "value": 0.0007677869200000003,
             "range": "± 0.0001",
+            "unit": "seconds"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "40362401+jakekaplan@users.noreply.github.com",
+            "name": "Jake Kaplan",
+            "username": "jakekaplan"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "cc5fdedbe1d465930b3301f8ee8c5067f2e63318",
+          "message": "Merge pull request #73 from jakekaplan/chore/edition-2024\n\nMove to Rust edition 2024",
+          "timestamp": "2026-10-18T15:20:47-04:00",
+          "tree_id": "0e0c6fcb43185991ac746000ba18508c04357277",
+          "url": "https://github.com/jakekaplan/loq/commit/cc5fdedbe1d465930b3301f8ee8c5067f2e63318"
+        },
+        "date": 1792351299168,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "cpython",
+            "value": 0.0008932676799999999,
+            "range": "± 0.0001",
+            "unit": "seconds"
+          },
+          {
+            "name": "airflow",
+            "value": 0.0008410828799999999,
+            "range": "± 0",
+            "unit": "seconds"
+          },
+          {
+            "name": "prefect",
+            "value": 0.00085505548,
+            "range": "± 0",
+            "unit": "seconds"
+          },
+          {
+            "name": "ruff",
+            "value": 0.0008406838799999998,
+            "range": "± 0",
             "unit": "seconds"
           }
         ]
