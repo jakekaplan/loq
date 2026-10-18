@@ -6,7 +6,7 @@ fn default_config_has_expected_values() {
     let config = LoqConfig::default();
     assert_eq!(config.default_limit, Some(Limit::lines(DEFAULT_MAX_LINES)));
     assert!(config.respect_gitignore);
-    assert!(config.exclude.is_empty());
+    assert_eq!(config.exclude, Vec::<String>::new());
     assert!(config.rules.is_empty());
 }
 

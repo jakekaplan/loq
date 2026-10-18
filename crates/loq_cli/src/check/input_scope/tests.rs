@@ -62,7 +62,7 @@ fn collect_inputs_empty_defaults_to_cwd() {
 fn collect_inputs_stdin_only_no_default() {
     let mut empty_stdin: &[u8] = b"";
     let result = collect_inputs(vec![], true, &mut empty_stdin, Path::new("/repo")).unwrap();
-    assert!(result.is_empty());
+    assert_eq!(result, Vec::<PathBuf>::new());
 }
 
 #[test]

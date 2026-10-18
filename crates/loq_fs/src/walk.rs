@@ -14,7 +14,7 @@ use thiserror::Error;
 use crate::PathIdentity;
 
 /// Files/directories that are always excluded regardless of configuration.
-const HARDCODED_EXCLUDES: &[&str] = &[".loq_cache", "loq.toml"];
+const HARDCODED_EXCLUDES: &[&str] = &[".git", ".loq_cache", "loq.toml"];
 
 /// Check if a path matches any hardcoded exclude pattern.
 fn is_hardcoded_exclude(path: &Path) -> bool {

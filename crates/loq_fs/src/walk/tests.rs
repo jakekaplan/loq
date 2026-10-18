@@ -311,6 +311,27 @@ fn hardcoded_excludes_filter_loq_cache_dir() {
 }
 
 #[test]
+fn hardcoded_excludes_filter_git_dirs() {
+    let temp = TempDir::new().unwrap();
+    let root = temp.path().canonicalize().unwrap();
+    std::fs::write(root.join("keep.rs"), "keep").unwrap();
+    std::fs::create_dir_all(root.join(".git/hooks")).unwrap();
+    std::fs::write(root.join(".git/hooks/pre-rebase.sample"), "hook").unwrap();
+    std::fs::create_dir_all(root.join("vendor/lib")).unwrap();
+    std::fs::write(root.join("vendor/lib/.git"), "gitdir: ../../.git").unwrap();
+
+    let exclude = empty_exclude();
+    let options = WalkOptions {
+        respect_gitignore: false,
+        exclude: &exclude,
+        cwd: &root,
+        root_dir: &root,
+    };
+    let result = expand_paths(std::slice::from_ref(&root), &options);
+    assert_eq!(result.paths, vec![root.join("keep.rs")]);
+}
+
+#[test]
 fn hardcoded_excludes_filter_loq_toml() {
     let temp = TempDir::new().unwrap();
     let root = temp.path().canonicalize().unwrap();
