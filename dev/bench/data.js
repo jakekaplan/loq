@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1792350236667,
+  "lastUpdate": 1792350301141,
   "repoUrl": "https://github.com/jakekaplan/loq",
   "entries": {
     "Benchmark": [
@@ -1919,6 +1919,54 @@ window.BENCHMARK_DATA = {
             "name": "ruff",
             "value": 0.0008779359400000001,
             "range": "± 0",
+            "unit": "seconds"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "40362401+jakekaplan@users.noreply.github.com",
+            "name": "Jake Kaplan",
+            "username": "jakekaplan"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "0c24e7521958261df2476bedf377d07d15de7dcc",
+          "message": "Merge pull request #71 from jakekaplan/deps/major-bumps\n\nBump toml, toml_edit, thiserror, and criterion",
+          "timestamp": "2026-10-18T15:03:08-04:00",
+          "tree_id": "27c5423def42aac196e2fae2434c8442f4c2f745",
+          "url": "https://github.com/jakekaplan/loq/commit/0c24e7521958261df2476bedf377d07d15de7dcc"
+        },
+        "date": 1792350300822,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "cpython",
+            "value": 0.00073453522,
+            "range": "± 0",
+            "unit": "seconds"
+          },
+          {
+            "name": "airflow",
+            "value": 0.0007281738200000001,
+            "range": "± 0",
+            "unit": "seconds"
+          },
+          {
+            "name": "prefect",
+            "value": 0.0007202518200000001,
+            "range": "± 0",
+            "unit": "seconds"
+          },
+          {
+            "name": "ruff",
+            "value": 0.0007677869200000003,
+            "range": "± 0.0001",
             "unit": "seconds"
           }
         ]
