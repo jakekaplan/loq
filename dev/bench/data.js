@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1786288670993,
+  "lastUpdate": 1792348340194,
   "repoUrl": "https://github.com/jakekaplan/loq",
   "entries": {
     "Benchmark": [
@@ -1774,6 +1774,54 @@ window.BENCHMARK_DATA = {
           {
             "name": "ruff",
             "value": 0.0008412153000000002,
+            "range": "± 0",
+            "unit": "seconds"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "40362401+jakekaplan@users.noreply.github.com",
+            "name": "Jake Kaplan",
+            "username": "jakekaplan"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "e95970c694fafcb2b86a7c72b77add61084ac28a",
+          "message": "Merge pull request #68 from jakekaplan/fix/skip-git-dir\n\nSkip .git when walking directories",
+          "timestamp": "2026-10-18T14:31:16-04:00",
+          "tree_id": "f5065cf98259d0f76ae698c15e9a21bec1db562a",
+          "url": "https://github.com/jakekaplan/loq/commit/e95970c694fafcb2b86a7c72b77add61084ac28a"
+        },
+        "date": 1792348339632,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "cpython",
+            "value": 0.0007175757200000001,
+            "range": "± 0",
+            "unit": "seconds"
+          },
+          {
+            "name": "airflow",
+            "value": 0.00069433992,
+            "range": "± 0",
+            "unit": "seconds"
+          },
+          {
+            "name": "prefect",
+            "value": 0.0007234074200000001,
+            "range": "± 0",
+            "unit": "seconds"
+          },
+          {
+            "name": "ruff",
+            "value": 0.00069421792,
             "range": "± 0",
             "unit": "seconds"
           }
