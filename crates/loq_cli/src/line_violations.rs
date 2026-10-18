@@ -4,7 +4,7 @@ use std::collections::HashMap;
 use std::path::Path;
 
 use anyhow::{Context, Result};
-use loq_core::config::{compile_config, LoqConfig};
+use loq_core::config::{LoqConfig, compile_config};
 use loq_core::{FileOutcome, Limit, Metric, OutcomeKind};
 use loq_fs::{CheckConfig, CheckOptions};
 

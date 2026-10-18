@@ -6,8 +6,8 @@ use std::path::Path;
 
 use serde::{Deserialize, Deserializer};
 
-use crate::config::{ConfigError, LoqConfig, Rule, DEFAULT_RESPECT_GITIGNORE};
 use crate::Limit;
+use crate::config::{ConfigError, DEFAULT_RESPECT_GITIGNORE, LoqConfig, Rule};
 
 #[derive(Deserialize)]
 struct RawConfig {
@@ -249,18 +249,20 @@ mod tests {
     fn both_default_budgets_are_invalid() {
         let text = "default_max_lines = 500\ndefault_max_tokens = 2000\n";
         let err = parse_config(Path::new("loq.toml"), text).unwrap_err();
-        assert!(err
-            .to_string()
-            .contains("only one of default_max_lines or default_max_tokens"));
+        assert!(
+            err.to_string()
+                .contains("only one of default_max_lines or default_max_tokens")
+        );
     }
 
     #[test]
     fn rule_with_both_budgets_is_invalid() {
         let text = "[[rules]]\npath = \"**/*.md\"\nmax_lines = 100\nmax_tokens = 1000\n";
         let err = parse_config(Path::new("loq.toml"), text).unwrap_err();
-        assert!(err
-            .to_string()
-            .contains("only one of max_lines or max_tokens"));
+        assert!(
+            err.to_string()
+                .contains("only one of max_lines or max_tokens")
+        );
     }
 
     #[test]

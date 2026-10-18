@@ -3,8 +3,8 @@
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result};
-use loq_core::config::{LoqConfig, DEFAULT_MAX_LINES, DEFAULT_RESPECT_GITIGNORE};
 use loq_core::Metric;
+use loq_core::config::{DEFAULT_MAX_LINES, DEFAULT_RESPECT_GITIGNORE, LoqConfig};
 use toml_edit::{DocumentMut, Item};
 
 use crate::init::add_to_gitignore;

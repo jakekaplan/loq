@@ -2,8 +2,8 @@
 //!
 //! Collects file check outcomes and generates structured reports.
 
-use crate::decide::MatchBy;
 use crate::Limit;
+use crate::decide::MatchBy;
 
 /// The result of checking a single file.
 #[derive(Debug)]

@@ -140,11 +140,7 @@ pub fn change_width(changes: &[&Change]) -> usize {
 /// Returns the plural suffix (`""` or `"s"`) for `count`.
 #[must_use]
 pub const fn plural(count: usize) -> &'static str {
-    if count == 1 {
-        ""
-    } else {
-        "s"
-    }
+    if count == 1 { "" } else { "s" }
 }
 
 /// Writes a dimmed summary line prefixed with a green check mark.

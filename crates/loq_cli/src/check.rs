@@ -2,18 +2,18 @@
 
 use std::io::{Read, Write};
 
-use loq_core::report::{build_report, Finding, FindingKind, Report, SkipReason};
+use loq_core::report::{Finding, FindingKind, Report, SkipReason, build_report};
 use loq_fs::{CheckConfig, CheckOptions, CheckOutput, FsError};
 use termcolor::{Color, WriteColor};
 
 use self::input_scope::resolve_check_inputs;
+use crate::Cli;
+use crate::ExitStatus;
 use crate::cli::{CheckArgs, OutputFormat};
 use crate::output::{
     print_error, write_block, write_finding, write_guidance, write_json, write_summary,
     write_walk_errors,
 };
-use crate::Cli;
-use crate::ExitStatus;
 
 mod input_scope;
 

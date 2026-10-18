@@ -6,8 +6,8 @@
 //! Note: Exclusion filtering (gitignore, exclude patterns) is handled
 //! at the walk layer, not here.
 
-use crate::config::CompiledConfig;
 use crate::Limit;
+use crate::config::CompiledConfig;
 
 /// How a file's limit was determined.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -64,7 +64,7 @@ pub fn decide(config: &CompiledConfig, path: &str) -> Decision {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::config::{compile_config, LoqConfig, Rule};
+    use crate::config::{LoqConfig, Rule, compile_config};
     use std::path::PathBuf;
 
     fn compiled(config: LoqConfig) -> CompiledConfig {

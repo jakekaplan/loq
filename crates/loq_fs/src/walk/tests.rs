@@ -1,5 +1,5 @@
 use super::*;
-use loq_core::config::{compile_config, LoqConfig};
+use loq_core::config::{LoqConfig, compile_config};
 use tempfile::TempDir;
 
 #[cfg(unix)]
@@ -72,10 +72,12 @@ fn expands_file_and_missing() {
     let result = expand_paths(&[file, missing], &options);
     assert_eq!(result.paths.len(), 2);
     assert!(result.paths.iter().any(|path| path.ends_with("a.txt")));
-    assert!(result
-        .paths
-        .iter()
-        .any(|path| path.ends_with("missing.txt")));
+    assert!(
+        result
+            .paths
+            .iter()
+            .any(|path| path.ends_with("missing.txt"))
+    );
 }
 
 #[test]
@@ -97,14 +99,18 @@ fn respects_gitignore_when_enabled() {
     let result = expand_paths(&[root.join("sub")], &options);
     // Should have .gitignore and included.txt (ignored.txt is excluded)
     assert_eq!(result.paths.len(), 2);
-    assert!(result
-        .paths
-        .iter()
-        .any(|path| path.ends_with("included.txt")));
-    assert!(!result
-        .paths
-        .iter()
-        .any(|path| path.ends_with("ignored.txt")));
+    assert!(
+        result
+            .paths
+            .iter()
+            .any(|path| path.ends_with("included.txt"))
+    );
+    assert!(
+        !result
+            .paths
+            .iter()
+            .any(|path| path.ends_with("ignored.txt"))
+    );
 }
 
 #[test]
@@ -126,10 +132,12 @@ fn includes_gitignored_when_disabled() {
     let result = expand_paths(&[root.join("sub")], &options);
     // Should have all 3: .gitignore, ignored.txt, included.txt
     assert_eq!(result.paths.len(), 3);
-    assert!(result
-        .paths
-        .iter()
-        .any(|path| path.ends_with("ignored.txt")));
+    assert!(
+        result
+            .paths
+            .iter()
+            .any(|path| path.ends_with("ignored.txt"))
+    );
 }
 
 #[test]
@@ -228,10 +236,12 @@ fn exclude_dotdir_pattern_without_leading_globstar() {
     let result = expand_paths(std::slice::from_ref(&root), &options);
     assert_eq!(result.paths.len(), 1, "got: {:?}", result.paths);
     assert!(result.paths.iter().any(|p| p.ends_with("keep.rs")));
-    assert!(!result
-        .paths
-        .iter()
-        .any(|p| p.to_string_lossy().contains(".git")));
+    assert!(
+        !result
+            .paths
+            .iter()
+            .any(|p| p.to_string_lossy().contains(".git"))
+    );
 }
 
 #[cfg(unix)]
@@ -304,10 +314,12 @@ fn hardcoded_excludes_filter_loq_cache_dir() {
     let result = expand_paths(std::slice::from_ref(&root), &options);
     assert_eq!(result.paths.len(), 1);
     assert!(result.paths.iter().any(|p| p.ends_with("keep.rs")));
-    assert!(!result
-        .paths
-        .iter()
-        .any(|p| p.to_string_lossy().contains(".loq_cache")));
+    assert!(
+        !result
+            .paths
+            .iter()
+            .any(|p| p.to_string_lossy().contains(".loq_cache"))
+    );
 }
 
 #[test]

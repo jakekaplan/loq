@@ -18,8 +18,8 @@ pub use path_identity::PathIdentity;
 
 use std::path::{Path, PathBuf};
 
-use loq_core::config::{compile_config, CompiledConfig, LoqConfig};
-use loq_core::decide::{decide, Decision};
+use loq_core::config::{CompiledConfig, LoqConfig, compile_config};
+use loq_core::decide::{Decision, decide};
 use loq_core::report::{FileOutcome, OutcomeKind};
 use rayon::prelude::*;
 

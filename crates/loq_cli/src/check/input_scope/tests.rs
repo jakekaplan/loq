@@ -267,10 +267,12 @@ fn resolve_git_inputs_uses_repo_root_config() {
     let expected_config = dunce::canonicalize(temp.path().join("loq.toml"))
         .unwrap_or_else(|_| temp.path().join("loq.toml"));
     assert_eq!(resolved.config_path, Some(expected_config));
-    assert!(resolved
-        .paths
-        .iter()
-        .any(|path| path.ends_with("outside.txt")));
+    assert!(
+        resolved
+            .paths
+            .iter()
+            .any(|path| path.ends_with("outside.txt"))
+    );
 }
 
 #[test]

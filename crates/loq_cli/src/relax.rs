@@ -7,14 +7,14 @@ use loq_fs::{CheckConfig, CheckOptions};
 use termcolor::WriteColor;
 use toml_edit::DocumentMut;
 
+use crate::ExitStatus;
 use crate::cli::RelaxArgs;
 use crate::config_edit::{config_path_and_root, load_doc_or_default, persist_doc};
 use crate::exact_limits::{self, ExactLimits};
 use crate::line_violations::line_violations;
 use crate::output::{
-    change_style, change_width, plural, print_error, write_change, write_ok_line, Change,
+    Change, change_style, change_width, plural, print_error, write_change, write_ok_line,
 };
-use crate::ExitStatus;
 
 struct RelaxReport {
     changes: Vec<Change>,

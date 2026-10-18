@@ -5,9 +5,9 @@ use std::path::{Path, PathBuf};
 use loq_core::config::{DEFAULT_MAX_LINES, DEFAULT_RESPECT_GITIGNORE};
 use termcolor::WriteColor;
 
+use crate::ExitStatus;
 use crate::cli::InitArgs;
 use crate::output::print_error;
-use crate::ExitStatus;
 
 pub fn run_init<W1: WriteColor, W2: WriteColor>(
     _args: &InitArgs,
