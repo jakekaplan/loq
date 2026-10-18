@@ -144,7 +144,7 @@ fn binary_file_skipped() {
 fn missing_file_explicit_arg() {
     let (stdout, stderr, success) = run_loq_with_args("all_ok", &["check", "nonexistent.rs"]);
 
-    assert!(success, "missing file is a warning, not error");
+    assert!(!success, "missing explicit path is an error");
     insta::assert_snapshot!("missing_file_stdout", stdout);
     insta::assert_snapshot!("missing_file_stderr", stderr);
 }

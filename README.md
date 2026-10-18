@@ -52,6 +52,9 @@ git diff --name-only | loq check -
 `--staged` and `--diff` are repo-wide modes. They cannot be combined with
 `PATH` args or stdin scope (`loq check -`).
 
+`PATH` args must exist, so a typo fails instead of checking nothing.
+Paths from stdin may include deleted files; those are reported and skipped.
+
 ### Managing legacy files
 
 ```bash

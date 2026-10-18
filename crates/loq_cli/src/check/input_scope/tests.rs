@@ -76,18 +76,36 @@ fn collect_inputs_stdin_with_paths() {
 
 #[test]
 fn collect_inputs_mixed_paths_and_stdin() {
+    let temp = TempDir::new().unwrap();
+    std::fs::write(temp.path().join("explicit.rs"), "").unwrap();
     let mut stdin: &[u8] = b"from_stdin.rs\n";
     let result = collect_inputs(
         vec![PathBuf::from("explicit.rs")],
         true,
         &mut stdin,
-        Path::new("/repo"),
+        temp.path(),
     )
     .unwrap();
 
     assert_eq!(result.len(), 2);
     assert!(result.contains(&PathBuf::from("explicit.rs")));
-    assert!(result.contains(&PathBuf::from("/repo/from_stdin.rs")));
+    assert!(result.contains(&temp.path().join("from_stdin.rs")));
+}
+
+#[test]
+fn collect_inputs_rejects_missing_explicit_paths() {
+    let temp = TempDir::new().unwrap();
+    std::fs::write(temp.path().join("real.rs"), "").unwrap();
+    let paths = vec![
+        PathBuf::from("typo.rs"),
+        PathBuf::from("real.rs"),
+        PathBuf::from("gone/"),
+    ];
+    let mut empty_stdin: &[u8] = b"";
+
+    let err = collect_inputs(paths, false, &mut empty_stdin, temp.path()).unwrap_err();
+
+    assert_eq!(err.to_string(), "path not found: typo.rs, gone/");
 }
 
 #[test]
