@@ -91,7 +91,7 @@ default_max_lines = 500
 respect_gitignore = true
 
 # ignore files or paths
-exclude = [".git/**", "**/generated/**", "*.lock"]
+exclude = ["**/generated/**", "*.lock"]
 
 # Add fix_guidance to include project-specific instructions
 # with each violation when piping output to an LLM:
