@@ -188,6 +188,8 @@ fn collect_inputs<R: Read>(
     stdin: &mut R,
     cwd: &Path,
 ) -> Result<Vec<PathBuf>> {
+    ensure_paths_exist(&paths, cwd)?;
+
     if use_stdin {
         let mut stdin_paths =
             loq_fs::stdin::read_paths(stdin, cwd).context("failed to read stdin")?;
@@ -199,6 +201,22 @@ fn collect_inputs<R: Read>(
     }
 
     Ok(paths)
+}
+
+/// Explicit paths must exist so a typo can't pass by checking nothing.
+/// Stdin paths are exempt: `git diff --name-only` lists deleted files.
+fn ensure_paths_exist(paths: &[PathBuf], cwd: &Path) -> Result<()> {
+    let missing: Vec<String> = paths
+        .iter()
+        .filter(|path| !cwd.join(path).exists())
+        .map(|path| path.display().to_string())
+        .collect();
+
+    if missing.is_empty() {
+        Ok(())
+    } else {
+        bail!("path not found: {}", missing.join(", "))
+    }
 }
 
 #[cfg(test)]

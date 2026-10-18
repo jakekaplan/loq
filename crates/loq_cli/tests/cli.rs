@@ -225,12 +225,25 @@ fn exit_code_error_on_violation() {
 }
 
 #[test]
-fn missing_file_warns() {
+fn missing_explicit_path_errors() {
     let temp = TempDir::new().unwrap();
 
     cargo_bin_cmd!("loq")
         .current_dir(temp.path())
         .args(["check", "missing.txt"])
+        .assert()
+        .code(2)
+        .stderr(predicate::str::contains("path not found: missing.txt"));
+}
+
+#[test]
+fn missing_stdin_path_warns() {
+    let temp = TempDir::new().unwrap();
+
+    cargo_bin_cmd!("loq")
+        .current_dir(temp.path())
+        .args(["check", "-"])
+        .write_stdin("missing.txt\n")
         .assert()
         .success()
         .stdout(predicate::str::contains("⚠"))
@@ -257,7 +270,8 @@ fn verbose_includes_skip_warnings() {
 
     cargo_bin_cmd!("loq")
         .current_dir(temp.path())
-        .args(["--verbose", "check", "missing.txt"])
+        .args(["--verbose", "check", "-"])
+        .write_stdin("missing.txt\n")
         .assert()
         .success()
         .stdout(predicate::str::contains("⚠"))
