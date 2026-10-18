@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1792351299726,
+  "lastUpdate": 1792354280427,
   "repoUrl": "https://github.com/jakekaplan/loq",
   "entries": {
     "Benchmark": [
@@ -2014,6 +2014,54 @@ window.BENCHMARK_DATA = {
           {
             "name": "ruff",
             "value": 0.0008406838799999998,
+            "range": "± 0",
+            "unit": "seconds"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "40362401+jakekaplan@users.noreply.github.com",
+            "name": "Jake Kaplan",
+            "username": "jakekaplan"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "b20f9da53d771af3e3a767b64c2d6f25e1bd4c75",
+          "message": "Merge pull request #74 from jakekaplan/fix/missing-path-errors\n\nError on missing explicit check paths",
+          "timestamp": "2026-10-18T16:10:19-04:00",
+          "tree_id": "75625d9f644d3343f13f979a6d55f842009c506a",
+          "url": "https://github.com/jakekaplan/loq/commit/b20f9da53d771af3e3a767b64c2d6f25e1bd4c75"
+        },
+        "date": 1792354279660,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "cpython",
+            "value": 0.0008746390400000001,
+            "range": "± 0",
+            "unit": "seconds"
+          },
+          {
+            "name": "airflow",
+            "value": 0.0009338289400000002,
+            "range": "± 0.0001",
+            "unit": "seconds"
+          },
+          {
+            "name": "prefect",
+            "value": 0.0008645353400000003,
+            "range": "± 0.0001",
+            "unit": "seconds"
+          },
+          {
+            "name": "ruff",
+            "value": 0.0008875678400000004,
             "range": "± 0",
             "unit": "seconds"
           }
