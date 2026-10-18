@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1792348674325,
+  "lastUpdate": 1792350236667,
   "repoUrl": "https://github.com/jakekaplan/loq",
   "entries": {
     "Benchmark": [
@@ -1870,6 +1870,54 @@ window.BENCHMARK_DATA = {
           {
             "name": "ruff",
             "value": 0.00072136678,
+            "range": "± 0",
+            "unit": "seconds"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "40362401+jakekaplan@users.noreply.github.com",
+            "name": "Jake Kaplan",
+            "username": "jakekaplan"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "605649603764673c9b9af31a5f5823cf1e506012",
+          "message": "Merge pull request #72 from jakekaplan/ci/bump-actions\n\nBump GitHub Actions to current majors",
+          "timestamp": "2026-10-18T15:02:57-04:00",
+          "tree_id": "d20d9289ef747cdc8b822b476361d1c9f9529bd8",
+          "url": "https://github.com/jakekaplan/loq/commit/605649603764673c9b9af31a5f5823cf1e506012"
+        },
+        "date": 1792350235926,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "cpython",
+            "value": 0.0008690221400000002,
+            "range": "± 0",
+            "unit": "seconds"
+          },
+          {
+            "name": "airflow",
+            "value": 0.0009414990400000003,
+            "range": "± 0.0002",
+            "unit": "seconds"
+          },
+          {
+            "name": "prefect",
+            "value": 0.0008627683400000002,
+            "range": "± 0",
+            "unit": "seconds"
+          },
+          {
+            "name": "ruff",
+            "value": 0.0008779359400000001,
             "range": "± 0",
             "unit": "seconds"
           }
